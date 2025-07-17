@@ -9522,7 +9522,7 @@ class Admin extends Base_Controller
 			'welfare_cycle' => 'UGL',
 			'jnr_saving' => 'UG',
 			'saving_pending' => 'UGL',
-			'saving' => 'UGL',
+			'saving' => 'UG',
 			'safekeeping_add' => 'SK',
 			'safekeeping_remove' => 'SK',
 		];
