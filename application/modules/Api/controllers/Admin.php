@@ -963,7 +963,7 @@ class Admin extends Base_Controller
 							</tr>
 							<tr>
 								<td><strong>Payment date</strong></td>
-								<td>' . date("d M Y", strtotime($_REQUEST["created_at"])) . '</td>
+								<td>' . date("d M Y", strtotime($_REQUEST["date"])) . '</td>
 							</tr>
 							<tr>
 								<td><strong>Payment status</strong></td>
@@ -994,7 +994,7 @@ class Admin extends Base_Controller
 					</tr>
 					<tr>
 						<td><strong>Payment date</strong></td>
-						<td>' . date("d M Y", strtotime($_REQUEST["created_at"])) . '</td>
+						<td>' . date("d M Y", strtotime($_REQUEST["date"])) . '</td>
 					</tr>
 					<tr>
 						<td><strong>Payment status</strong></td>
@@ -1046,7 +1046,7 @@ class Admin extends Base_Controller
 					</tr>
 					<tr>
 						<td><strong>Payment date</strong></td>
-						<td>' . date("d M Y", strtotime($_REQUEST["created_at"])) . '</td>
+						<td>' . date("d M Y", strtotime($_REQUEST["date"])) . '</td>
 					</tr>
 					<tr>
 						<td><strong>Payment status</strong></td>
