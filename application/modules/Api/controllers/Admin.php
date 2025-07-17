@@ -844,10 +844,10 @@ class Admin extends Base_Controller
 
 			$userDetailTo = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
-			$data['username'] = $userDetailTo['first_name'] . " " . $userDetailTo['last_name'];
-			$data['amount'] = $_REQUEST['amount'];
-			$data['payment_date'] =  date('d M Y', strtotime($_REQUEST['date']));
-			$subject = "Payment Received";
+			// $data['username'] = $userDetailTo['first_name'] . " " . $userDetailTo['last_name'];
+			// $data['amount'] = $_REQUEST['amount'];
+			// $data['payment_date'] =  date('d M Y', strtotime($_REQUEST['date']));
+			// $subject = "Payment Received";
 			//changes 05-08
 			//	$messaged = $this->load->view('template/payment-mail-received',$data,true);
 			//	$mail = $this->sendMail($userDetailTo['email'],$subject,$messaged);
