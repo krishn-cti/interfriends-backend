@@ -830,19 +830,19 @@ class Admin extends Base_Controller
 
 			$this->common->insertData('user_cycle_status_history', array("lifecycle_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
 
-			if ($_REQUEST['status'] == '2') {
-				$data['status'] = 'Paid On Time';
-			}
+			// if ($_REQUEST['status'] == '2') {
+			// 	$data['status'] = 'Paid On Time';
+			// }
 
-			if ($_REQUEST['status'] == '4') {
-				$data['status'] = 'Paid Late';
-			}
+			// if ($_REQUEST['status'] == '4') {
+			// 	$data['status'] = 'Paid Late';
+			// }
 
-			if ($_REQUEST['status'] == '3') {
-				$data['status'] = 'Declined Loan';
-			}
+			// if ($_REQUEST['status'] == '3') {
+			// 	$data['status'] = 'Declined Loan';
+			// }
 
-			$userDetailTo = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			// $userDetailTo = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
 			// $data['username'] = $userDetailTo['first_name'] . " " . $userDetailTo['last_name'];
 			// $data['amount'] = $_REQUEST['amount'];
