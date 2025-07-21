@@ -7764,15 +7764,79 @@ class Admin extends Base_Controller
 	// 		}
 	// 	}
 
+	// created by @krishn on 18-07-25
 	public function welfareList()
 	{
-		$groupCycleList = $this->common->getData('user_group_lifecycle', array('group_id' => $_REQUEST['group_id'], 'groupLifecycle_id' => $_REQUEST['groupLifecycle_id'], 'user_id' => $_REQUEST['user_id'], 'is_completed' => 0));
+		$groupCycleList = $this->common->getData(
+			'user_group_lifecycle',
+			array(
+				'group_id' => $_REQUEST['group_id'],
+				'groupLifecycle_id' => $_REQUEST['groupLifecycle_id'],
+				'user_id' => $_REQUEST['user_id'],
+				'is_completed' => 0
+			)
+		);
+
 		if (!empty($groupCycleList)) {
+
+			// Find all records where welfare_uuid is NULL or empty
+			$emptyUuidItems = array_filter($groupCycleList, function ($row) {
+				return empty($row['welfare_uuid']);
+			});
+
+			if (!empty($emptyUuidItems)) {
+				// Sort items by ID (to keep consistent order)
+				usort($emptyUuidItems, function ($a, $b) {
+					return $a['id'] <=> $b['id'];
+				});
+
+				$count = 0;
+				$uuid = null;
+
+				foreach ($emptyUuidItems as $item) {
+					if ($count % 40 === 0 || !$uuid) {
+						// Generate a new UUID for each batch of 40
+						$uuid = strtoupper(substr(bin2hex(random_bytes(8)), 0, 10));
+					}
+
+					// Update each row with the batch UUID
+					$this->common->updateData(
+						'user_group_lifecycle',
+						array('welfare_uuid' => $uuid),
+						array('id' => $item['id'])
+					);
+
+					$count++;
+				}
+
+				// Fetch the updated list (with UUIDs)
+				$groupCycleList = $this->common->getData(
+					'user_group_lifecycle',
+					array(
+						'group_id' => $_REQUEST['group_id'],
+						'groupLifecycle_id' => $_REQUEST['groupLifecycle_id'],
+						'user_id' => $_REQUEST['user_id'],
+						'is_completed' => 0
+					)
+				);
+			}
+
 			$this->response(true, 'group fetch successfully', array('lists' => $groupCycleList));
 		} else {
 			$this->response(true, 'group not found', array('lists' => array()));
 		}
 	}
+
+
+	// public function welfareList()
+	// {
+	// 	$groupCycleList = $this->common->getData('user_group_lifecycle', array('group_id' => $_REQUEST['group_id'], 'groupLifecycle_id' => $_REQUEST['groupLifecycle_id'], 'user_id' => $_REQUEST['user_id'], 'is_completed' => 0));
+	// 	if (!empty($groupCycleList)) {
+	// 		$this->response(true, 'group fetch successfully', array('lists' => $groupCycleList));
+	// 	} else {
+	// 		$this->response(true, 'group not found', array('lists' => array()));
+	// 	}
+	// }
 
 
 
@@ -7871,201 +7935,427 @@ class Admin extends Base_Controller
 	}
 
 
+	// public function editwelfareCycle()
+	// {
 
+	// 	$id = $_REQUEST['id'];
+
+	// 	unset($_REQUEST['id']);
+
+	// 	if ($_REQUEST['payment_method'] == '3') {
+	// 		$this->paymentBySafekeeping($id, $_REQUEST['amount'], '2', "0");
+	// 	}
+
+	// 	if ($_REQUEST['payment_method'] == '2') {
+	// 		$this->paymentByPF($id, $_REQUEST['amount'], '2');
+	// 	}
+
+
+	// 	$getcycle = $this->common->getData('user_group_lifecycle', array(
+	// 		"group_id" => $_REQUEST['group_id'],
+	// 		'status!=' => '1',
+	// 		'loan_amount_status' => 1,
+	// 		"user_id" => $_REQUEST['user_id']
+	// 	), array('sort_by' => 'id', 'sort_direction' => 'desc', 'limit' => 1));
+
+	// 	$_REQUEST['loan_amount_status'] = 1;
+	// 	if ($_REQUEST['created_at']) {
+	// 		$_REQUEST['date'] = $_REQUEST['created_at'];
+	// 	}
+
+	// 	$post = $this->common->getField('user_group_lifecycle', $_REQUEST);
+
+	// 	if (!empty($post)) {
+	// 		if (!empty($getcycle)) {
+	// 			if ($getcycle[0]['total_payment'] > 0) {
+	// 				$amount =  $getcycle[0]['total_payment'] - $_REQUEST['amount'];
+	// 				$result = $this->common->updateData('user_group_lifecycle', array('total_payment' => $amount), array('id' => $id));
+	// 			}
+	// 		}
+
+	// 		$post['total_payment'] = $post['amount'] * $post['month'];
+
+	// 		// if welfare closed
+	// 		if (isset($_REQUEST['welfare_uuid']) && isset($_REQUEST['is_completed']) && $_REQUEST['is_completed'] == '1') {
+	// 			$this->common->updateData(
+	// 				'user_group_lifecycle',
+	// 				array('is_completed' => '1'),
+	// 				array('welfare_uuid' => $_REQUEST['welfare_uuid'])
+	// 			);
+	// 		}
+
+	// 		$result = $this->common->updateData('user_group_lifecycle', $post, array('id' => $id));
+	// 	} else {
+	// 		$result = "";
+	// 	}
+
+	// 	if ($result) {
+
+	// 		$this->common->insertData('user_cycle_status_history', array("lifecycle_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
+	// 		//user_loan_payment
+
+	// 		$wherePendingwel = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "'AND groupLifecycle_id = '147' GROUP BY user_id,grand_total_amount,group_id,groupLifecycle_id,id ";
+
+	// 		$resultwelTotal = $this->common->getData('user_group_lifecycle', $wherePendingwel, array("field" => 'user_id,group_id,groupLifecycle_id,grand_total_amount,id', ""));
+
+	// 		$user_loan_payment = $this->common->insertData(
+	// 			'user_loan_payment',
+	// 			array(
+	// 				"loan_id" => $resultwelTotal[0]['id'],
+	// 				"group_id" => $_REQUEST['group_id'],
+	// 				"amount" => $_REQUEST['amount'],
+	// 				"payment_method" => $_REQUEST['payment_method'],
+	// 				"user_id" => $_REQUEST['user_id'],
+	// 				"note_title" => $_REQUEST['note_title'],
+	// 				"note_description" => $_REQUEST['note_description'],
+	// 				"status" => $_REQUEST['status'],
+	// 				"created_at" => date('Y-m-d H:i:s')
+	// 			)
+	// 		);
+
+
+
+	// 		$message = "Your cycle info has been updated";
+	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "1");
+
+
+	// 		if ($_REQUEST['status'] === '3') {
+
+	// 			$this->common->query_normal("UPDATE credit_score_user SET three_or_more_missed_savings_deadline = three_or_more_missed_savings_deadline+1 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+
+	// 			$creditScoreInfo = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
+
+	// 			if (!empty($creditScoreInfo)) {
+
+	// 				if ($creditScoreInfo['three_or_more_missed_savings_deadline'] > 2) {
+	// 					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+
+	// 					$this->updateCreditScore(300, 'minus');
+	// 				} else {
+	// 					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+	// 					$this->updateCreditScore(100, 'minus');
+	// 				}
+	// 			}
+	// 		}
+
+
+
+	// 		if ($_REQUEST['status'] === '2') {
+
+	// 			$this->common->query_normal("UPDATE credit_score_user SET saving_paid_on_time = saving_paid_on_time+20 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+	// 			$this->updateCreditScore(20, 'plus');
+
+
+
+	// 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+
+	// 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+	// 			$data['useremail'] = "";
+	// 			$data['message'] = '<p>This is a confirmation that your WELFARE payment for this month has been received and recorded. Check your app for confirmation.</p>';
+	// 			$messaged = $this->load->view('template/common-mail', $data, true);
+	// 			$mail = $this->sendMail($userDetailFrom['email'], 'Welfare', $messaged);
+	// 		}
+
+
+	// 		if ($_REQUEST['status'] === '4') {
+	// 			$data['status'] = "Missed Payment Deadline";
+	// 			// added super email 
+	// 			$usersuper = $this->common->getData('superAdmin', array('admin_type' => '2', 'status!=' => '2'), array('single'));
+	// 			$data1['sendername'] = $usersuper['name'];
+	// 			// $data1['message'] = '<p>This is a confirmation that we have received and recorded Welfare for this month. Refer to your app for confirmation</p><p>Amount paid: £' . $_REQUEST["amount"] . '</p><p>Payment date: ' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</p><p>Payment status: ' . $_REQUEST['status'] . '</p>';
+	// 			$data1['message'] = '<p>This is a confirmation that we have received and recorded Welfare for this month. Refer to your app for confirmation.</p>
+	// 			<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+	// 				<tr>
+	// 					<td><strong>Amount paid</strong></td>
+	// 					<td>£' . $_REQUEST["amount"] . '</td>
+	// 				</tr>
+	// 				<tr>
+	// 					<td><strong>Payment date</strong></td>
+	// 					<td>' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</td>
+	// 				</tr>
+	// 				<tr>
+	// 					<td><strong>Payment status</strong></td>
+	// 					<td>' . $data['status'] . '</td>
+	// 				</tr>
+	// 			</table>';
+
+	// 			$messaged1 = $this->load->view('template/common-mail', $data1, true);
+	// 			$mail = $this->sendMail($usersuper['email'], 'Welfare', $messaged1);
+
+	// 			$this->common->query_normal("UPDATE credit_score_user SET late_savings_payment = late_savings_payment-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+	// 			$this->updateCreditScore(60, 'minus');
+	// 		}
+	// 		//new-changes 12-06-2024
+	// 		if ($_REQUEST['status']) {
+	// 			$status = $_REQUEST['status'];
+	// 			$group_type_id = '4';
+	// 			$group_id = $_REQUEST['group_id'];
+	// 			$created_at = date('Y-m-d H:i:s');
+	// 			$groupLifecycle_id = '147';
+	// 			$user_id = $_REQUEST['user_id'];
+	// 			$month = $_REQUEST['month'];
+	// 			$amount = $_REQUEST['amount'];
+	// 			$result = $this->common->query_normal("INSERT INTO payment_notification(status,group_type_id,group_id,month,created_at,
+	//            groupLifecycle_id,user_id,amount) VALUES('$status','$group_type_id','$group_id','$month','$created_at','$groupLifecycle_id','$user_id','$amount')");
+	// 		}
+	// 		//changes
+	// 		// $userDetailFrom = $this->common->getData('user',array('user_id'=>$_REQUEST['user_id']),array('single'));
+	// 		// $checkuser = $this->common->getData('user_circle',array("user_id"=>$_REQUEST['user_id']),array('single'));
+	// 		//  if(!empty($checkuser)){
+	// 		//  $checkusercircle = $this->common->getData('user_circle',array("circle_id"=>$checkuser['circle_id']),array());
+	// 		//   if($checkusercircle){
+	// 		//       foreach($checkusercircle as $value){
+	// 		//           $chuser = $this->common->getData('user',array("user_id"=>$value['user_id']),array('single'));
+	// 		//             $data['sendername'] = $userDetailFrom['first_name']." ".$userDetailFrom['last_name'];
+	// 		// 			$data['useremail'] = "";
+
+	// 		// 		    if($_REQUEST['status'] ==='4'){
+	// 		//     	$data['message'] = '<p>Hello Team members Someone in your circle has paid late</p>';
+	// 		//     	$messaged = $this->load->view('template/common-mail',$data,true);
+	// 		//       $mail = $this->sendMail($chuser['email'],'Welfare',$messaged);
+	// 		//             }
+	// 		//             if($_REQUEST['status'] ==='3'){
+	// 		//     $data['message'] = '<p>Hello Team members Someone in your circle has missed a payment</p>';
+	// 		//     $messaged = $this->load->view('template/common-mail',$data,true);
+	// 		//       $mail = $this->sendMail($chuser['email'],'Welfare',$messaged);
+	// 		//             }
+
+
+	// 		//       }
+	// 		//   }
+	// 		//  }
+
+	// 		$this->response(true, "User Welfare Cycle Update Successfully");
+	// 	} else {
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
+	// created by @krishn on 18-07-25
 	public function editwelfareCycle()
 	{
+		$id = $_REQUEST['id'] ?? null;
+		if (!$id) {
+			$this->response(false, "Missing lifecycle ID");
+			return;
+		}
 
-		$id = $_REQUEST['id'];
+		unset($_REQUEST['id']); // Remove id so it doesn't overwrite the record
 
-		unset($_REQUEST['id']);
-
+		// Handle payments
 		if ($_REQUEST['payment_method'] == '3') {
 			$this->paymentBySafekeeping($id, $_REQUEST['amount'], '2', "0");
 		}
-
 		if ($_REQUEST['payment_method'] == '2') {
 			$this->paymentByPF($id, $_REQUEST['amount'], '2');
 		}
 
-
-		$getcycle = $this->common->getData('user_group_lifecycle', array(
-			"group_id" => $_REQUEST['group_id'],
-			'status!=' => '1',
-			'loan_amount_status' => 1,
-			"user_id" => $_REQUEST['user_id']
-		), array('sort_by' => 'id', 'sort_direction' => 'desc', 'limit' => 1));
+		// Get last cycle data
+		$getcycle = $this->common->getData(
+			'user_group_lifecycle',
+			[
+				"group_id" => $_REQUEST['group_id'],
+				'status!=' => '1',
+				'loan_amount_status' => 1,
+				"user_id" => $_REQUEST['user_id']
+			],
+			['sort_by' => 'id', 'sort_direction' => 'desc', 'limit' => 1]
+		);
 
 		$_REQUEST['loan_amount_status'] = 1;
-		if ($_REQUEST['created_at']) {
+		if (!empty($_REQUEST['created_at'])) {
 			$_REQUEST['date'] = $_REQUEST['created_at'];
 		}
 
+		// Ensure welfare_uuid for grouping (40 per batch)
+		if (empty($_REQUEST['welfare_uuid'])) {
+			$lastEntry = $this->common->getData(
+				'user_group_lifecycle',
+				['user_id' => $_REQUEST['user_id'], 'group_id' => $_REQUEST['group_id']],
+				['sort_by' => 'id', 'sort_direction' => 'desc', 'limit' => 1]
+			);
+
+			$batchUuid = !empty($lastEntry) ? $lastEntry[0]['welfare_uuid'] : '';
+
+			if ($batchUuid) {
+				$batchCount = $this->common->getData(
+					'user_group_lifecycle',
+					['welfare_uuid' => $batchUuid],
+					['count' => true] // Should return only count
+				);
+
+				if ($batchCount < 40) {
+					$_REQUEST['welfare_uuid'] = $batchUuid;
+				} else {
+					$_REQUEST['welfare_uuid'] = strtoupper(substr(bin2hex(random_bytes(8)), 0, 10));
+				}
+			} else {
+				$_REQUEST['welfare_uuid'] = strtoupper(substr(bin2hex(random_bytes(8)), 0, 10));
+			}
+		}
+
+		// Prepare data for update
 		$post = $this->common->getField('user_group_lifecycle', $_REQUEST);
 
 		if (!empty($post)) {
-			if (!empty($getcycle)) {
-				if ($getcycle[0]['total_payment'] > 0) {
-					$amount =  $getcycle[0]['total_payment'] - $_REQUEST['amount'];
-					$result = $this->common->updateData('user_group_lifecycle', array('total_payment' => $amount), array('id' => $id));
-				}
+			if (!empty($getcycle) && $getcycle[0]['total_payment'] > 0) {
+				$amount = $getcycle[0]['total_payment'] - $_REQUEST['amount'];
+				$this->common->updateData('user_group_lifecycle', ['total_payment' => $amount], ['id' => $id]);
 			}
 
 			$post['total_payment'] = $post['amount'] * $post['month'];
 
-			// if welfare closed
-			if (isset($_REQUEST['welfare_uuid']) && isset($_REQUEST['is_completed']) && $_REQUEST['is_completed'] == '1') {
-				$this->common->updateData(
-					'user_group_lifecycle',
-					array('is_completed' => '1'),
-					array('welfare_uuid' => $_REQUEST['welfare_uuid'])
-				);
-			}
+			// Mark as completed if requested
+			if (!empty($_REQUEST['is_completed']) && $_REQUEST['is_completed'] == '1') {
 
-			$result = $this->common->updateData('user_group_lifecycle', $post, array('id' => $id));
-		} else {
-			$result = "";
-		}
+				$welfareUuid = $_REQUEST['welfare_uuid'] ?? '';
 
-		if ($result) {
+				if (empty($welfareUuid)) {
+					// Get last entry to determine batch UUID if not provided
+					$lastEntry = $this->common->getData(
+						'user_group_lifecycle',
+						['user_id' => $_REQUEST['user_id'], 'group_id' => $_REQUEST['group_id']],
+						['sort_by' => 'id', 'sort_direction' => 'desc', 'limit' => 1]
+					);
+					if (!empty($lastEntry)) {
+						$welfareUuid = $lastEntry[0]['welfare_uuid'];
+					}
+				}
 
-			$this->common->insertData('user_cycle_status_history', array("lifecycle_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
-			//user_loan_payment
+				if (!empty($welfareUuid)) {
+					// Fetch all 40 entries for this cycle batch
+					$cycleEntries = $this->common->getData(
+						'user_group_lifecycle',
+						['welfare_uuid' => $welfareUuid, 'group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id']],
+						['sort_by' => 'id', 'sort_direction' => 'asc']
+					);
 
-			$wherePendingwel = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "'AND groupLifecycle_id = '147' GROUP BY user_id,grand_total_amount,group_id,groupLifecycle_id,id ";
+					foreach ($cycleEntries as $entry) {
+						$updateData = [
+							'is_completed' => 1
+						];
 
-			$resultwelTotal = $this->common->getData('user_group_lifecycle', $wherePendingwel, array("field" => 'user_id,group_id,groupLifecycle_id,grand_total_amount,id', ""));
+						// Update fields conditionally
+						if ($entry['status'] == 1) {
+							$updateData['status'] = 2;
+						}
+						if ($entry['payment_method'] == 0) {
+							$updateData['payment_method'] = 1;
+						}
+						if ($entry['loan_amount_status'] == 0) {
+							$updateData['loan_amount_status'] = 1;
+						}
 
-			$user_loan_payment = $this->common->insertData(
-				'user_loan_payment',
-				array(
-					"loan_id" => $resultwelTotal[0]['id'],
-					"group_id" => $_REQUEST['group_id'],
-					"amount" => $_REQUEST['amount'],
-					"payment_method" => $_REQUEST['payment_method'],
-					"user_id" => $_REQUEST['user_id'],
-					"note_title" => $_REQUEST['note_title'],
-					"note_description" => $_REQUEST['note_description'],
-					"status" => $_REQUEST['status'],
-					"created_at" => date('Y-m-d H:i:s')
-				)
-			);
+						// Update total_payment if needed
+						if ($entry['total_payment'] == 0) {
+							$updateData['total_payment'] = $entry['month'] * $entry['amount'];
+						}
 
-
-
-			$message = "Your cycle info has been updated";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "1");
-
-
-			if ($_REQUEST['status'] === '3') {
-
-				$this->common->query_normal("UPDATE credit_score_user SET three_or_more_missed_savings_deadline = three_or_more_missed_savings_deadline+1 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-				$creditScoreInfo = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-				if (!empty($creditScoreInfo)) {
-
-					if ($creditScoreInfo['three_or_more_missed_savings_deadline'] > 2) {
-						$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-						$this->updateCreditScore(300, 'minus');
-					} else {
-						$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-						$this->updateCreditScore(100, 'minus');
+						// Update this row
+						$this->common->updateData('user_group_lifecycle', $updateData, ['id' => $entry['id']]);
 					}
 				}
 			}
 
 
-
-			if ($_REQUEST['status'] === '2') {
-
-				$this->common->query_normal("UPDATE credit_score_user SET saving_paid_on_time = saving_paid_on_time+20 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-				$this->updateCreditScore(20, 'plus');
-
-
-
-				$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-				$data['useremail'] = "";
-				$data['message'] = '<p>This is a confirmation that your WELFARE payment for this month has been received and recorded. Check your app for confirmation.</p>';
-				$messaged = $this->load->view('template/common-mail', $data, true);
-				$mail = $this->sendMail($userDetailFrom['email'], 'Welfare', $messaged);
-			}
-
-
-			if ($_REQUEST['status'] === '4') {
-				$data['status'] = "Missed Payment Deadline";
-				// added super email 
-				$usersuper = $this->common->getData('superAdmin', array('admin_type' => '2', 'status!=' => '2'), array('single'));
-				$data1['sendername'] = $usersuper['name'];
-				// $data1['message'] = '<p>This is a confirmation that we have received and recorded Welfare for this month. Refer to your app for confirmation</p><p>Amount paid: £' . $_REQUEST["amount"] . '</p><p>Payment date: ' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</p><p>Payment status: ' . $_REQUEST['status'] . '</p>';
-				$data1['message'] = '<p>This is a confirmation that we have received and recorded Welfare for this month. Refer to your app for confirmation.</p>
-				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
-					<tr>
-						<td><strong>Amount paid</strong></td>
-						<td>£' . $_REQUEST["amount"] . '</td>
-					</tr>
-					<tr>
-						<td><strong>Payment date</strong></td>
-						<td>' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</td>
-					</tr>
-					<tr>
-						<td><strong>Payment status</strong></td>
-						<td>' . $data['status'] . '</td>
-					</tr>
-				</table>';
-
-				$messaged1 = $this->load->view('template/common-mail', $data1, true);
-				$mail = $this->sendMail($usersuper['email'], 'Welfare', $messaged1);
-
-				$this->common->query_normal("UPDATE credit_score_user SET late_savings_payment = late_savings_payment-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-				$this->updateCreditScore(60, 'minus');
-			}
-			//new-changes 12-06-2024
-			if ($_REQUEST['status']) {
-				$status = $_REQUEST['status'];
-				$group_type_id = '4';
-				$group_id = $_REQUEST['group_id'];
-				$created_at = date('Y-m-d H:i:s');
-				$groupLifecycle_id = '147';
-				$user_id = $_REQUEST['user_id'];
-				$month = $_REQUEST['month'];
-				$amount = $_REQUEST['amount'];
-				$result = $this->common->query_normal("INSERT INTO payment_notification(status,group_type_id,group_id,month,created_at,
-               groupLifecycle_id,user_id,amount) VALUES('$status','$group_type_id','$group_id','$month','$created_at','$groupLifecycle_id','$user_id','$amount')");
-			}
-			//changes
-			// $userDetailFrom = $this->common->getData('user',array('user_id'=>$_REQUEST['user_id']),array('single'));
-			// $checkuser = $this->common->getData('user_circle',array("user_id"=>$_REQUEST['user_id']),array('single'));
-			//  if(!empty($checkuser)){
-			//  $checkusercircle = $this->common->getData('user_circle',array("circle_id"=>$checkuser['circle_id']),array());
-			//   if($checkusercircle){
-			//       foreach($checkusercircle as $value){
-			//           $chuser = $this->common->getData('user',array("user_id"=>$value['user_id']),array('single'));
-			//             $data['sendername'] = $userDetailFrom['first_name']." ".$userDetailFrom['last_name'];
-			// 			$data['useremail'] = "";
-
-			// 		    if($_REQUEST['status'] ==='4'){
-			//     	$data['message'] = '<p>Hello Team members Someone in your circle has paid late</p>';
-			//     	$messaged = $this->load->view('template/common-mail',$data,true);
-			//       $mail = $this->sendMail($chuser['email'],'Welfare',$messaged);
-			//             }
-			//             if($_REQUEST['status'] ==='3'){
-			//     $data['message'] = '<p>Hello Team members Someone in your circle has missed a payment</p>';
-			//     $messaged = $this->load->view('template/common-mail',$data,true);
-			//       $mail = $this->sendMail($chuser['email'],'Welfare',$messaged);
-			//             }
-
-
-			//       }
-			//   }
-			//  }
-
-			$this->response(true, "User Welfare Cycle Update Successfully");
+			$result = $this->common->updateData('user_group_lifecycle', $post, ['id' => $id]);
 		} else {
-			$this->response(false, "There is a problem, please try again.");
+			$result = false;
 		}
+
+		if (!$result) {
+			$this->response(false, "There is a problem, please try again.");
+			return;
+		}
+
+		// Insert status history
+		$this->common->insertData('user_cycle_status_history', [
+			"lifecycle_id" => $id,
+			"user_id" => $_REQUEST['user_id'],
+			"note_title" => $_REQUEST['note_title'],
+			"note_description" => $_REQUEST['note_description'],
+			"status" => $_REQUEST['status'],
+			"created_at" => date('Y-m-d H:i:s')
+		]);
+
+		// Log loan payment
+		$wherePendingwel = "user_id = '{$_REQUEST['user_id']}' AND group_id = '{$_REQUEST['group_id']}' AND groupLifecycle_id = '147' GROUP BY user_id,grand_total_amount,group_id,groupLifecycle_id,id";
+		$resultwelTotal = $this->common->getData('user_group_lifecycle', $wherePendingwel, [
+			"field" => 'user_id,group_id,groupLifecycle_id,grand_total_amount,id'
+		]);
+
+		if (!empty($resultwelTotal)) {
+			$this->common->insertData('user_loan_payment', [
+				"loan_id" => $resultwelTotal[0]['id'],
+				"group_id" => $_REQUEST['group_id'],
+				"amount" => $_REQUEST['amount'],
+				"payment_method" => $_REQUEST['payment_method'],
+				"user_id" => $_REQUEST['user_id'],
+				"note_title" => $_REQUEST['note_title'],
+				"note_description" => $_REQUEST['note_description'],
+				"status" => $_REQUEST['status'],
+				"created_at" => date('Y-m-d H:i:s')
+			]);
+		}
+
+		// Send notification
+		$message = "Your cycle info has been updated";
+		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "1");
+
+		// Credit score adjustments
+		if ($_REQUEST['status'] === '3') { // Missed payment
+			$this->common->query_normal("UPDATE credit_score_user SET three_or_more_missed_savings_deadline = three_or_more_missed_savings_deadline+1 WHERE user_id = '{$_REQUEST['user_id']}'");
+			$creditScoreInfo = $this->common->getData('credit_score_user', ['user_id' => $_REQUEST['user_id']], ['single']);
+			if (!empty($creditScoreInfo)) {
+				if ($creditScoreInfo['three_or_more_missed_savings_deadline'] > 2) {
+					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-300 WHERE user_id = '{$_REQUEST['user_id']}'");
+					$this->updateCreditScore(300, 'minus');
+				} else {
+					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-100 WHERE user_id = '{$_REQUEST['user_id']}'");
+					$this->updateCreditScore(100, 'minus');
+				}
+			}
+		}
+
+		if ($_REQUEST['status'] === '2') { // On-time payment
+			$this->common->query_normal("UPDATE credit_score_user SET saving_paid_on_time = saving_paid_on_time+20 WHERE user_id = '{$_REQUEST['user_id']}'");
+			$this->updateCreditScore(20, 'plus');
+
+			$userDetailFrom = $this->common->getData('user', ['user_id' => $_REQUEST['user_id']], ['single']);
+			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+			$data['useremail'] = "";
+			$data['message'] = '<p>This is a confirmation that your WELFARE payment for this month has been received and recorded. Check your app for confirmation.</p>';
+			$messaged = $this->load->view('template/common-mail', $data, true);
+			$this->sendMail($userDetailFrom['email'], 'Welfare', $messaged);
+		}
+
+		if ($_REQUEST['status'] === '4') { // Missed deadline
+			$data['status'] = "Missed Payment Deadline";
+			$usersuper = $this->common->getData('superAdmin', ['admin_type' => '2', 'status!=' => '2'], ['single']);
+			$data1['sendername'] = $usersuper['name'];
+			$data1['message'] = '<p>This is a confirmation that we have received and recorded Welfare for this month. Refer to your app for confirmation.</p>
+			<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+				<tr><td><strong>Amount paid</strong></td><td>£' . $_REQUEST["amount"] . '</td></tr>
+				<tr><td><strong>Payment date</strong></td><td>' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</td></tr>
+				<tr><td><strong>Payment status</strong></td><td>' . $data['status'] . '</td></tr>
+			</table>';
+			$messaged1 = $this->load->view('template/common-mail', $data1, true);
+			$this->sendMail($usersuper['email'], 'Welfare', $messaged1);
+
+			$this->common->query_normal("UPDATE credit_score_user SET late_savings_payment = late_savings_payment-60 WHERE user_id = '{$_REQUEST['user_id']}'");
+			$this->updateCreditScore(60, 'minus');
+		}
+
+		// Log notification
+		if (!empty($_REQUEST['status'])) {
+			$status = $_REQUEST['status'];
+			$this->common->query_normal("
+            INSERT INTO payment_notification (status, group_type_id, group_id, month, created_at, groupLifecycle_id, user_id, amount)
+            VALUES ('{$status}', '4', '{$_REQUEST['group_id']}', '{$_REQUEST['month']}', NOW(), '147', '{$_REQUEST['user_id']}', '{$_REQUEST['amount']}')
+        ");
+		}
+
+		$this->response(true, "User Welfare Cycle Update Successfully");
 	}
 
 
