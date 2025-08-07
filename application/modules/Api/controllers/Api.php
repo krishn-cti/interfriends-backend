@@ -583,7 +583,7 @@ class Api extends Base_Controller
 				]);
 
 				// Build registration link with token
-				$data1["link"] = 'https://www.creativethoughtsinfo.com/interfriendsApp/#/register?token=' . $token;
+				$data1["link"] = USER_BASE_URL.'register?token=' . $token;
 
 				$data1["message"] = '
 					<p>
@@ -791,7 +791,7 @@ class Api extends Base_Controller
 				}
 			}
 
-			$data1['link'] = 'https://www.creativethoughtsinfo.com/interfriendsApp/#/register';
+			$data1['link'] = USER_BASE_URL.'register';
 			$data1['sendername'] = $_REQUEST['first_name'] . " " . $_REQUEST['last_name'];
 			$data1['useremail'] = "";
 			$data1['message'] = '<p style="margin-bottom:10px;">Your Friend ' . $data['recommend_first_member'] . ' and ' . $data['recommend_member'] . ' have recommended you to interfriends to join the group.</p><p>To accept and continue your registration,click on link below to complete your registration</p><a href="' . $data1["link"] . '">click here</a>';
@@ -1017,8 +1017,8 @@ class Api extends Base_Controller
 			}
 
 
-			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_request = emergency_loan_request-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(60, 'minus', $_REQUEST['user_id']);
+			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_request = emergency_loan_request-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(100, 'minus', $_REQUEST['user_id']);
 
 			$this->response(true, "Emergency loan submitted successfully", array("loan_id" => $loan_id));
 		} else {
@@ -1056,7 +1056,7 @@ class Api extends Base_Controller
 		$msg_notification = array(
 			"body" => $message,
 			"title" => $title,
-			"icon" => 'https://ctinfotech.com/CT01/interfriends//assets/images/favicon-c.png'
+			"icon" => ASSET_BASE_URL . 'icons/i_white.jfif'
 		);
 
 		// for web		
@@ -1099,7 +1099,7 @@ class Api extends Base_Controller
 		$msg_notification = array(
 			"body" => $message,
 			"title" => $title,
-			"icon" => 'https://ctinfotech.com/CT01/interfriends//assets/images/favicon-c.png'
+			"icon" => ASSET_BASE_URL . 'icons/i_white.jfif'
 		);
 
 		// for web		
@@ -1651,7 +1651,8 @@ class Api extends Base_Controller
 
 			$mail->IsSMTP();
 			$mail->CharSet = 'UTF-8';
-			$mail->Host = "smtp.gmail.com";
+			// $mail->Host = "smtp.gmail.com";
+			$mail->Host = "smtp.hostinger.com";
 
 			$mail->SMTPAuth = true;
 			// 		$mail->SMTPOptions = array(
@@ -1663,11 +1664,14 @@ class Api extends Base_Controller
 			//         );
 
 			$mail->Port = 587; // Or 587
-			$mail->Username = 'interfriendscu@gmail.com';
-			$mail->Password = 'zbkydsoaizmbqnhm';
+			// $mail->Username = 'interfriendscu@gmail.com';
+			$mail->Username = 'admin@interfriends.uk';
+			// $mail->Password = 'zbkydsoaizmbqnhm';
+			$mail->Password = 'Mbx9jm!2';
 			$mail->SMTPSecure = "tls";
 			//$mail->SMTPDebug = 2;
-			$mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
+			// $mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
+			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
 			$mail->Body = $message;
 
 			$mail->isHTML(true);
@@ -3126,8 +3130,8 @@ class Api extends Base_Controller
 		if (!$approver) return;
 
 		$token = urlencode($token);
-		$linkApprove = "https://www.creativethoughtsinfo.com/CT01/interfriends_admin/Api/handleApproval/{$token}/1";
-		$linkDecline = "https://www.creativethoughtsinfo.com/CT01/interfriends_admin/Api/handleDecline/{$token}/2";
+		$linkApprove = API_BASE_URL."handleApproval/{$token}/1";
+		$linkDecline = API_BASE_URL."handleDecline/{$token}/2";
 
 		$subject = "Approval Request for Recommendation";
 
@@ -3247,29 +3251,33 @@ class Api extends Base_Controller
 
 		// if ($status == 2) {
 		// 	$this->sendDeclineNotification($approval);
-		// 	header("Location: https://creativethoughtsinfo.com/interfriendsApp/#/handleDecline/decline/2");
+		// 	header("Location: " . USER_BASE_URL . "handleApproval/decline/2");
 		// 	exit;
 		// }
 		// Process next level based on role
 		switch ($approval['approver_role']) {
 			case 'second_recommender':
 				$this->processCircleApproval($approval['recommend_id']);
-				header("Location: https://creativethoughtsinfo.com/interfriendsApp/#/handleApproval/second_recommender/1");
+				header("Location: " . USER_BASE_URL . "handleApproval/second_recommender/1");
+				exit;
 				break;
 
 			case 'circle_lead':
 			case 'deputy_circle_lead':
 				$this->processAdminApproval($approval['recommend_id']);
-				header("Location: https://creativethoughtsinfo.com/interfriendsApp/#/handleApproval/circle_lead/1");
+				header("Location: " . USER_BASE_URL . "handleApproval/circle_lead/1");
+				exit;
 				break;
 
 			case 'admin':
 				$this->sendFinalRegistrationMail($approval['recommend_id']);
-				header("Location: https://creativethoughtsinfo.com/interfriendsApp/#/handleApproval/admin/1");
+				header("Location: " . USER_BASE_URL . "handleApproval/admin/1");
+				exit;
 				break;
 
 			default:
 				$this->response(false, "Unknown approval role.");
+				exit;
 				break;
 		}
 	}
@@ -3286,7 +3294,7 @@ class Api extends Base_Controller
 
 		if ($status == 2) {
 			$this->sendDeclineNotification($approval);
-			header("Location: https://creativethoughtsinfo.com/interfriendsApp/#/handleDecline/decline/2");
+			header("Location: " . USER_BASE_URL . "handleApproval/decline/2");
 			exit;
 		}
 	}
@@ -3329,7 +3337,7 @@ class Api extends Base_Controller
 	{
 		$recommend = $this->common->getData('recommend_user', array('id' => $recommend_id), array('single'));
 
-		$link = "https://www.creativethoughtsinfo.com/interfriendsApp/#/register?recommend_id=$recommend_id";
+		$link = USER_BASE_URL."register?recommend_id=$recommend_id";
 
 		$message = "
 			<p>

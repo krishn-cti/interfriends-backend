@@ -90,6 +90,20 @@ defined('user_profile')      OR define('user_profile', 'assets/userfile/profile/
 define('ANG_URL', 'https://creativethoughtsinfo.com/interfriendsApp/#/');
 define('ANG_superAdmin_URL', 'https://creativethoughtsinfo.com/interfriendsAdmin/#/');
 
+// defined here base URLs for Interfriends CTI server
+define('ADMIN_BASE_URL', 'https://www.creativethoughtsinfo.com/interfriendsAdmin/#/');
+define('USER_BASE_URL', 'https://www.creativethoughtsinfo.com/interfriendsApp/#/');
+define('ASSET_BASE_URL', 'https://www.creativethoughtsinfo.com/interfriendsApp/assets/');
+define('API_BASE_URL', 'https://www.creativethoughtsinfo.com/CT01/interfriends_admin/Api/');
+define('ADMIN_API_BASE_URL', 'https://www.creativethoughtsinfo.com/CT01/interfriends_admin/Api/Admin/');
+
+// defined here base URLs for Interfriends UK server
+// define('ADMIN_BASE_URL', 'https://www.interfriends.uk/admin/#/');
+// define('USER_BASE_URL', 'https://www.interfriends.uk/app/#/');
+// define('ASSET_BASE_URL', 'https://www.interfriends.uk/app/assets/');
+// define('API_BASE_URL', 'https://www.interfriends.uk/backend/Api/');
+// define('ADMIN_API_BASE_URL', 'https://www.interfriends.uk/backend/Api/Admin/');
+
 
 
 

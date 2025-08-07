@@ -1060,8 +1060,8 @@ class Admin extends Base_Controller
 
 
 			if ($_REQUEST['status'] === '4' &&  $typename != '2') {
-				$this->common->query_normal("UPDATE credit_score_user SET late_savings_payment = late_savings_payment-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-				$this->updateCreditScore(60, 'minus');
+				$this->common->query_normal("UPDATE credit_score_user SET late_savings_payment = late_savings_payment-30 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+				$this->updateCreditScore(30, 'minus');
 			}
 			//new-changes 12-06-2024
 			if ($_REQUEST['status']) {
@@ -2258,9 +2258,9 @@ class Admin extends Base_Controller
 		$result = $this->common->insertData('user_loan', $post);
 		$loan_id = $this->db->insert_id();
 		if ($result) {
-			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 
-			$this->updateCreditScoreUser(100, 'minus', $_REQUEST['user_id']);
+			$this->updateCreditScoreUser(200, 'minus', $_REQUEST['user_id']);
 
 			if (!empty($_REQUEST['gurarantor'])) {
 				$this->common->query_normal("UPDATE credit_score_user SET guarantee_a_loan_application = guarantee_a_loan_application+0 WHERE `user_id` = '" . $_REQUEST['gurarantor'] . "'");
@@ -2435,8 +2435,8 @@ class Admin extends Base_Controller
 		$loan_id = $this->db->insert_id();
 
 		if ($result) {
-			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_request = emergency_loan_request-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScoreUser(60, 'minus', $_REQUEST['user_id']);
+			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_request = emergency_loan_request-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScoreUser(100, 'minus', $_REQUEST['user_id']);
 
 
 			$this->common->insertData('user_emergency_loan_status_history', array("loan_id" => $loan_id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
@@ -2547,8 +2547,8 @@ class Admin extends Base_Controller
 
 		if ($_REQUEST['status'] === '2') {
 
-			$this->common->query_normal("UPDATE credit_score_user SET loan_emergency_payment_fully_paid = loan_emergency_payment_fully_paid+80 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(80, 'plus');
+			$this->common->query_normal("UPDATE credit_score_user SET loan_emergency_payment_fully_paid = loan_emergency_payment_fully_paid+0 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(0, 'plus');
 
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 			$data['useremail'] = "";
@@ -2560,8 +2560,8 @@ class Admin extends Base_Controller
 
 
 		if ($_REQUEST['paid_status'] === '1') {
-			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_on_time = emergency_loan_paid_on_time+20 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(20, 'plus');
+			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_on_time = emergency_loan_paid_on_time+150 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(150, 'plus');
 		}
 
 
@@ -2573,11 +2573,11 @@ class Admin extends Base_Controller
 			if (!empty($creditScoreInfo)) {
 
 				if ($creditScoreInfo['three_late_emergency_payments'] > 3) {
+					$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_late = emergency_loan_paid_late-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+					$this->updateCreditScore(300, 'minus');
+				} else {
 					$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_late = emergency_loan_paid_late-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 					$this->updateCreditScore(100, 'minus');
-				} else {
-					$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_late = emergency_loan_paid_late-20 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-					$this->updateCreditScore(20, 'minus');
 				}
 			}
 		}
@@ -3277,8 +3277,8 @@ class Admin extends Base_Controller
 				if (!empty($creditScoreInfo)) {
 
 					if ($creditScoreInfo['three_or_more_late_loan_payments'] > 3) {
-						$this->common->query_normal("UPDATE credit_score_user SET late_loan_payment = late_loan_payment-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-						$this->updateCreditScore(200, 'minus');
+						$this->common->query_normal("UPDATE credit_score_user SET late_loan_payment = late_loan_payment-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+						$this->updateCreditScore(300, 'minus');
 					} else {
 						$this->common->query_normal("UPDATE credit_score_user SET late_loan_payment = late_loan_payment-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 						$this->updateCreditScore(60, 'minus');
@@ -3295,11 +3295,11 @@ class Admin extends Base_Controller
 			}
 			if ($_REQUEST['status'] == '2') {
 				$data["status"] = 'Paid Late';
-				$this->updateCreditScoreUser(40, 'minus', $_REQUEST['user_id']);
+				$this->updateCreditScoreUser(60, 'minus', $_REQUEST['user_id']);
 			}
 			if ($_REQUEST['status'] == '3') {
 				$data["status"] = 'Missed Payment Deadline';
-				$this->updateCreditScoreUser(80, 'minus', $_REQUEST['user_id']);
+				$this->updateCreditScoreUser(120, 'minus', $_REQUEST['user_id']);
 			}
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
@@ -3366,11 +3366,11 @@ class Admin extends Base_Controller
 			}
 			if ($_REQUEST['status'] == '2') {
 				$data["status"] = 'Paid Late';
-				$this->updateCreditScoreUser(40, 'minus', $_REQUEST['user_id']);
+				$this->updateCreditScoreUser(30, 'minus', $_REQUEST['user_id']);
 			}
 			if ($_REQUEST['status'] == '3') {
 				$data["status"] = 'Missed Payment Deadline';
-				$this->updateCreditScoreUser(80, 'minus', $_REQUEST['user_id']);
+				$this->updateCreditScoreUser(60, 'minus', $_REQUEST['user_id']);
 			}
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
@@ -3439,8 +3439,8 @@ class Admin extends Base_Controller
 			$message = "loan approved";
 			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "5", "2");
 
-			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(100, 'minus', $_REQUEST['user_id']);
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(200, 'minus', $_REQUEST['user_id']);
 
 
 			$message2 = "loan accepted by super admin";
@@ -3874,7 +3874,7 @@ class Admin extends Base_Controller
 			$message = $this->load->view('template/block-user', $array, true);
 			$mail = $this->sendMail($email, 'Default Account', $message);
 
-			$this->updateCreditScoreUser(300, 'minus', $_REQUEST['id']);
+			$this->updateCreditScoreUser(600, 'minus', $_REQUEST['id']);
 
 			$this->response(true, 'User added in Default successfully', array('is_default' => $_REQUEST['is_default']));
 		}
@@ -3894,7 +3894,7 @@ class Admin extends Base_Controller
 
 			$this->common->updateData('user', array('is_default' => $_REQUEST['is_default'], 'subadmin_is_default' => '1'), array('user_id' => $_REQUEST['id']));
 
-			$this->updateCreditScoreUser(300, 'minus', $_REQUEST['id']);
+			$this->updateCreditScoreUser(600, 'minus', $_REQUEST['id']);
 
 			$this->response(true, 'Accepted & User Added in Default list successfully', array('is_default' => $_REQUEST['is_default']));
 		}
@@ -4018,15 +4018,19 @@ class Admin extends Base_Controller
 
 			$mail->IsSMTP();
 			$mail->CharSet = 'UTF-8';
-			$mail->Host = "smtp.gmail.com";
+			// $mail->Host = "smtp.gmail.com";
+			$mail->Host = "smtp.hostinger.com";
 
 			$mail->SMTPAuth = true;
 			$mail->Port = 465; // Or 587
-			$mail->Username = 'interfriendscu@gmail.com';
-			$mail->Password = 'zbkydsoaizmbqnhm';
+			// $mail->Username = 'interfriendscu@gmail.com';
+			$mail->Username = 'admin@interfriends.uk';
+			// $mail->Password = 'zbkydsoaizmbqnhm';
+			$mail->Password = 'Mbx9jm!2';
 			$mail->SMTPSecure = "ssl";
 			//$mail->SMTPDebug  = 1;
-			$mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
+			// $mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
+			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
 			$mail->Body = $message;
 
 			$mail->isHTML(true);
@@ -4902,7 +4906,7 @@ class Admin extends Base_Controller
 				<p>Reference: Your unique ID followed by SVS (we will send your unique ID separately)</p>
 				<p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
 				<p>Any payments made after the deadline may negatively impact your Interfriends Trust Score.</p>
-				<p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="https://www.interfriends.uk">https://www.interfriends.uk</a></p>
+				<p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="'.USER_BASE_URL.'">Click Here</a> for Login</p>
 				<p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
 				<p>Thank you for your attention to this matter.</p>';
 
@@ -5019,7 +5023,7 @@ class Admin extends Base_Controller
                 <p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
                 <p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
                 <p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
-                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="https://www.interfriends.uk">https://www.interfriends.uk</a></p>
+                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="'.USER_BASE_URL.'">Click Here</a> for Login</p>
                 <p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
                 <p>Thank you for your attention to this matter.</p>';
 
@@ -5208,9 +5212,17 @@ class Admin extends Base_Controller
 		}
 
 		// Search keyword filtering
-		$search = !empty($_REQUEST['search']) ? $_REQUEST['search'] : '';
+		$search = !empty($_REQUEST['search']) ? $this->db->escape_like_str(trim($_REQUEST['search'])) : '';
+		// if (!empty($search)) {
+		// 	$searchCond .= " AND (U.first_name LIKE '%$search%' OR U.last_name LIKE '%$search%' OR U.email LIKE '%$search%')";
+		// }
+
 		if (!empty($search)) {
-			$searchCond .= " AND (U.first_name LIKE '%$search%' OR U.last_name LIKE '%$search%' OR U.email LIKE '%$search%')";
+			$searchCond = " AND (
+				U.first_name LIKE '%{$search}%' ESCAPE '!' OR 
+				U.last_name LIKE '%{$search}%' ESCAPE '!' OR 
+				U.email LIKE '%{$search}%' ESCAPE '!'
+			)";
 		}
 
 		// SQL parts
@@ -6164,6 +6176,47 @@ class Admin extends Base_Controller
 		}
 	}
 
+	// public function loanList_Help2pay1()
+	// {
+	// 	// limit code start
+	// 	if (empty($_REQUEST['start'])) {
+	// 		$start = 10;
+	// 		$end = 0;
+	// 	} else {
+	// 		$start = 10;
+	// 		$end = $_REQUEST['start'];
+	// 	}
+	// 	// limit code end
+
+	// 	$where = "L.user_id = '" . $_REQUEST['user_id'] . "' AND L.group_id = '" . $_REQUEST['group_id'] . "' AND  L.loan_type = '" . $_REQUEST['loan_type'] . "'";
+
+	// 	if (!empty($_REQUEST['admin_type'] === '2')) {
+	// 		$where .= " AND L.status != '6'";
+	// 	}
+
+	// 	$result = $this->user_model->loan_detail($where, array(), $start, $end);
+	// 	$resultCount = $this->user_model->loan_detail($where, array('count'), $start, $end);
+	// 	$countData = $end;
+	// 	$countData++;
+	// 	if (!empty($result)) {
+
+	// 		foreach ($result as $key => $value) {
+	// 			$result[$key]['sno'] = $countData++;
+
+	// 			if (!empty($value['document_image'])) {
+	// 				$result[$key]['document_image'] = base_url($value['document_image']);
+	// 			} else {
+	// 				$result[$key]['document_image'] = "assets/img/default-user-icon.jpg";
+	// 			}
+	// 		}
+
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount));
+	// 	} else {
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
+	// 	}
+	// }
+
+	// created by @krishn on 31-07-25
 	public function loanList_Help2pay()
 	{
 		// limit code start
@@ -6192,9 +6245,15 @@ class Admin extends Base_Controller
 				$result[$key]['sno'] = $countData++;
 
 				if (!empty($value['document_image'])) {
-					$result[$key]['document_image'] = base_url($value['document_image']);
+					$docUrl = base_url($value['document_image']);
+					$result[$key]['document_image'] = $docUrl;
+
+					// Check for PDF extension (case-insensitive)
+					$ext = pathinfo($value['document_image'], PATHINFO_EXTENSION);
+					$result[$key]['is_pdf'] = (strtolower($ext) === 'pdf') ? true : false;
 				} else {
 					$result[$key]['document_image'] = "assets/img/default-user-icon.jpg";
+					$result[$key]['is_pdf'] = false;
 				}
 			}
 
@@ -6293,7 +6352,7 @@ class Admin extends Base_Controller
 		$msg_notification = array(
 			"body" => $message,
 			"title" => $title,
-			"icon" => 'https://ctinfotech.com/CT01/interfriends//assets/images/favicon-c.png'
+			"icon" => ASSET_BASE_URL . 'icons/i_white.jfif'
 		);
 
 		// for web		
@@ -6341,7 +6400,7 @@ class Admin extends Base_Controller
 		$msg_notification = array(
 			"body" => $message,
 			"title" => $title,
-			"icon" => 'https://ctinfotech.com/CT01/interfriends//assets/images/favicon-c.png'
+			"icon" => ASSET_BASE_URL . 'icons/i_white.jfif'
 		);
 
 		// for web		
@@ -8311,8 +8370,8 @@ class Admin extends Base_Controller
 					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-300 WHERE user_id = '{$_REQUEST['user_id']}'");
 					$this->updateCreditScore(300, 'minus');
 				} else {
-					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-100 WHERE user_id = '{$_REQUEST['user_id']}'");
-					$this->updateCreditScore(100, 'minus');
+					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-120 WHERE user_id = '{$_REQUEST['user_id']}'");
+					$this->updateCreditScore(120, 'minus');
 				}
 			}
 		}
@@ -8946,7 +9005,7 @@ class Admin extends Base_Controller
                 <p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
                 <p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
                 <p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
-                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="https://www.interfriends.uk">https://www.interfriends.uk</a></p>
+                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="'.USER_BASE_URL.'">Click Here</a> for Login</p>
                 <p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
                 <p>Thank you for your attention to this matter.</p>';
 
@@ -9372,7 +9431,7 @@ class Admin extends Base_Controller
 			$data['sendername'] = $userDetailFrom1['first_name'] . " " . $userDetailFrom1['last_name'];
 			$data['useremail'] = "";
 
-			$baseUrl = 'https://www.creativethoughtsinfo.com/interfriendsAdmin/#/user/UpdateUserPayment/';
+			$baseUrl = ADMIN_BASE_URL . 'user/UpdateUserPayment/';
 			$data["link"] = $baseUrl . $ecode;
 
 			$data['message'] = '<p>As we prepare for the upcoming Interfriends cycle, we kindly request that you confirm your monthly savings and anticipated payout date.</p><p>To provide this important information, please click on the link provided below.</p><a href="' . $data["link"] . '">click here</a>
@@ -9421,7 +9480,7 @@ class Admin extends Base_Controller
 	// 			$ecode = base64_encode($id);
 	// 			$data['sendername'] = $value['first_name'] . " " . $value['last_name'];
 	// 			$data['useremail'] = "";
-	// 			$data["link"] = 'https://www.creativethoughtsinfo.com/interfriendsAdmin/#/user/UpdateUserPayment/' . $ecode;
+	// 			$data["link"] = ADMIN_BASE_URL.'user/UpdateUserPayment/' . $ecode;
 	// 			$data['message'] = '<p>As we prepare for the upcoming Interfriends cycle, we kindly request that you confirm your monthly savings and anticipated payout date.</p><p>To provide this important information, please click on the link provided below.</p><a href="' . $data["link"] . '">click here</a>
 	//             <p>Thank you for your prompt attention to this matter.</p>';
 	// 			$messaged = $this->load->view('template/common-mail', $data, true);
@@ -9491,7 +9550,7 @@ class Admin extends Base_Controller
 
 			$data['sendername'] = $user['first_name'] . " " . $user['last_name'];
 			$data['useremail'] = "";
-			$data["link"] = 'https://www.creativethoughtsinfo.com/interfriendsAdmin/#/user/UpdateUserPayment/' . $encodedId;
+			$data["link"] = ADMIN_BASE_URL . 'user/UpdateUserPayment/' . $encodedId;
 			$data['message'] = '
             <p>As we prepare for the upcoming Interfriends cycle, we kindly request that you confirm your monthly savings and anticipated payout date.</p>
             <p>To provide this important information, please click on the link provided below.</p>
@@ -9675,100 +9734,10 @@ class Admin extends Base_Controller
 		}
 	}
 
-	// created by @krishn on 22-05-25
-	// public function getDownloadableData()
-	// {
-	// 	$start = isset($_REQUEST['start']) ? $_REQUEST['start'] : 0;
-	// 	$limit = 200;
-
-	// 	$search = !empty($_REQUEST['search']) ? $this->db->escape_like_str($_REQUEST['search']) : '';
-	// 	$type   = isset($_REQUEST['product_category']) ? $_REQUEST['product_category'] : '';
-
-	// 	$resultList = [];
-	// 	$where = "U.status != '2'";
-	// 	$searchCond = '';
-
-	// 	if (!empty($search)) {
-	// 		$searchCond = " AND (U.first_name LIKE '%$search%' OR U.last_name LIKE '%$search%' OR U.email LIKE '%$search%')";
-	// 	}
-
-	// 	switch ($type) {
-	// 		case 'investment':
-	// 			$where .= " AND I.user_id = U.user_id AND I.group_id != 34 $searchCond";
-	// 			$resultList = $this->common->getData('investment I, user U', $where, [
-	// 				'field' => 'I.user_id, U.first_name, U.last_name, U.email, I.amount, I.created_at'
-	// 			]);
-	// 			break;
-
-	// 		case 'property':
-	// 			$where .= " AND I.user_id = U.user_id AND I.group_id != 34 AND I.investment_type = 1 $searchCond";
-	// 			$resultList = $this->common->getData('investment I, user U', $where, [
-	// 				'field' => 'I.user_id, U.first_name, U.last_name, U.email, I.amount, I.created_at'
-	// 			]);
-	// 			break;
-
-	// 		case 'payout':
-	// 			$where = "PU.user_id = U.user_id AND U.status != '2' $searchCond";
-	// 			$resultList = $this->common->getData('payout_cycle PU, user U', $where, [
-	// 				'field' => 'PU.user_id, U.first_name, U.last_name, U.email, PU.payout_amount AS amount, PU.created_at'
-	// 			]);
-	// 			break;
-
-	// 		case 'pf_user':
-	// 			$where = "PF.user_id = U.user_id AND U.status != '2' AND PF.group_id != 34 AND PF.payment_type = '2' $searchCond";
-	// 			$resultList = $this->common->getData('pf_user PF, user U', $where, [
-	// 				'field' => 'PF.user_id, U.first_name, U.last_name, U.email, PF.pf_amount AS amount, PF.created_at'
-	// 			]);
-	// 			break;
-
-	// 		case 'emergency_loan_completed':
-	// 			$where = "UEL.user_id = U.user_id AND U.status != '2' $searchCond";
-	// 			$resultList = $this->common->getData('user_emergency_loan UEL, user U', $where, [
-	// 				'field' => 'UEL.user_id, U.first_name, U.last_name, U.email, UEL.loan_amount AS amount, UEL.created_at'
-	// 			]);
-	// 			break;
-
-	// 		case 'emergency_loan_active':
-	// 			$where = "UEL.user_id = U.user_id AND U.status != '2' AND UEL.status = '4' $searchCond";
-	// 			$resultList = $this->common->getData('user_emergency_loan UEL, user U', $where, [
-	// 				'field' => 'UEL.user_id, U.first_name, U.last_name, U.email, UEL.loan_amount AS amount, UEL.created_at'
-	// 			]);
-	// 			break;
-
-	// 		case 'loan_completed':
-	// 			$where = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 $searchCond";
-	// 			$resultList = $this->common->getData('user_loan UL, user U', $where, [
-	// 				'field' => 'UL.user_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, UL.created_at'
-	// 			]);
-	// 			break;
-	// 		case 'loan_paid_user':
-	// 			$where = "ULP.user_id = U.user_id AND U.status != '2' AND ULP.group_id != 34 $searchCond";
-	// 			$resultList = $this->common->getData('user_loan_payment ULP, user U', $where, [
-	// 				'field' => 'ULP.user_id, U.first_name, U.last_name, U.email, ULP.amount, ULP.created_at'
-	// 			]);
-	// 			break;
-
-
-	// 		default:
-	// 			$resultList = [];
-	// 	}
-
-	// 	// Add type key
-	// 	if (!empty($resultList)) {
-	// 		foreach ($resultList as &$row) {
-	// 			$row['type'] = $type;
-	// 		}
-	// 	}
-
-	// 	$this->response(true, !empty($resultList) ? "Data fetch successfully." : "Record not found.", [
-	// 		'resultList' => $resultList,
-	// 		'resultCount' => count($resultList)
-	// 	]);
-	// }
-
 	// changed by @krishn on 25-05-25
 	public function getDownloadableData()
 	{
+		// ini_set('display_errors', 1);
 		// limit code start
 		if (empty($_REQUEST['start'])) {
 			$start = 0;
@@ -9778,15 +9747,23 @@ class Admin extends Base_Controller
 		$limit = 200;
 		// limit code end
 
-		$search = !empty($_REQUEST['search']) ? $this->db->escape_like_str($_REQUEST['search']) : '';
+		$search = !empty($_REQUEST['search']) ? $this->db->escape_like_str(trim($_REQUEST['search'])) : '';
 		$type   = isset($_REQUEST['product_category']) ? $_REQUEST['product_category'] : '';
 
 		$resultList = [];
 		$where = "U.status != '2'";
 		$searchCond = '';
 
+		// if (!empty($search)) {
+		// 	$searchCond = " AND (U.first_name LIKE '%$search%' OR U.last_name LIKE '%$search%' OR U.email LIKE '%$search%')";
+		// }
+
 		if (!empty($search)) {
-			$searchCond = " AND (U.first_name LIKE '%$search%' OR U.last_name LIKE '%$search%' OR U.email LIKE '%$search%')";
+			$searchCond = " AND (
+				U.first_name LIKE '%{$search}%' ESCAPE '!' OR 
+				U.last_name LIKE '%{$search}%' ESCAPE '!' OR 
+				U.email LIKE '%{$search}%' ESCAPE '!'
+			)";
 		}
 
 		$field = '';
@@ -9871,36 +9848,68 @@ class Admin extends Base_Controller
 				$field = 'UEL.user_id, U.first_name, U.last_name, U.email, UEL.loan_amount AS amount, UEL.created_at';
 				break;
 
+			// case 'loan_completed':
+			// 	$table = 'user_loan UL, user U';
+			// 	$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 $searchCond";
+			// 	$field = 'UL.user_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, UL.created_at';
+			// 	break;
+
+			// case 'loan_paid':
+			// 	$table = 'user_loan_payment ULP, user U';
+			// 	$fullWhere = "ULP.user_id = U.user_id AND U.status != '2' AND ULP.group_id != 34 $searchCond";
+			// 	$field = 'ULP.user_id, U.first_name, U.last_name, U.email, ULP.amount, ULP.created_at';
+			// 	break;
+
+			// case 'active_loan':
+			// 	$table = 'user_loan UL 
+			// 		LEFT JOIN (
+			// 			SELECT user_id, group_id, SUM(amount) AS total_paid 
+			// 			FROM user_loan_payment 
+			// 			GROUP BY user_id, group_id
+			// 		) AS ULP ON UL.user_id = ULP.user_id AND UL.group_id = ULP.group_id,
+			// 		user U';
+
+			// 	$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 $searchCond";
+
+			// 	$field = 'UL.user_id, U.first_name, U.last_name, U.email, 
+			// 		SUM(UL.loan_amount) AS total_completed,
+			// 		IFNULL(ULP.total_paid, 0) AS total_paid,
+			// 		(SUM(UL.loan_amount) - IFNULL(ULP.total_paid, 0)) AS amount,
+			// 		MAX(UL.created_at) AS created_at';
+
+			// 	$groupBy = 'UL.user_id';
+			// 	break;
+
 			case 'loan_completed':
 				$table = 'user_loan UL, user U';
 				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 $searchCond";
-				$field = 'UL.user_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, UL.created_at';
+				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, UL.created_at';
 				break;
 
 			case 'loan_paid':
 				$table = 'user_loan_payment ULP, user U';
 				$fullWhere = "ULP.user_id = U.user_id AND U.status != '2' AND ULP.group_id != 34 $searchCond";
-				$field = 'ULP.user_id, U.first_name, U.last_name, U.email, ULP.amount, ULP.created_at';
+				$field = 'ULP.user_id, ULP.group_id, U.first_name, U.last_name, U.email, ULP.amount, ULP.created_at';
 				break;
 
 			case 'active_loan':
 				$table = 'user_loan UL 
-					LEFT JOIN (
-						SELECT user_id, group_id, SUM(amount) AS total_paid 
-						FROM user_loan_payment 
-						GROUP BY user_id, group_id
-					) AS ULP ON UL.user_id = ULP.user_id AND UL.group_id = ULP.group_id,
-					user U';
+				LEFT JOIN (
+					SELECT user_id, group_id, SUM(amount) AS total_paid 
+					FROM user_loan_payment 
+					GROUP BY user_id, group_id
+				) AS ULP ON UL.user_id = ULP.user_id AND UL.group_id = ULP.group_id,
+				user U';
 
 				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 $searchCond";
 
-				$field = 'UL.user_id, U.first_name, U.last_name, U.email, 
-					SUM(UL.loan_amount) AS total_completed,
-					IFNULL(ULP.total_paid, 0) AS total_paid,
-					(SUM(UL.loan_amount) - IFNULL(ULP.total_paid, 0)) AS amount,
-					MAX(UL.created_at) AS created_at';
+				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, 
+				SUM(UL.loan_amount) AS total_completed,
+				IFNULL(ULP.total_paid, 0) AS total_paid,
+				(SUM(UL.loan_amount) - IFNULL(ULP.total_paid, 0)) AS amount,
+				MAX(UL.created_at) AS created_at';
 
-				$groupBy = 'UL.user_id';
+				$groupBy = 'UL.user_id, UL.group_id';
 				break;
 
 
