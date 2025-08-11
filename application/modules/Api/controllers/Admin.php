@@ -4906,7 +4906,7 @@ class Admin extends Base_Controller
 				<p>Reference: Your unique ID followed by SVS (we will send your unique ID separately)</p>
 				<p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
 				<p>Any payments made after the deadline may negatively impact your Interfriends Trust Score.</p>
-				<p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="'.USER_BASE_URL.'">Click Here</a> for Login</p>
+				<p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="' . USER_BASE_URL . '">Click Here</a> for Login</p>
 				<p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
 				<p>Thank you for your attention to this matter.</p>';
 
@@ -5023,7 +5023,7 @@ class Admin extends Base_Controller
                 <p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
                 <p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
                 <p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
-                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="'.USER_BASE_URL.'">Click Here</a> for Login</p>
+                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="' . USER_BASE_URL . '">Click Here</a> for Login</p>
                 <p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
                 <p>Thank you for your attention to this matter.</p>';
 
@@ -7045,65 +7045,154 @@ class Admin extends Base_Controller
 		}
 	}
 	///////////////////////////23/01/2023 chandni///////////////////////////////////////////
+	// public function addBanner()
+	// {
+	// 	$iname = "";
+	// 	if (isset($_FILES['image'])) {
+	// 		$image = $this->common->multi_upload('image', './assets/banners/');
+	// 		if (!empty($image[0])) {
+	// 			foreach ($image as $key => $value) {
+	// 				$_REQUEST['image'] = 'assets/banners/' . $value['file_name'];
+	// 				$post = $this->common->getField('tbl_banners', $_REQUEST);
+	// 				$result = $this->common->insertData('tbl_banners', $post);
+	// 				$banners = $this->db->insert_id();
+	// 			}
+	// 		} else {
+	// 			$_REQUEST['image'] = '';
+	// 		}
+	// 	} else {
+	// 		$_REQUEST['image'] = '';
+	// 		$post = $this->common->getField('tbl_banners', $_REQUEST);
+	// 		$result = $this->common->insertData('tbl_banners', $post);
+	// 		$banners = $this->db->insert_id();
+	// 	}
+
+	// 	$result_banner = $this->common->getData('tbl_banners');
+	// 	if (!empty($result_banner)) {
+	// 		$this->response(true, "banners fetch Successfully.", array("banners" => $result_banner));
+	// 	} else {
+	// 		$this->response(true, "banners fetch Successfully.", array("banners" => array()));
+	// 	}
+	// }
+
+	// public function delete_banner()
+	// {
+	// 	if (!empty($_REQUEST['id'])) {
+	// 		$where = " id ='" . $_REQUEST['id'] . "'";
+	// 		$value = $this->common->deleteData('tbl_banners', $where);
+	// 		$this->response(true, "Delete Successfully.");
+	// 	} else {
+	// 		$this->response(false, "Id Can't be empty.");
+	// 	}
+	// }
+
+	// public function allBanners()
+	// {
+
+	// 	$result_banner = $this->common->getData('tbl_banners');
+	// 	$data = array();
+	// 	if (!empty($result_banner)) {
+	// 		foreach ($result_banner as $key => $value) {
+	// 			if (!empty($value['image'])) {
+	// 				$value['image'] = base_url() . $value['image'];
+	// 			} else {
+	// 				$value['image'] = "";
+	// 			}
+
+	// 			$data[] = $value;
+	// 		}
+	// 		$this->response(true, "banners fetch Successfully.", array("banners" => $data));
+	// 	} else {
+	// 		$this->response(true, "banners fetch Successfully.", array("banners" => array()));
+	// 	}
+	// }
+
+	// created by @krishn on 11-08-25
 	public function addBanner()
 	{
-		$iname = "";
-		if (isset($_FILES['image'])) {
-			$image = $this->common->multi_upload('image', './assets/banners/');
-			if (!empty($image[0])) {
-				foreach ($image as $key => $value) {
-					$_REQUEST['image'] = 'assets/banners/' . $value['file_name'];
+		if (empty($_REQUEST['title'])) {
+			$_REQUEST['title'] = null;
+		}
+
+		$_REQUEST['image'] = '';
+
+		if (isset($_FILES['image']) && !empty($_FILES['image']['name'][0])) {
+			$images = $this->common->multi_upload('image', './assets/banners/');
+			if (!empty($images)) {
+				foreach ($images as $image) {
+					$_REQUEST['image'] = 'assets/banners/' . $image['file_name'];
 					$post = $this->common->getField('tbl_banners', $_REQUEST);
 					$result = $this->common->insertData('tbl_banners', $post);
-					$banners = $this->db->insert_id();
 				}
-			} else {
-				$_REQUEST['image'] = '';
 			}
 		} else {
-			$_REQUEST['image'] = '';
 			$post = $this->common->getField('tbl_banners', $_REQUEST);
 			$result = $this->common->insertData('tbl_banners', $post);
-			$banners = $this->db->insert_id();
 		}
 
 		$result_banner = $this->common->getData('tbl_banners');
 		if (!empty($result_banner)) {
-			$this->response(true, "banners fetch Successfully.", array("banners" => $result_banner));
+			$this->response(true, "Banners fetched successfully.", ["banners" => $result_banner]);
 		} else {
-			$this->response(true, "banners fetch Successfully.", array("banners" => array()));
+			$this->response(true, "Banners fetched successfully.", ["banners" => []]);
 		}
 	}
 
+	// created by @krishn on 11-08-25
 	public function delete_banner()
 	{
 		if (!empty($_REQUEST['id'])) {
-			$where = " id ='" . $_REQUEST['id'] . "'";
+			$where = "id = '" . $this->db->escape_str($_REQUEST['id']) . "'";
 			$value = $this->common->deleteData('tbl_banners', $where);
-			$this->response(true, "Delete Successfully.");
+			$this->response(true, "Deleted successfully.");
 		} else {
-			$this->response(false, "Id Can't be empty.");
+			$this->response(false, "Id can't be empty.");
 		}
 	}
 
+	// created by @krishn on 11-08-25
 	public function allBanners()
 	{
-
 		$result_banner = $this->common->getData('tbl_banners');
-		$data = array();
-		if (!empty($result_banner)) {
-			foreach ($result_banner as $key => $value) {
-				if (!empty($value['image'])) {
-					$value['image'] = base_url() . $value['image'];
-				} else {
-					$value['image'] = "";
-				}
+		$data = [];
 
-				$data[] = $value;
+		if (!empty($result_banner)) {
+			foreach ($result_banner as $banner) {
+				if (!empty($banner['image'])) {
+					$banner['image'] = base_url() . $banner['image'];
+				} else {
+					$banner['image'] = "";
+				}
+				$data[] = $banner;
 			}
-			$this->response(true, "banners fetch Successfully.", array("banners" => $data));
+		}
+
+		$this->response(true, "Banners fetched successfully.", ["banners" => $data]);
+	}
+
+	// created by @krishn on 11-08-25
+	public function getBannerDetail()
+	{
+		if (empty($_REQUEST['id'])) {
+			return $this->response(false, "Id can't be empty.");
+		}
+
+		$id = $this->db->escape_str($_REQUEST['id']);
+
+		$banner = $this->common->getData('tbl_banners', ["id" => $id]);
+
+		if (!empty($banner)) {
+			$banner = $banner[0];
+
+			if (!empty($banner['image'])) {
+				$banner['image'] = base_url() . $banner['image'];
+			} else {
+				$banner['image'] = "";
+			}
+
+			$this->response(true, "Banner details fetched successfully.", ["banner" => $banner]);
 		} else {
-			$this->response(true, "banners fetch Successfully.", array("banners" => array()));
+			$this->response(false, "Banner not found.");
 		}
 	}
 
@@ -7166,45 +7255,88 @@ class Admin extends Base_Controller
 	}
 
 
+	// public function editBanner()
+	// {
+	// 	$iname = "";
+	// 	$result_banner = $this->common->getData('tbl_banners', array('id' => $_REQUEST['id']), array('single'));
+
+	// 	if (isset($_FILES['image'])) {
+	// 		$image = $this->common->do_upload('image', './assets/banners/');
+	// 		if (!empty($image['upload_data'])) {
+	// 			$_REQUEST['image'] = 'assets/banners/' . $image['upload_data']['file_name'];
+	// 		} else {
+	// 			$_REQUEST['image'] = $result_banner['image'];
+	// 		}
+	// 	} else {
+	// 		$_REQUEST['image'] = $result_banner['image'];
+	// 	}
+
+
+	// 	if (!empty($_REQUEST['title'])) {
+	// 		$_REQUEST['title'] = $_REQUEST['title'];
+	// 	} else {
+	// 		$_REQUEST['title'] = $result_banner['title'];
+	// 	}
+
+	// 	if (!empty($_REQUEST)) {
+	// 		$result = $this->common->updateData('tbl_banners', array(
+	// 			'title' => $_REQUEST['title'],
+	// 			'image' => $_REQUEST['image']
+	// 		), array('id' => $_REQUEST['id']));
+	// 	} else {
+	// 		$result = "";
+	// 	}
+	// 	if ($result) {
+	// 		$this->response(true, "Update Successfully");
+	// 	} else {
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
+	// created by @krishn on 11-08-25
 	public function editBanner()
 	{
-		$iname = "";
-		$result_banner = $this->common->getData('tbl_banners', array('id' => $_REQUEST['id']), array('single'));
+		$id = $this->input->post('id', true);
 
-		if (isset($_FILES['image'])) {
-			$image = $this->common->do_upload('image', './assets/banners/');
-			if (!empty($image['upload_data'])) {
-				$_REQUEST['image'] = 'assets/banners/' . $image['upload_data']['file_name'];
+		if (!$id) {
+			return $this->response(false, "Banner ID is required.");
+		}
+
+		// Get existing banner
+		$banner = $this->common->getData('tbl_banners', ['id' => $id], ['single']);
+		if (!$banner) {
+			return $this->response(false, "Banner not found.");
+		}
+
+		$updateData = [];
+
+		$title = $this->input->post('title', true);
+		$updateData['title'] = !empty($title) ? $title : "";
+
+		// Image upload
+		if (isset($_FILES['image']) && $_FILES['image']['name'] != '') {
+			$upload = $this->common->do_upload('image', './assets/banners/');
+			if (!empty($upload['upload_data'])) {
+				$updateData['image'] = 'assets/banners/' . $upload['upload_data']['file_name'];
+				// Delete old image if exists
+				if (!empty($banner['image']) && file_exists(FCPATH . $banner['image'])) {
+					unlink(FCPATH . $banner['image']);
+				}
 			} else {
-				$_REQUEST['image'] = $result_banner['image'];
+				return $this->response(false, "Image upload failed.");
 			}
 		} else {
-			$_REQUEST['image'] = $result_banner['image'];
+			$updateData['image'] = $banner['image'];
 		}
 
+		$result = $this->common->updateData('tbl_banners', $updateData, ['id' => $id]);
 
-		if (!empty($_REQUEST['title'])) {
-			$_REQUEST['title'] = $_REQUEST['title'];
-		} else {
-			$_REQUEST['title'] = $result_banner['title'];
-		}
-
-		if (!empty($_REQUEST)) {
-			$result = $this->common->updateData('tbl_banners', array(
-				'title' => $_REQUEST['title'],
-				'image' => $_REQUEST['image']
-			), array('id' => $_REQUEST['id']));
-		} else {
-			$result = "";
-		}
 		if ($result) {
-			$this->response(true, "Update Successfully");
+			return $this->response(true, "Banner updated successfully.");
 		} else {
-			$this->response(false, "There is a problem, please try again.");
+			return $this->response(false, "No changes made or update failed.");
 		}
 	}
-
-
 
 	function savingAvgCal($group_cycle_id)
 	{
@@ -9005,7 +9137,7 @@ class Admin extends Base_Controller
                 <p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
                 <p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
                 <p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
-                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="'.USER_BASE_URL.'">Click Here</a> for Login</p>
+                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="' . USER_BASE_URL . '">Click Here</a> for Login</p>
                 <p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
                 <p>Thank you for your attention to this matter.</p>';
 

@@ -583,7 +583,7 @@ class Api extends Base_Controller
 				]);
 
 				// Build registration link with token
-				$data1["link"] = USER_BASE_URL.'register?token=' . $token;
+				$data1["link"] = USER_BASE_URL . 'register?token=' . $token;
 
 				$data1["message"] = '
 					<p>
@@ -791,7 +791,7 @@ class Api extends Base_Controller
 				}
 			}
 
-			$data1['link'] = USER_BASE_URL.'register';
+			$data1['link'] = USER_BASE_URL . 'register';
 			$data1['sendername'] = $_REQUEST['first_name'] . " " . $_REQUEST['last_name'];
 			$data1['useremail'] = "";
 			$data1['message'] = '<p style="margin-bottom:10px;">Your Friend ' . $data['recommend_first_member'] . ' and ' . $data['recommend_member'] . ' have recommended you to interfriends to join the group.</p><p>To accept and continue your registration,click on link below to complete your registration</p><a href="' . $data1["link"] . '">click here</a>';
@@ -2709,27 +2709,46 @@ class Api extends Base_Controller
 	}
 
 	///////////////////////////////////////////////
+	// public function allBanners()
+	// {
+
+	// 	$result_banner = $this->common->getData('tbl_banners');
+	// 	$data = array();
+	// 	if (!empty($result_banner)) {
+	// 		foreach ($result_banner as $key => $value) {
+	// 			if (!empty($value['image'])) {
+	// 				$value['image'] = base_url() . $value['image'];
+	// 			} else {
+	// 				$value['image'] = "";
+	// 			}
+
+	// 			$data[] = $value;
+	// 		}
+	// 		$this->response(true, "banners fetch Successfully.", array("banners" => $data));
+	// 	} else {
+	// 		$this->response(true, "banners fetch Successfully.", array("banners" => array()));
+	// 	}
+	// }
+
+	// created by @krishn on 11-08-25
 	public function allBanners()
 	{
-
 		$result_banner = $this->common->getData('tbl_banners');
-		$data = array();
+		$data = [];
+
 		if (!empty($result_banner)) {
-			foreach ($result_banner as $key => $value) {
-				if (!empty($value['image'])) {
-					$value['image'] = base_url() . $value['image'];
+			foreach ($result_banner as $banner) {
+				if (!empty($banner['image'])) {
+					$banner['image'] = base_url() . $banner['image'];
 				} else {
-					$value['image'] = "";
+					$banner['image'] = "";
 				}
-
-				$data[] = $value;
+				$data[] = $banner;
 			}
-			$this->response(true, "banners fetch Successfully.", array("banners" => $data));
-		} else {
-			$this->response(true, "banners fetch Successfully.", array("banners" => array()));
 		}
-	}
 
+		$this->response(true, "Banners fetched successfully.", ["banners" => $data]);
+	}
 
 	public function allCreditScoreList()
 	{
@@ -3130,8 +3149,8 @@ class Api extends Base_Controller
 		if (!$approver) return;
 
 		$token = urlencode($token);
-		$linkApprove = API_BASE_URL."handleApproval/{$token}/1";
-		$linkDecline = API_BASE_URL."handleDecline/{$token}/2";
+		$linkApprove = API_BASE_URL . "handleApproval/{$token}/1";
+		$linkDecline = API_BASE_URL . "handleDecline/{$token}/2";
 
 		$subject = "Approval Request for Recommendation";
 
@@ -3337,7 +3356,7 @@ class Api extends Base_Controller
 	{
 		$recommend = $this->common->getData('recommend_user', array('id' => $recommend_id), array('single'));
 
-		$link = USER_BASE_URL."register?recommend_id=$recommend_id";
+		$link = USER_BASE_URL . "register?recommend_id=$recommend_id";
 
 		$message = "
 			<p>
