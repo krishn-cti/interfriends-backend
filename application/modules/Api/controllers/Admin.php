@@ -4008,6 +4008,50 @@ class Admin extends Base_Controller
 	}
 
 
+	// function sendMail($email, $subject, $message)
+	// {
+	// 	require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
+	// 	require_once(APPPATH . 'third_party/phpmailer/class.smtp.php');
+
+	// 	try {
+	// 		$mail = new PHPMailer();
+
+	// 		$mail->IsSMTP();
+	// 		$mail->CharSet = 'UTF-8';
+	// 		// $mail->Host = "smtp.gmail.com";
+	// 		$mail->Host = "smtp.hostinger.com";
+
+	// 		$mail->SMTPAuth = true;
+	// 		$mail->Port = 465; // Or 587
+	// 		// $mail->Username = 'interfriendscu@gmail.com';
+	// 		$mail->Username = 'admin@interfriends.uk';
+	// 		// $mail->Password = 'zbkydsoaizmbqnhm';
+	// 		$mail->Password = 'Mbx9jm!2';
+	// 		$mail->SMTPSecure = "ssl";
+	// 		//$mail->SMTPDebug  = 1;
+	// 		// $mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
+	// 		$mail->setFrom("admin@interfriends.uk", 'Interfriends');
+	// 		$mail->Body = $message;
+
+	// 		$mail->isHTML(true);
+	// 		$mail->Subject = $subject;
+
+	// 		$mail->addAddress($email);
+	// 		$send =  $mail->send();
+
+
+	// 		if ($send != '1') {
+
+	// 			return false;
+	// 		} else {
+	// 			return true;
+	// 		}
+	// 	} catch (Exception $e) {
+	// 		//  echo "An error occurred while sending the email: " . $e->getMessage();
+	// 	}
+	// }
+
+	// created by @krishn on 12-08-25
 	function sendMail($email, $subject, $message)
 	{
 		require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
@@ -4018,36 +4062,48 @@ class Admin extends Base_Controller
 
 			$mail->IsSMTP();
 			$mail->CharSet = 'UTF-8';
-			// $mail->Host = "smtp.gmail.com";
 			$mail->Host = "smtp.hostinger.com";
-
 			$mail->SMTPAuth = true;
-			$mail->Port = 465; // Or 587
-			// $mail->Username = 'interfriendscu@gmail.com';
+			$mail->Port = 465;
 			$mail->Username = 'admin@interfriends.uk';
-			// $mail->Password = 'zbkydsoaizmbqnhm';
 			$mail->Password = 'Mbx9jm!2';
 			$mail->SMTPSecure = "ssl";
-			//$mail->SMTPDebug  = 1;
-			// $mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
-			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
-			$mail->Body = $message;
 
+			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
 			$mail->isHTML(true);
 			$mail->Subject = $subject;
+			$mail->Body = $message;
 
 			$mail->addAddress($email);
-			$send =  $mail->send();
 
+			$send = $mail->send();
 
-			if ($send != '1') {
+			if ($send) {
+				$imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
+				$imapUser = 'admin@interfriends.uk';
+				$imapPass = 'Mbx9jm!2';
 
-				return false;
-			} else {
+				$imapStream = imap_open($imapServer, $imapUser, $imapPass);
+				if ($imapStream) {
+					$mime  = "Date: " . date('r') . "\r\n";
+					$mime .= "From: Interfriends <admin@interfriends.uk>\r\n";
+					$mime .= "To: <$email>\r\n";
+					$mime .= "Subject: $subject\r\n";
+					$mime .= "Message-ID: <" . md5(uniqid(time())) . "@interfriends.uk>\r\n";
+					$mime .= "MIME-Version: 1.0\r\n";
+					$mime .= "Content-Type: text/html; charset=UTF-8\r\n";
+					$mime .= "\r\n";
+					$mime .= $message;
+
+					imap_append($imapStream, $imapServer, $mime, "\\Seen");
+					imap_close($imapStream);
+				}
 				return true;
+			} else {
+				return false;
 			}
 		} catch (Exception $e) {
-			//  echo "An error occurred while sending the email: " . $e->getMessage();
+			return false;
 		}
 	}
 
@@ -5987,7 +6043,6 @@ class Admin extends Base_Controller
 	}
 
 
-
 	public function safeKeeping_list()
 	{
 		// limit code start
@@ -6025,6 +6080,69 @@ class Admin extends Base_Controller
 			$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount, 'safeKeepingAmount' => 0));
 		}
 	}
+
+	// public function safeKeeping_list()
+	// {
+	// 	// limit code start
+	// 	if (empty($_REQUEST['start'])) {
+	// 		$start = 10;
+	// 		$end = 0;
+	// 	} else {
+	// 		$start = 10;
+	// 		$end = $_REQUEST['start'];
+	// 	}
+	// 	// limit code end
+	// 	$where = "SK.user_id = '" . $_REQUEST['user_id'] . "' AND SK.group_id = '" . $_REQUEST['group_id'] . "'";
+	// 	$result = $this->user_model->safeKeeping_detail($where, array(), $start, $end);
+	// 	$resultCount = $this->user_model->safeKeeping_detail($where, array('count'));
+
+	// 	$countData = $end;
+	// 	$countData++;
+	// 	if (!empty($result)) {
+
+	// 		foreach ($result as $key => $value) {
+	// 			$result[$key]['sno'] = $countData++;
+	// 		}
+
+
+	// 		// Fetch total credit
+	// 		$totalCreditAmount = $this->common->getData(
+	// 			'safe_keeping',
+	// 			array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 2),
+	// 			array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
+	// 		);
+
+	// 		// Fetch total debit
+	// 		$totalDebitAmount = $this->common->getData(
+	// 			'safe_keeping',
+	// 			array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 1),
+	// 			array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
+	// 		);
+
+	// 		// Prevent null values
+	// 		$creditSafeKeeping = $totalCreditAmount['safe_keeping_total_amount'] ?? 0;
+	// 		$debitSafeKeeping  = $totalDebitAmount['safe_keeping_total_amount'] ?? 0;
+
+	// 		// Fetch latest credit request details (if needed for condition)
+	// 		$latestCredit = $this->common->getData(
+	// 			'safe_keeping',
+	// 			array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id']),
+	// 			array("field" => 'id, requested_by, request_status'),
+	// 		);
+
+	// 		$lastCreditRecord = array_reverse($latestCredit);
+
+	// 		if (!empty($lastCreditRecord) && $lastCreditRecord[0]['requested_by'] === "user" && $lastCreditRecord[0]['request_status'] == 1) {
+	// 			$safeKeepingAmount = $creditSafeKeeping - $debitSafeKeeping;
+	// 		} else {
+	// 			$safeKeepingAmount = 0 - $debitSafeKeeping;
+	// 		}
+
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount, 'safeKeepingAmount' => $safeKeepingAmount));
+	// 	} else {
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount, 'safeKeepingAmount' => 0));
+	// 	}
+	// }
 
 
 	public function payout_list()

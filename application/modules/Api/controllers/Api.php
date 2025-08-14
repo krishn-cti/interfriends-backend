@@ -282,7 +282,6 @@ class Api extends Base_Controller
 				- You confirm that you will assist Interfriends to recover any amounts owed in the event that we exhaust all our options for recovering any amount owed
 				</li>
 				<li style='margin-bottom: 5px;'>- You are agreeing that in the event that we are unable to recover the amount owed, we can use all or part of your provident or any amount you have with interfriends for example; investments, safekeeping to pay off the outstanding amount </li>
-				<li style='margin-bottom: 5px;'>- In the event where the applicant is deceased, we will not hold you accountable for any amount owed to Interfriends</li>
 			
 				</ul>
 				</div>
@@ -1006,7 +1005,6 @@ class Api extends Base_Controller
 				- You confirm that you will assist Interfriends to recover any amounts owed in the event that we exhaust all our options for recovering any amount owed
 				</li>
 				<li style='margin-bottom: 5px;'>- You are agreeing that in the event that we are unable to recover the amount owed, we can use all or part of your provident or any amount you have with interfriends for example; investments, safekeeping to pay off the outstanding amount </li>
-				<li style='margin-bottom: 5px;'>- In the event where the applicant is deceased, we will not hold you accountable for any amount owed to Interfriends</li>
 			
 				</ul>
 				</div>
@@ -1371,6 +1369,63 @@ class Api extends Base_Controller
 		}
 	}
 
+    // // created by @krishn on 14-08-25
+	// public function safeKeepingList()
+    // {
+    //     $groupId = $_REQUEST['group_id'] ?? null;
+    //     $userId  = $_REQUEST['user_id'] ?? null;
+    
+    //     // Fetch all safe keeping records
+    //     $safeKeepingList = $this->common->getData(
+    //         'safe_keeping',
+    //         array('group_id' => $groupId, 'user_id' => $userId)
+    //     );
+    
+    //     // Fetch total credit
+    //     $totalCreditAmount = $this->common->getData(
+    //         'safe_keeping',
+    //         array('group_id' => $groupId, 'user_id' => $userId, 'pyment_type' => 2),
+    //         array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
+    //     );
+    
+    //     // Fetch total debit
+    //     $totalDebitAmount = $this->common->getData(
+    //         'safe_keeping',
+    //         array('group_id' => $groupId, 'user_id' => $userId, 'pyment_type' => 1),
+    //         array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
+    //     );
+    
+    //     // Prevent null values
+    //     $creditSafeKeeping = $totalCreditAmount['safe_keeping_total_amount'] ?? 0;
+    //     $debitSafeKeeping  = $totalDebitAmount['safe_keeping_total_amount'] ?? 0;
+    
+    //     // Fetch latest credit request details (if needed for condition)
+    //     $latestCredit = $this->common->getData(
+    //         'safe_keeping',
+    //         array('group_id' => $groupId, 'user_id' => $userId),
+    //         array("field" => 'id, requested_by, request_status'),
+    //     );
+        
+    //     $lastCreditRecord = array_reverse($latestCredit);
+    
+    //     if (!empty($lastCreditRecord) && $lastCreditRecord[0]['requested_by'] === "user" && $lastCreditRecord[0]['request_status'] == 1) {
+    //         $safeKeepingAmount = $creditSafeKeeping - $debitSafeKeeping;
+    //     } else {
+    //         $safeKeepingAmount = 0 - $debitSafeKeeping;
+    //     }
+    
+    //     if (!empty($safeKeepingList)) {
+    //         $this->response(true, 'Safe keeping fetched successfully', array(
+    //             'safeKeepingList'    => $safeKeepingList,
+    //             'safeKeepingAmount'  => $safeKeepingAmount,
+    //         ));
+    //     } else {
+    //         $this->response(true, 'Safe keeping not found', array(
+    //             'safeKeepingList'   => array(),
+    //             'safeKeepingAmount' => 0
+    //         ));
+    //     }
+    // }
 
 	public function cylcleAvg()
 	{
@@ -1639,54 +1694,110 @@ class Api extends Base_Controller
 
 
 
+	// function sendMail($email, $subject, $message)
+	// {
+
+	// 	require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
+	// 	require_once(APPPATH . 'third_party/phpmailer/class.smtp.php');
+
+	// 	try {
+
+	// 		$mail = new PHPMailer();
+
+	// 		$mail->IsSMTP();
+	// 		$mail->CharSet = 'UTF-8';
+	// 		// $mail->Host = "smtp.gmail.com";
+	// 		$mail->Host = "smtp.hostinger.com";
+
+	// 		$mail->SMTPAuth = true;
+	// 		// 		$mail->SMTPOptions = array(
+	// 		//             'ssl' => array(
+	// 		//                 'verify_peer' => false,
+	// 		//                 'verify_peer_name' => false,
+	// 		//                 'allow_self_signed' => true
+	// 		//             )
+	// 		//         );
+
+	// 		$mail->Port = 587; // Or 587
+	// 		// $mail->Username = 'interfriendscu@gmail.com';
+	// 		$mail->Username = 'admin@interfriends.uk';
+	// 		// $mail->Password = 'zbkydsoaizmbqnhm';
+	// 		$mail->Password = 'Mbx9jm!2';
+	// 		$mail->SMTPSecure = "tls";
+	// 		//$mail->SMTPDebug = 2;
+	// 		// $mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
+	// 		$mail->setFrom("admin@interfriends.uk", 'Interfriends');
+	// 		$mail->Body = $message;
+
+	// 		$mail->isHTML(true);
+	// 		$mail->Subject = $subject;
+
+	// 		$mail->addAddress($email);
+	// 		$send =  $mail->send();
+
+	// 		if ($send != '1') {
+	// 			return false;
+	// 		} else {
+	// 			return true;
+	// 		}
+	// 	} catch (Exception $e) {
+	// 		echo "An error occurred while sending the email: " . $e->getMessage();
+	// 	}
+	// }
+
+	// created by @krishn on 12-08-25
 	function sendMail($email, $subject, $message)
 	{
-
 		require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
 		require_once(APPPATH . 'third_party/phpmailer/class.smtp.php');
 
 		try {
-
 			$mail = new PHPMailer();
 
 			$mail->IsSMTP();
 			$mail->CharSet = 'UTF-8';
-			// $mail->Host = "smtp.gmail.com";
 			$mail->Host = "smtp.hostinger.com";
-
 			$mail->SMTPAuth = true;
-			// 		$mail->SMTPOptions = array(
-			//             'ssl' => array(
-			//                 'verify_peer' => false,
-			//                 'verify_peer_name' => false,
-			//                 'allow_self_signed' => true
-			//             )
-			//         );
-
-			$mail->Port = 587; // Or 587
-			// $mail->Username = 'interfriendscu@gmail.com';
+			$mail->Port = 587;
 			$mail->Username = 'admin@interfriends.uk';
-			// $mail->Password = 'zbkydsoaizmbqnhm';
 			$mail->Password = 'Mbx9jm!2';
 			$mail->SMTPSecure = "tls";
-			//$mail->SMTPDebug = 2;
-			// $mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
-			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
-			$mail->Body = $message;
 
+			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
 			$mail->isHTML(true);
 			$mail->Subject = $subject;
+			$mail->Body = $message;
 
 			$mail->addAddress($email);
-			$send =  $mail->send();
 
-			if ($send != '1') {
-				return false;
-			} else {
+			$send = $mail->send();
+
+			if ($send) {
+				$imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
+				$imapUser = 'admin@interfriends.uk';
+				$imapPass = 'Mbx9jm!2';
+
+				$imapStream = @imap_open($imapServer, $imapUser, $imapPass);
+				if ($imapStream) {
+					$mime  = "Date: " . date('r') . "\r\n";
+					$mime .= "From: Interfriends <admin@interfriends.uk>\r\n";
+					$mime .= "To: <$email>\r\n";
+					$mime .= "Subject: $subject\r\n";
+					$mime .= "Message-ID: <" . md5(uniqid(time())) . "@interfriends.uk>\r\n";
+					$mime .= "MIME-Version: 1.0\r\n";
+					$mime .= "Content-Type: text/html; charset=UTF-8\r\n";
+					$mime .= "\r\n";
+					$mime .= $message;
+
+					imap_append($imapStream, $imapServer, $mime, "\\Seen");
+					imap_close($imapStream);
+				}
 				return true;
+			} else {
+				return false;
 			}
 		} catch (Exception $e) {
-			echo "An error occurred while sending the email: " . $e->getMessage();
+			return false;
 		}
 	}
 

@@ -144,8 +144,12 @@
                             <table width="100%" align="left" border="0" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td height="70" style="padding: 0 20px 20px 0;">
-                                        <!-- <img class="fix" src="https://interfriends.uk/interfriendsApp/assets/images/logo.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" /> -->
-                                        <img class="fix" src="https://creativethoughtsinfo.com/interfriendsApp/assets/img/interfriend_white.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" />
+                                        <a href="<?= USER_BASE_URL ?>">
+                                            <img class="fix" src="<?= ASSET_BASE_URL ?>img/interfriend_white.png"
+                                                width="200" height="auto"
+                                                style="margin: 0 auto; display: block;"
+                                                border="0" alt="Interfriends" />
+                                        </a>
                                     </td>
                                 </tr>
                             </table>
@@ -164,7 +168,9 @@
                                             <p></p>
                                             <h2 style="text-align: left;"><strong> You are one click away to reset your password </strong></h2>
                                             <p> <strong>Dear <?= $first_name . " " . $last_name; ?>,</strong> </p>
-                                            <p style="color:#333"> Please <a href="<?= 'https://creativethoughtsinfo.com/interfriendsApp/#/resetPassword/' . $token; ?>">click here</a> to reset your password.</p>
+                                            <p style="color:#333">
+                                                Please <a href="<?= USER_BASE_URL . 'resetPassword/' . $token; ?>">click here</a> to reset your password.
+                                            </p>
                                         </center>
 
                                     </td>

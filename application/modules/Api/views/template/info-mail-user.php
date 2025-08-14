@@ -144,8 +144,12 @@
                             <table width="100%" align="left" border="0" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td height="70" style="padding: 0 20px 20px 0;">
-                                        <!-- <img class="fix" src="https://interfriends.uk/interfriendsApp/assets/images/logo.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" /> -->
-                                        <img class="fix" src="https://creativethoughtsinfo.com/interfriendsApp/assets/img/interfriend_white.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" />
+                                        <a href="<?= USER_BASE_URL ?>">
+                                            <img class="fix" src="<?= ASSET_BASE_URL ?>img/interfriend_white.png"
+                                                width="200" height="auto"
+                                                style="margin: 0 auto; display: block;"
+                                                border="0" alt="Interfriends" />
+                                        </a>
                                     </td>
                                 </tr>
                             </table>
@@ -167,7 +171,9 @@
                                             <h4 style="text-align:left">Please login with these credentials</h4>
                                             <h2 style="text-align:left">Email: <span style="color:#c00;"><?= $email; ?></span></h2>
                                             <h2 style="text-align:left">Password: <span style="color:#c00;"><?= $const_password; ?></span></h2>
-                                            <p style="color:#333"> Please <a href="https://creativethoughtsinfo.com/interfriendsApp/#/">click here</a> for login Interfriends</p>
+                                            <p style="color:#333">
+                                                Please <a href="<?= USER_BASE_URL ?>login">click here</a> to login to Interfriends
+                                            </p>
                                         </center>
 
 

@@ -144,8 +144,12 @@
                             <table width="100%" align="left" border="0" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td height="70" style="padding: 0 20px 20px 0;">
-                                        <!-- <img class="fix" src="https://interfriends.uk/interfriendsApp/assets/images/logo.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" /> -->
-                                        <img class="fix" src="https://creativethoughtsinfo.com/interfriendsApp/assets/img/interfriend_white.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" />
+                                        <a href="<?= USER_BASE_URL ?>">
+                                            <img class="fix" src="<?= ASSET_BASE_URL ?>img/interfriend_white.png"
+                                                width="200" height="auto"
+                                                style="margin: 0 auto; display: block;"
+                                                border="0" alt="Interfriends" />
+                                        </a>
                                     </td>
                                 </tr>
                             </table>
@@ -160,11 +164,19 @@
                                     <td class="bodycopy" text-align:left;">
 
                                         <center>
-                                            <div align="center"><img src="<?= base_url('assets/images/thankyou.png'); ?>" class="img-responsive"></div>
+                                            <div align="center">
+                                                <img src="<?= base_url('assets/images/thankyou.png'); ?>" class="img-responsive" alt="Thank You">
+                                            </div>
                                             <p></p>
-                                            <h2 style="text-align: left;"><strong> Your account has been created successfully and is ready to use </strong></h2>
-                                            <p> <strong>Dear <?= $username; ?>,</strong> </p>
-                                            <p style="color:#333"> Please <a href="<?= base_url('Api/Webservices/activate?token=' . $act_token); ?>">click here</a> to activate your account.</p>
+                                            <h2 style="text-align: left;">
+                                                <strong>Your account has been created successfully and is ready to use</strong>
+                                            </h2>
+                                            <p>
+                                                <strong>Dear <?= htmlspecialchars($username); ?>,</strong>
+                                            </p>
+                                            <p style="color:#333">
+                                                Please <a href="<?= base_url('Api/Webservices/activate?token=' . urlencode($act_token)); ?>">click here</a> to activate your account.
+                                            </p>
                                         </center>
 
 

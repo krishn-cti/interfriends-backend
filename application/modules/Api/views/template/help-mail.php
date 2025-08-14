@@ -144,8 +144,12 @@
                             <table width="100%" align="left" border="0" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td height="70" style="padding: 0 20px 20px 0;">
-                                        <!-- <img class="fix" src="https://interfriends.uk/interfriendsApp/assets/images/logo.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" /> -->
-                                        <img class="fix" src="https://creativethoughtsinfo.com/interfriendsApp/assets/img/interfriend_white.png" width="200" height="auto" style="margin: 0 auto;display: block;" border="0" alt="" />
+                                        <a href="<?= USER_BASE_URL ?>">
+                                            <img class="fix" src="<?= ASSET_BASE_URL ?>img/interfriend_white.png"
+                                                width="200" height="auto"
+                                                style="margin: 0 auto; display: block;"
+                                                border="0" alt="Interfriends" />
+                                        </a>
                                     </td>
                                 </tr>
                             </table>
