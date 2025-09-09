@@ -41,7 +41,7 @@ class Admin extends Base_Controller
 	// created by @krishn on 16-05-25
 	public function login()
 	{
-		$_POST['password'] = md5($_POST['password']); // You should use stronger hashing like password_hash() in real apps
+		$_POST['password'] = md5($_POST['password']);
 		$adminInfo = $this->common->getData('superAdmin', [
 			'email' => $_POST['email'],
 			'password' => $_POST['password']
@@ -57,13 +57,14 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		// Generate a secure token (you can also store it if you want persistent sessions)
+		// Generate a secure token
 		$token = bin2hex(random_bytes(32)); // 64-character secure random token
 
 		$this->response(true, 'Login successful.', [
 			"user_id" => $adminInfo["id"],
 			"email" => $adminInfo["email"],
 			"group_ids" => $adminInfo["group_ids"],
+			"circle_ids" => $adminInfo["circle_ids"],
 			"token" => $token,
 			"name" => $adminInfo["name"],
 			"admin_type" => $adminInfo["admin_type"]
@@ -1502,6 +1503,15 @@ class Admin extends Base_Controller
 			$where .= " AND $group_condition";
 		}
 
+		if (!empty($_REQUEST['circle_ids'])) {
+			$circle_ids = explode(',', $_REQUEST['circle_ids']);
+			$circle_ids = array_map('trim', $circle_ids);      // Remove whitespace
+			$circle_ids = array_map('intval', $circle_ids);    // Sanitize to integers
+
+			$circle_condition = "UC.circle_id IN (" . implode(',', $circle_ids) . ")";
+			$where .= " AND $circle_condition";
+		}
+
 		$result = $this->user_model->user_detail($where, array(), $start, $end);
 		$userCount = $this->user_model->user_detail($where, array('count'));
 
@@ -2532,14 +2542,14 @@ class Admin extends Base_Controller
 
 
 		if ($_REQUEST['payment_method'] === '1' && $_REQUEST['status'] === '2') {
-			$message2 = "emergency loan fully  approved";
+			$message2 = "emergency loan fully  paid";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "5");
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 			$data['useremail'] = "";
-			$data['message'] = 'This is a confirmation that your Emergency Loan has been processed and approved.<p>Payment due date - <b>' . date('d M Y', strtotime($_REQUEST['pay_by'])) . '</b></p>';
+			$data['message'] = 'This is a confirmation that your Emergency Loan has been fully paid and mark as completed.<p>Payment due date - <b>' . date('d M Y', strtotime($_REQUEST['pay_by'])) . '</b></p>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
 		}
@@ -2583,19 +2593,56 @@ class Admin extends Base_Controller
 		}
 
 		$this->common->insertData('user_emergency_loan_status_history', array("loan_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
-		// new-changes 12-06-2024
-		if ($_REQUEST['status']) {
-			$status = $_REQUEST['status'];
-			$loan_type = '8';
-			$group_id = $_REQUEST['group_id'];
+		// new-changes 28-08-2025
+		if (!empty($_REQUEST['status'])) {
+			$status     = $_REQUEST['status'];
+			$loan_type  = '8';
+			$group_id   = $_REQUEST['group_id'];
 			$created_at = date('Y-m-d H:i:s');
-			$loan_id = $id;
-			$user_id = $_REQUEST['user_id'];
-			$month = $_REQUEST['pay_by'];
-			$amount = $_REQUEST['loan_amount'];
-			$result = $this->common->query_normal("INSERT INTO payment_notification(status,group_id,month,created_at,
-               user_id,amount,loan_type,loan_id) VALUES('$status','$group_id','$month','$created_at','$user_id','$amount','$loan_type','$loan_id')");
+			$loan_id    = $id;
+			$user_id    = $_REQUEST['user_id'];
+			$month      = $_REQUEST['pay_by'];
+			$amount     = $_REQUEST['loan_amount'];
+
+			// Check if record already exists for this loan_id
+			$check = $this->common->getData(
+				"payment_notification",
+				array("loan_id" => $loan_id)
+			);
+
+			if (!empty($check)) {
+				// Update existing record
+				$result = $this->common->updateData(
+					"payment_notification",
+					array(
+						"status"     => $status,
+						"group_id"   => $group_id,
+						"month"      => $month,
+						"created_at" => $created_at,
+						"user_id"    => $user_id,
+						"amount"     => $amount,
+						"loan_type"  => $loan_type
+					),
+					array("loan_id" => $loan_id)
+				);
+			} else {
+				// Insert new record
+				$result = $this->common->insertData(
+					"payment_notification",
+					array(
+						"status"     => $status,
+						"group_id"   => $group_id,
+						"month"      => $month,
+						"created_at" => $created_at,
+						"user_id"    => $user_id,
+						"amount"     => $amount,
+						"loan_type"  => $loan_type,
+						"loan_id"    => $loan_id
+					)
+				);
+			}
 		}
+
 		if ($result) {
 			//changes on  10-05-2024
 			//   $userDetailFrom = $this->common->getData('user',array('user_id'=>$_REQUEST['user_id']),array('single'));
@@ -3521,18 +3568,54 @@ class Admin extends Base_Controller
 			$message2 = "Loan awaiting approval";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "9");
 		}
-		//new-changes 12-06-2024
+		//new-changes 28-08-2025
 		if ($_REQUEST['status']) {
-			$status = $_REQUEST['status'];
-			$loan_type = $_REQUEST['loan_type'];
-			$group_id = $_REQUEST['group_id'];
+			$status     = $_REQUEST['status'];
+			$loan_type  = $_REQUEST['loan_type'];
+			$group_id   = $_REQUEST['group_id'];
 			$created_at = date('Y-m-d H:i:s');
-			$loan_id = $id;
-			$user_id = $_REQUEST['user_id'];
-			$month = $getloan['start_date'];
-			$amount = $_REQUEST['loan_amount'];
-			$result = $this->common->query_normal("INSERT INTO payment_notification(status,group_id,month,created_at,
-               user_id,amount,loan_type,loan_id) VALUES('$status','$group_id','$month','$created_at','$user_id','$amount','$loan_type','$loan_id')");
+			$loan_id    = $id;
+			$user_id    = $_REQUEST['user_id'];
+			$month      = $getloan['start_date'];
+			$amount     = $_REQUEST['loan_amount'];
+
+			// Check if record exists for this loan_id
+			$check = $this->common->getData(
+				"payment_notification",
+				array("loan_id" => $loan_id)
+			);
+
+			if (!empty($check)) {
+				// Update existing record
+				$result = $this->common->updateData(
+					"payment_notification",
+					array(
+						"status"     => $status,
+						"group_id"   => $group_id,
+						"month"      => $month,
+						"created_at" => $created_at,
+						"user_id"    => $user_id,
+						"amount"     => $amount,
+						"loan_type"  => $loan_type
+					),
+					array("loan_id" => $loan_id)
+				);
+			} else {
+				// Insert new record
+				$result = $this->common->insertData(
+					"payment_notification",
+					array(
+						"status"     => $status,
+						"group_id"   => $group_id,
+						"month"      => $month,
+						"created_at" => $created_at,
+						"user_id"    => $user_id,
+						"amount"     => $amount,
+						"loan_type"  => $loan_type,
+						"loan_id"    => $loan_id
+					)
+				);
+			}
 		}
 
 		if ($_REQUEST['status'] === '2') {
@@ -5328,6 +5411,23 @@ class Admin extends Base_Controller
 		}
 	}
 
+	public function removeSafekeepingRequest()
+	{
+		$id = $this->input->post('safekeeping_id');
+
+		if (!empty($id)) {
+			$where = ['id' => $id];
+			$deleted = $this->common->deleteData('safe_keeping_withdral_request', $where);
+
+			if ($deleted) {
+				$this->response(true, "Safekeeping request deleted successfully.");
+			} else {
+				$this->response(false, "Failed to delete safekeeping request. Please try again.");
+			}
+		} else {
+			$this->response(false, "ID cannot be empty.");
+		}
+	}
 
 
 
@@ -9113,7 +9213,17 @@ class Admin extends Base_Controller
 			die();
 		}
 
-		$groupcircle = $this->common->getData('group_circle', array('group_id' => $_POST['group_id']), array(''));
+		$circleIds = explode(",", $_POST['circle_ids']);
+
+		$groupcircle = $this->common->getData(
+			'group_circle',
+			array('group_id' => $_POST['group_id']),
+			array(
+				'colname' => 'id',
+				'where_in' => $circleIds
+			)
+		);
+		// $groupcircle = $this->common->getData('group_circle', array('group_id' => $_POST['group_id'], 'id' => $_POST['circle_ids']), array(''));
 
 		$array = [];
 		if ($groupcircle) {
@@ -10291,18 +10401,12 @@ class Admin extends Base_Controller
 		$where2 = "status = 1";
 		$where3 = "UM.user_id = '1'";
 
-		// $loanResult = $this->user_model->loan_detail($where1, array());
-		// $loanCount = $this->user_model->loan_detail($where1, array('count'));
-
-		// $miscellaneousResult = $this->user_model->miscellaneous_detail($where3, array(),);
-		// $miscellaneousCount = $this->user_model->miscellaneous_detail($where3, array('count'));
-
 		// Fetch all data first (no limit)
 		$allLoan = $this->user_model->loan_detail($where1, array());
 		$allSaving = $this->common->getData('user_group_lifecycle', $where2);
-		$allMiscellaneous = $this->user_model->miscellaneous_detail($where3, array(),);
+		$allMiscellaneous = $this->user_model->miscellaneous_detail($where3, array());
 
-		// Add type and sno (sno will be adjusted after filtering)
+		// Add type
 		foreach ($allLoan as &$item) {
 			$item['type'] = 'loan';
 		}
@@ -10315,6 +10419,19 @@ class Admin extends Base_Controller
 
 		// Merge all data
 		$mergedData = array_merge($allLoan, $allSaving, $allMiscellaneous);
+
+		// Strict Type Filter: only allow loan/saving/miscellaneous
+		if (isset($_REQUEST['type'])) {
+			$type = trim(strtolower(trim($_REQUEST['type'])));
+			$allowedTypes = ['loan', 'saving', 'miscellaneous'];
+
+			if (in_array($type, $allowedTypes, true)) {
+				$mergedData = array_filter($mergedData, function ($item) use ($type) {
+					return isset($item['type']) && strtolower($item['type']) === $type;
+				});
+			}
+			// if type not in whitelist, no filter is applied
+		}
 
 		// Search Filter
 		if (!empty($_REQUEST['search_keyword'])) {
@@ -10336,7 +10453,7 @@ class Admin extends Base_Controller
 		$mergedData = array_values($mergedData);
 		$mergedCount = count($mergedData);
 
-		// Pagination: slice the merged array
+		// Pagination
 		$paginatedData = array_slice($mergedData, $end, $start);
 
 		// Append user_info and SNO
@@ -10351,6 +10468,83 @@ class Admin extends Base_Controller
 			"listCount" => $mergedCount
 		));
 	}
+
+	// public function getAllMissedPayments()
+	// {
+	// 	if (empty($_REQUEST['start'])) {
+	// 		$start = 10;
+	// 		$end = 0;
+	// 	} else {
+	// 		$start = 10;
+	// 		$end = $_REQUEST['start'];
+	// 	}
+
+	// 	$where1 = "L.status = '1'";
+	// 	$where2 = "status = 1";
+	// 	$where3 = "UM.user_id = '1'";
+
+	// 	// Fetch all data first (no limit)
+	// 	$allLoan = $this->user_model->loan_detail($where1, array());
+	// 	$allSaving = $this->common->getData('user_group_lifecycle', $where2);
+	// 	$allMiscellaneous = $this->user_model->miscellaneous_detail($where3, array(),);
+
+	// 	// Add type and sno (sno will be adjusted after filtering)
+	// 	foreach ($allLoan as &$item) {
+	// 		$item['type'] = 'loan';
+	// 	}
+	// 	foreach ($allSaving as &$item) {
+	// 		$item['type'] = 'saving';
+	// 	}
+	// 	foreach ($allMiscellaneous as &$item) {
+	// 		$item['type'] = 'miscellaneous';
+	// 	}
+
+	// 	// Merge all data
+	// 	$mergedData = array_merge($allLoan, $allSaving, $allMiscellaneous);
+
+	// 	// Type Filter
+	// 	if (!empty($_REQUEST['type'])) {
+	// 		$type = strtolower($_REQUEST['type']);
+	// 		$mergedData = array_filter($mergedData, function ($item) use ($type) {
+	// 			return strtolower($item['type']) === $type;
+	// 		});
+	// 	}
+
+	// 	// Search Filter
+	// 	if (!empty($_REQUEST['search_keyword'])) {
+	// 		$keyword = strtolower($_REQUEST['search_keyword']);
+	// 		$mergedData = array_filter($mergedData, function ($item) use ($keyword) {
+	// 			$user = get_user_details($item['user_id']);
+	// 			return (
+	// 				strpos(strtolower($user['first_name']), $keyword) !== false ||
+	// 				strpos(strtolower($user['last_name']), $keyword) !== false ||
+	// 				strpos(strtolower($user['email']), $keyword) !== false ||
+	// 				(isset($item['loan_total']) && strpos(strtolower($item['loan_total']), $keyword) !== false) ||
+	// 				(isset($item['amount']) && strpos(strtolower($item['amount']), $keyword) !== false) ||
+	// 				(isset($item['type']) && strpos(strtolower($item['type']), $keyword) !== false)
+	// 			);
+	// 		});
+	// 	}
+
+	// 	// Reset indexes after filtering
+	// 	$mergedData = array_values($mergedData);
+	// 	$mergedCount = count($mergedData);
+
+	// 	// Pagination: slice the merged array
+	// 	$paginatedData = array_slice($mergedData, $end, $start);
+
+	// 	// Append user_info and SNO
+	// 	$sno = $end + 1;
+	// 	foreach ($paginatedData as $key => &$value) {
+	// 		$value['sno'] = $sno++;
+	// 		$value['user_info'] = get_user_details($value['user_id']);
+	// 	}
+
+	// 	$this->response(true, "Missed Payment Data fetched successfully.", array(
+	// 		"lists" => $paginatedData,
+	// 		"listCount" => $mergedCount
+	// 	));
+	// }
 
 	// created by @krishn on 27-05-25
 	public function getAllOutstandingPayments()

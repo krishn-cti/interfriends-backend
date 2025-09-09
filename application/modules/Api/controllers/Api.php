@@ -1350,82 +1350,113 @@ class Api extends Base_Controller
 	}
 
 
+	// public function safeKeepingList()
+	// {
+	// 	$safeKeepingList = $this->common->getData('safe_keeping', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id']));
+
+	// 	// removed this conditions ('request_status' => '1') in both amount
+	// 	$totalCreditAmount = $this->common->getData('safe_keeping', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 2, 'request_status' => '1'), array("field" => 'sum(amount) as safe_keeping_total_amount', "single"));
+
+	// 	$totalDebitAmount = $this->common->getData('safe_keeping', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 1, 'request_status' => '1'), array("field" => 'sum(amount) as safe_keeping_total_amount', "single"));
+
+
+	// 	$safeKeepingAmount = $totalCreditAmount['safe_keeping_total_amount'] - $totalDebitAmount['safe_keeping_total_amount'];
+
+	// 	if (!empty($safeKeepingList)) {
+	// 		$this->response(true, 'safe Keeping fetch successfully', array('safeKeepingList' => $safeKeepingList, 'safeKeepingAmount' => $safeKeepingAmount));
+	// 	} else {
+	// 		$this->response(true, 'safe Keeping not found', array('safeKeepingList' => array(), 'safeKeepingAmount' => 0));
+	// 	}
+	// }
+
 	public function safeKeepingList()
 	{
-		$safeKeepingList = $this->common->getData('safe_keeping', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id']));
+		$group_id = $_REQUEST['group_id'];
+		$user_id  = $_REQUEST['user_id'];
 
-		// removed this conditions ('request_status' => '1') in both amount
-		$totalCreditAmount = $this->common->getData('safe_keeping', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 2), array("field" => 'sum(amount) as safe_keeping_total_amount', "single"));
+		// condition for list
+		$condition = "group_id = '$group_id' AND user_id = '$user_id' 
+                  AND (
+                        (requested_by = 'admin' AND request_status = '2') 
+                        OR 
+                        (requested_by = 'user' AND request_status = '1')
+                      )";
 
-		$totalDebitAmount = $this->common->getData('safe_keeping', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 1), array("field" => 'sum(amount) as safe_keeping_total_amount', "single"));
+		// fetch list
+		$safeKeepingList = $this->common->getData('safe_keeping', $condition);
 
+		// total credit
+		$totalCreditAmount = $this->common->getData(
+			'safe_keeping',
+			$condition . " AND pyment_type = 2",
+			array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
+		);
+
+		// total debit
+		$totalDebitAmount = $this->common->getData(
+			'safe_keeping',
+			$condition . " AND pyment_type = 1",
+			array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
+		);
 
 		$safeKeepingAmount = $totalCreditAmount['safe_keeping_total_amount'] - $totalDebitAmount['safe_keeping_total_amount'];
 
 		if (!empty($safeKeepingList)) {
-			$this->response(true, 'safe Keeping fetch successfully', array('safeKeepingList' => $safeKeepingList, 'safeKeepingAmount' => $safeKeepingAmount));
+			$this->response(true, 'Safe keeping fetched successfully', array(
+				'safeKeepingList'   => $safeKeepingList,
+				'safeKeepingAmount' => $safeKeepingAmount
+			));
 		} else {
-			$this->response(true, 'safe Keeping not found', array('safeKeepingList' => array(), 'safeKeepingAmount' => 0));
+			$this->response(true, 'Safe keeping not found', array(
+				'safeKeepingList'   => array(),
+				'safeKeepingAmount' => 0
+			));
 		}
 	}
 
-    // // created by @krishn on 14-08-25
+	// // created by @krishn on 18-08-25
 	// public function safeKeepingList()
-    // {
-    //     $groupId = $_REQUEST['group_id'] ?? null;
-    //     $userId  = $_REQUEST['user_id'] ?? null;
-    
-    //     // Fetch all safe keeping records
-    //     $safeKeepingList = $this->common->getData(
-    //         'safe_keeping',
-    //         array('group_id' => $groupId, 'user_id' => $userId)
-    //     );
-    
-    //     // Fetch total credit
-    //     $totalCreditAmount = $this->common->getData(
-    //         'safe_keeping',
-    //         array('group_id' => $groupId, 'user_id' => $userId, 'pyment_type' => 2),
-    //         array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
-    //     );
-    
-    //     // Fetch total debit
-    //     $totalDebitAmount = $this->common->getData(
-    //         'safe_keeping',
-    //         array('group_id' => $groupId, 'user_id' => $userId, 'pyment_type' => 1),
-    //         array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
-    //     );
-    
-    //     // Prevent null values
-    //     $creditSafeKeeping = $totalCreditAmount['safe_keeping_total_amount'] ?? 0;
-    //     $debitSafeKeeping  = $totalDebitAmount['safe_keeping_total_amount'] ?? 0;
-    
-    //     // Fetch latest credit request details (if needed for condition)
-    //     $latestCredit = $this->common->getData(
-    //         'safe_keeping',
-    //         array('group_id' => $groupId, 'user_id' => $userId),
-    //         array("field" => 'id, requested_by, request_status'),
-    //     );
-        
-    //     $lastCreditRecord = array_reverse($latestCredit);
-    
-    //     if (!empty($lastCreditRecord) && $lastCreditRecord[0]['requested_by'] === "user" && $lastCreditRecord[0]['request_status'] == 1) {
-    //         $safeKeepingAmount = $creditSafeKeeping - $debitSafeKeeping;
-    //     } else {
-    //         $safeKeepingAmount = 0 - $debitSafeKeeping;
-    //     }
-    
-    //     if (!empty($safeKeepingList)) {
-    //         $this->response(true, 'Safe keeping fetched successfully', array(
-    //             'safeKeepingList'    => $safeKeepingList,
-    //             'safeKeepingAmount'  => $safeKeepingAmount,
-    //         ));
-    //     } else {
-    //         $this->response(true, 'Safe keeping not found', array(
-    //             'safeKeepingList'   => array(),
-    //             'safeKeepingAmount' => 0
-    //         ));
-    //     }
-    // }
+	// {
+	// 	$group_id = $_REQUEST['group_id'];
+	// 	$user_id  = $_REQUEST['user_id'];
+
+	// 	// Add condition for requested_by and request_status
+	// 	$condition = "group_id = '$group_id' AND user_id = '$user_id' 
+	//               AND (
+	//                     (requested_by = 'admin' AND request_status = '2') 
+	//                     OR 
+	//                     (requested_by = 'user' AND request_status = '1')
+	//                   )";
+
+	// 	$safeKeepingList = $this->common->getData('safe_keeping', $condition);
+
+	// 	// total credit
+	// 	$totalCreditAmount = $this->common->getData('safe_keeping', $condition . " AND pyment_type = 2", [
+	// 		"field"  => 'SUM(amount) as safe_keeping_total_amount',
+	// 		"single" => true
+	// 	]);
+
+	// 	// total debit
+	// 	$totalDebitAmount = $this->common->getData('safe_keeping', $condition . " AND pyment_type = 1", [
+	// 		"field"  => 'SUM(amount) as safe_keeping_total_amount',
+	// 		"single" => true
+	// 	]);
+
+	// 	$safeKeepingAmount = $totalCreditAmount['safe_keeping_total_amount'] - $totalDebitAmount['safe_keeping_total_amount'];
+
+	// 	if (!empty($safeKeepingList)) {
+	// 		$this->response(true, 'Safe keeping fetched successfully', [
+	// 			'safeKeepingList'   => $safeKeepingList,
+	// 			'safeKeepingAmount' => $safeKeepingAmount
+	// 		]);
+	// 	} else {
+	// 		$this->response(true, 'Safe keeping not found', [
+	// 			'safeKeepingList'   => [],
+	// 			'safeKeepingAmount' => 0
+	// 		]);
+	// 	}
+	// }
+
 
 	public function cylcleAvg()
 	{
