@@ -3333,20 +3333,17 @@ class Admin extends Base_Controller
 				}
 			}
 
-			$cycle_name = $_REQUEST['loan_title'] ?? 'Loan Payment';
+			$cycle_name = $_REQUEST['loan_title'] == '' ? 'Loan Payment' : $_REQUEST['loan_title'];
 
 			$data["status"] = '#N/A';
 			if ($_REQUEST['status'] == '1') {
 				$data["status"] = 'Paid On Time';
-				$this->updateCreditScoreUser(20, 'plus', $_REQUEST['user_id']);
 			}
 			if ($_REQUEST['status'] == '2') {
 				$data["status"] = 'Paid Late';
-				$this->updateCreditScoreUser(60, 'minus', $_REQUEST['user_id']);
 			}
 			if ($_REQUEST['status'] == '3') {
 				$data["status"] = 'Missed Payment Deadline';
-				$this->updateCreditScoreUser(120, 'minus', $_REQUEST['user_id']);
 			}
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
@@ -8727,13 +8724,19 @@ class Admin extends Base_Controller
 		}
 
 		if ($_REQUEST['status'] === '2') { // On-time payment
+			$data['status'] = "Paid on Time";
 			$this->common->query_normal("UPDATE credit_score_user SET saving_paid_on_time = saving_paid_on_time+20 WHERE user_id = '{$_REQUEST['user_id']}'");
 			$this->updateCreditScore(20, 'plus');
 
 			$userDetailFrom = $this->common->getData('user', ['user_id' => $_REQUEST['user_id']], ['single']);
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 			$data['useremail'] = "";
-			$data['message'] = '<p>This is a confirmation that your WELFARE payment for this month has been received and recorded. Check your app for confirmation.</p>';
+			$data['message'] = '<p>This is a confirmation that your WELFARE payment for this month has been received and recorded. Check your app for confirmation.</p>
+			<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+				<tr><td><strong>Amount paid</strong></td><td>£' . $_REQUEST["amount"] . '</td></tr>
+				<tr><td><strong>Payment date</strong></td><td>' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</td></tr>
+				<tr><td><strong>Payment status</strong></td><td>' . $data['status'] . '</td></tr>
+			</table>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$this->sendMail($userDetailFrom['email'], 'Welfare', $messaged);
 		}
@@ -10242,13 +10245,23 @@ class Admin extends Base_Controller
 
 			case 'loan_completed':
 				$table = 'user_loan UL, user U';
-				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 $searchCond";
+				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND UL.loan_type = 1 $searchCond";
 				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, UL.created_at';
 				break;
 
+			// case 'loan_paid':
+			// 	$table = 'user_loan_payment ULP, user U';
+			// 	$fullWhere = "ULP.user_id = U.user_id AND U.status != '2' AND ULP.group_id != 34 $searchCond";
+			// 	$field = 'ULP.user_id, ULP.group_id, U.first_name, U.last_name, U.email, ULP.amount, ULP.created_at';
+			// 	break;
+
 			case 'loan_paid':
-				$table = 'user_loan_payment ULP, user U';
-				$fullWhere = "ULP.user_id = U.user_id AND U.status != '2' AND ULP.group_id != 34 $searchCond";
+				$table = 'user_loan_payment ULP, user U, user_loan UL';
+				$fullWhere = "ULP.user_id = U.user_id
+					AND U.status != '2'
+					AND ULP.group_id != 34
+					AND ULP.loan_id = UL.id
+					AND UL.loan_type = 1 $searchCond";
 				$field = 'ULP.user_id, ULP.group_id, U.first_name, U.last_name, U.email, ULP.amount, ULP.created_at';
 				break;
 
@@ -10261,7 +10274,7 @@ class Admin extends Base_Controller
 				) AS ULP ON UL.user_id = ULP.user_id AND UL.group_id = ULP.group_id,
 				user U';
 
-				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 $searchCond";
+				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND loan_type = 1 $searchCond";
 
 				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, 
 				SUM(UL.loan_amount) AS total_completed,
