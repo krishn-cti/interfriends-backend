@@ -9218,15 +9218,24 @@ class Admin extends Base_Controller
 
 		$circleIds = explode(",", $_POST['circle_ids']);
 
-		$groupcircle = $this->common->getData(
-			'group_circle',
-			array('group_id' => $_POST['group_id']),
-			array(
-				'colname' => 'id',
-				'where_in' => $circleIds
-			)
-		);
-		// $groupcircle = $this->common->getData('group_circle', array('group_id' => $_POST['group_id'], 'id' => $_POST['circle_ids']), array(''));
+		if (!empty($_POST['circle_ids'])) {
+			// When circle_ids is available
+			$groupcircle = $this->common->getData(
+				'group_circle',
+				array('group_id' => $_POST['group_id']),
+				array(
+					'colname'  => 'id',
+					'where_in' => $circleIds
+				)
+			);
+		} else {
+			// When circle_ids is NOT available
+			$groupcircle = $this->common->getData(
+				'group_circle',
+				array('group_id' => $_POST['group_id']),
+				array()
+			);
+		}
 
 		$array = [];
 		if ($groupcircle) {
