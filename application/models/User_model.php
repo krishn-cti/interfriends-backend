@@ -1330,6 +1330,44 @@ class User_model extends CI_Model
 		}
 	}
 
+	public function recommendUserApprovalTracking_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
+	{
+		$this->db->select("RU.*,U.first_name as first_name_main_refer,U.last_name as last_name_main_refer,U.email as email_main_refer,IFNULL(UR.first_name,'') as first_name_refer,IFNULL(UR.last_name,'') as last_name_refer,IFNULL(UR.email,'') as email_refer,IFNULL(REG.user_id,'0') as recommended_user_id,IFNULL(REG.recommended,'') as recommended_status");
+		$this->db->from('recommend_user as RU');
+		if ($where != "") {
+			$this->db->where($where);
+		}
+
+		if ($having != "") {
+			$this->db->having($having);
+		}
+
+		$this->db->join('user as U', 'U.user_id = RU.user_id');
+		$this->db->join('user as UR', 'UR.user_id = RU.refer_user_id', 'left');
+		$this->db->join('user as REG', 'REG.email = RU.email', 'left');
+		$this->db->order_by("RU.id", 'DESC');
+
+		if ($limit != '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$res = $this->db->get()->result_array();
+
+		if (!empty($options) && in_array('count', $options)) {
+			return count($res);
+		}
+
+		if ($res) {
+			if (isset($options) && in_array('single', $options)) {
+				return $res[0];
+			} else {
+				return $res;
+			}
+		} else {
+			return array();
+		}
+	}
+
 
 
 

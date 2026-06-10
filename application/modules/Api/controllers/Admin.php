@@ -241,6 +241,8 @@ class Admin extends Base_Controller
 			$totalLoanAmountCar = 0;
 		}
 
+		$pendingRecommendedUsers = $this->pendingRecommendedUsersCount();
+
 		$info = array(
 			'loan_completed' => $loan_completed['total'],
 			'loan_active' => $loan_completed['total'] - $loan_paid_user['total'],
@@ -249,9 +251,24 @@ class Admin extends Base_Controller
 			'helptobuycar' => (string)$totalLoanAmountCar,
 			'helptobuycarInsurance' => (string)$totalLoanAmountCarInsurance ?? '0',
 			'helptobuycc' => (string)$totalLoanAmountCc,
+			'pending_recommended_users' => $pendingRecommendedUsers,
 		);
 
 		$this->response(true, 'Dashboard third row fetch Successfully', array('info' => $info));
+	}
+
+	private function pendingRecommendedUsersCount()
+	{
+		$this->db->distinct();
+		$this->db->select('RU.id');
+		$this->db->from('recommend_user as RU');
+		$this->db->join('recommendation_approvals as RA', 'RA.recommend_id = RU.id');
+		$this->db->where('RA.status', '0');
+		$this->db->where("(RU.signup_form != '1' OR RU.signup_form IS NULL)", null, false);
+		$this->db->where("NOT EXISTS (SELECT 1 FROM recommendation_approvals RA_DECLINED WHERE RA_DECLINED.recommend_id = RU.id AND RA_DECLINED.status = '2')", null, false);
+		$this->db->where("NOT EXISTS (SELECT 1 FROM recommendation_approvals RA_ADMIN WHERE RA_ADMIN.recommend_id = RU.id AND RA_ADMIN.approver_role = 'admin' AND RA_ADMIN.status = '1')", null, false);
+
+		return $this->db->count_all_results();
 	}
 
 	// created by @krishn on 03-06-25
@@ -1861,6 +1878,17 @@ class Admin extends Base_Controller
 			$this->response(true, 'Property Unblocked Successfully', array('status' => $_REQUEST['status']));
 		} else {
 			$this->response(true, 'Property Blocked Successfully', array('status' => $_REQUEST['status']));
+		}
+	}
+
+	public function openCloseProperty()
+	{
+		$this->common->updateData('property', array('is_closed' => $_REQUEST['is_closed']), array('id' => $_REQUEST['id']));
+
+		if ($_REQUEST['is_closed'] == 1) {
+			$this->response(true, 'Property Closed Successfully', array('is_closed' => $_REQUEST['is_closed]']));
+		} else {
+			$this->response(true, 'Property Opened Successfully', array('is_closed' => $_REQUEST['is_closed']));
 		}
 	}
 
@@ -4996,6 +5024,113 @@ class Admin extends Base_Controller
 		}
 	}
 
+	public function recommendUserApprovalTracking()
+	{
+		if (empty($_REQUEST['start'])) {
+			$start = 10;
+			$end = 0;
+		} else {
+			$start = 10;
+			$end = $_REQUEST['start'];
+		}
+
+		$where = array();
+		if (!empty($_REQUEST['id'])) {
+			$where['RU.id'] = $_REQUEST['id'];
+		}
+
+		$result = $this->user_model->recommendUserApprovalTracking_detail($where, array(), $start, $end);
+		// $recommendUserCount = $this->user_model->recommendUserApprovalTracking_detail($where, array('count'));
+
+		$countData = $end;
+		$countData++;
+
+		if (!empty($result)) {
+			foreach ($result as $key => $value) {
+				$approvals = $this->common->getData('recommendation_approvals', array('recommend_id' => $value['id']), array('sort_by' => 'id', 'sort_direction' => 'ASC'));
+				if (empty($approvals)) {
+					$approvals = array();
+				}
+				$approvalSteps = array();
+				$hasDeclined = false;
+				$hasPending = false;
+				$adminApproved = false;
+				$currentPendingRole = "";
+
+				foreach ($approvals as $approval) {
+					$approvalStatus = "pending";
+					if ($approval['status'] == '1') {
+						$approvalStatus = "approved";
+					} elseif ($approval['status'] == '2') {
+						$approvalStatus = "declined";
+					}
+
+					if ($approval['status'] == '2') {
+						$hasDeclined = true;
+					}
+
+					if ($approval['status'] == '0') {
+						$hasPending = true;
+						if ($currentPendingRole == "") {
+							$currentPendingRole = $approval['approver_role'];
+						}
+					}
+
+					if ($approval['approver_role'] == 'admin' && $approval['status'] == '1') {
+						$adminApproved = true;
+					}
+
+					if ($approval['approver_role'] == 'admin') {
+						$approver = $this->common->getData('superAdmin', array('id' => $approval['approver_id']), array('single'));
+						$approverName = !empty($approver) ? $approver['name'] : "";
+						$approverEmail = !empty($approver) ? $approver['email'] : "";
+					} else {
+						$approver = $this->common->getData('user', array('user_id' => $approval['approver_id']), array('single'));
+						$approverName = !empty($approver) ? trim($approver['first_name'] . ' ' . $approver['last_name']) : "";
+						$approverEmail = !empty($approver) ? $approver['email'] : "";
+					}
+
+					$approvalSteps[] = array(
+						"id" => $approval['id'],
+						"recommend_id" => $approval['recommend_id'],
+						"approver_id" => $approval['approver_id'],
+						"approver_role" => $approval['approver_role'],
+						"approver_name" => $approverName,
+						"approver_email" => $approverEmail,
+						"status" => $approvalStatus,
+						"status_code" => $approval['status']
+					);
+				}
+
+				$overallStatus = "not_started";
+				if ($hasDeclined) {
+					$overallStatus = "declined";
+				} elseif ($adminApproved) {
+					$overallStatus = "approved";
+				} elseif ($hasPending) {
+					$overallStatus = "pending";
+				} elseif (!empty($approvals)) {
+					$overallStatus = "in_progress";
+				}
+
+				if (!empty($value['signup_form']) && $value['signup_form'] == '1') {
+					$overallStatus = "registered";
+				}
+
+				$result[$key]['sno'] = $countData++;
+				$result[$key]['primary_recommender_name'] = trim($value['first_name_main_refer'] . ' ' . $value['last_name_main_refer']);
+				$result[$key]['second_recommender_name'] = trim($value['first_name_refer'] . ' ' . $value['last_name_refer']);
+				$result[$key]['overall_status'] = $overallStatus;
+				$result[$key]['current_pending_role'] = $currentPendingRole;
+				$result[$key]['approval_steps'] = $approvalSteps;
+			}
+
+			$this->response(true, "Recommendation approval tracking fetched successfully.", array("lists" => $result[0], /*"listCount" => $recommendUserCount*/));
+		} else {
+			$this->response(true, "Recommendation approval tracking fetched successfully.", array("lists" => array(), /*"listCount" => $recommendUserCount*/));
+		}
+	}
+
 	public function recommendUser_status_160525()
 	{
 		// limit code start
@@ -7809,7 +7944,12 @@ class Admin extends Base_Controller
 
 		$totalDebitpfAmount = $this->common->getData('pf_user', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'payment_type' => '1'), array("field" => 'sum(pf_amount) as pf_total_amount, sum(pf_interest_amount) as pf_interest', "single"));
 
-		$avgAmountPf = $totalCreditpfAmount['pf_total_amount'] - $totalDebitpfAmount['pf_total_amount'];
+		$creditPfAmount = (float)($totalCreditpfAmount['pf_total_amount'] ?? 0);
+		$creditPfInterest = (float)($totalCreditpfAmount['pf_interest'] ?? 0);
+		$debitPfAmount = (float)($totalDebitpfAmount['pf_total_amount'] ?? 0);
+		$debitPfInterest = (float)($totalDebitpfAmount['pf_interest'] ?? 0);
+
+		$avgAmountPf = ($creditPfAmount + $creditPfInterest) - ($debitPfAmount + $debitPfInterest);
 
 
 
@@ -10150,6 +10290,7 @@ class Admin extends Base_Controller
 			'pf_user' => 'PF',
 			'emergency_loan_completed' => 'UEL',
 			'emergency_loan_active' => 'UEL',
+			'loan_approved' => 'UL',
 			'loan_completed' => 'UL',
 			'loan_paid' => 'ULP',
 			'active_loan' => 'UL',
@@ -10252,10 +10393,32 @@ class Admin extends Base_Controller
 			// 	$groupBy = 'UL.user_id';
 			// 	break;
 
-			case 'loan_completed':
+			case 'loan_approved':
 				$table = 'user_loan UL, user U';
 				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND UL.loan_type = 1 $searchCond";
 				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, UL.created_at';
+				break;
+
+			case 'loan_completed':
+				$table = 'user_loan UL
+				LEFT JOIN (
+					SELECT loan_id, SUM(amount) AS total_paid
+					FROM user_loan_payment
+					GROUP BY loan_id
+				) AS ULP ON ULP.loan_id = UL.id,
+				user U';
+				$fullWhere = "UL.user_id = U.user_id
+					AND U.status != '2'
+					AND UL.group_id != 34
+					AND UL.loan_type = 1
+					AND UL.status = '2'
+					AND EXISTS (
+						SELECT 1
+						FROM user_loan_status_history ULSH
+						WHERE ULSH.loan_id = UL.id
+						AND ULSH.status = '2'
+					) $searchCond";
+				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, IFNULL(ULP.total_paid, 0) AS total_paid, UL.created_at';
 				break;
 
 			// case 'loan_paid':
@@ -10455,6 +10618,39 @@ class Admin extends Base_Controller
 			// if type not in whitelist, no filter is applied
 		}
 
+		// Date Range Filter
+		if (!empty($_REQUEST['date_range'])) {
+
+			$dateRange = explode(',', $_REQUEST['date_range']);
+
+			if (count($dateRange) == 2) {
+
+				$fromDate = trim($dateRange[0]);
+				$toDate   = trim($dateRange[1]);
+
+				// Handle reversed dates
+				if (strtotime($fromDate) > strtotime($toDate)) {
+					$temp = $fromDate;
+					$fromDate = $toDate;
+					$toDate = $temp;
+				}
+
+				$mergedData = array_filter($mergedData, function ($item) use ($fromDate, $toDate) {
+
+					if (empty($item['created_at'])) {
+						return false;
+					}
+
+					$itemDate = date('Y-m-d', strtotime($item['created_at']));
+
+					return (
+						$itemDate >= $fromDate &&
+						$itemDate <= $toDate
+					);
+				});
+			}
+		}
+
 		// Search Filter
 		if (!empty($_REQUEST['search_keyword'])) {
 			$keyword = strtolower($_REQUEST['search_keyword']);
@@ -10640,6 +10836,18 @@ class Admin extends Base_Controller
 			));
 		} else {
 			$this->response(false, "Data not found.");
+		}
+	}
+
+	// API created by @krishn on 10/06/26
+	public function getUserNotes($user_id)
+	{
+		$notes = $this->common->getData('user_cycle_status_history', ['user_id' => $user_id], ['all']);
+
+		if ($notes) {
+			$this->response(true, "Notes fetched successfully.", ['notes' => $notes]);
+		} else {
+			$this->response(false, "No notes found for this user.");
 		}
 	}
 }

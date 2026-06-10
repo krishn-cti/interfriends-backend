@@ -227,6 +227,60 @@ class Api extends Base_Controller
 		if ($result) {
 			$message = "request loan";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
+			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
+
+			$userDetail = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			$adminUsers = $this->common->getData('superAdmin', array('admin_type' => '2'));
+
+			$loanSubject = "Loan application";
+			if (!empty($_REQUEST['loan_type'])) {
+				if ($_REQUEST['loan_type'] == '2') {
+					$loanSubject = "Help2 Pay(Car Insurance)";
+				} elseif ($_REQUEST['loan_type'] == '3') {
+					$loanSubject = "Help2 Buy(Car)";
+				} elseif ($_REQUEST['loan_type'] == '4') {
+					$loanSubject = "Help2 Pay(credit card)";
+				} elseif ($_REQUEST['loan_type'] == '5') {
+					$loanSubject = "Help2 Pay(other)";
+				} elseif ($_REQUEST['loan_type'] != '1') {
+					$loanSubject = "Help2 Buy(property)";
+				}
+			}
+
+			if (!empty($userDetail) && !empty($adminUsers)) {
+				$applicantName = trim($userDetail['first_name'] . " " . $userDetail['last_name']);
+				foreach ($adminUsers as $admin) {
+					if (!empty($admin['email'])) {
+						$data['sendername'] = !empty($admin['name']) ? $admin['name'] : "Admin";
+						$data['useremail'] = "";
+						$data['message'] = '<p>' . $applicantName . ' has submitted a new ' . $loanSubject . ' request.</p>
+						<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+							<tr>
+								<td><strong>Applicant</strong></td>
+								<td>' . $applicantName . '</td>
+							</tr>
+							<tr>
+								<td><strong>Email</strong></td>
+								<td>' . $userDetail['email'] . '</td>
+							</tr>
+							<tr>
+								<td><strong>Amount</strong></td>
+								<td>&pound;' . $_REQUEST['loan_amount'] . '</td>
+							</tr>
+							<tr>
+								<td><strong>Term</strong></td>
+								<td>' . $_REQUEST['tenure'] . ' Months</td>
+							</tr>
+							<tr>
+								<td><strong>Type</strong></td>
+								<td>' . $loanSubject . '</td>
+							</tr>
+						</table>';
+						$mailMessage = $this->load->view('template/common-mail', $data, true);
+						$this->sendMail($admin['email'], $loanSubject, $mailMessage);
+					}
+				}
+			}
 
 
 			// 			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '". $_REQUEST['user_id'] ."'");
@@ -509,10 +563,10 @@ class Api extends Base_Controller
 			if (!empty($userDetailTo)) {
 				foreach ($userDetailTo as $key => $value) {
 					if (!empty($value['email'])) {
-						$value['sendername'] = "superAdmin";
-						$value['username'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-						$value['useremail'] =  $userDetailFrom['email'];
-						$value['message'] = $value['username'] . ' has requested for Safe keeping';
+						$username = trim($userDetailFrom['first_name'] . " " . $userDetailFrom['last_name']);
+						$value['sendername'] = !empty($value['name']) ? $value['name'] : "Admin";
+						$value['useremail'] = $userDetailFrom['email'];
+						$value['message'] = $username . ' has requested a safekeeping withdrawal.';
 						$message = $this->load->view('template/common-mail', $value, true);
 						$mail = $this->sendMail($value['email'], 'Safekeeping Withdrawal', $message);
 					}
@@ -1911,7 +1965,7 @@ class Api extends Base_Controller
 			$payout_amount_total = $result['total_amount'];
 
 
-			return $avgAmount =  $payout_amount_total -  $paidAvgAmount;
+			return $avgAmount =  $paidAvgAmount - $payout_amount_total;
 		}
 	}
 
@@ -2485,6 +2539,13 @@ class Api extends Base_Controller
 	// created by @krishn on 24-04-25
 	public function avgAmountEmergencyLoan()
 	{
+		if (empty($_REQUEST['user_id']) || empty($_REQUEST['group_id'])) {
+			return $this->response(false, 'Missing Parameter.', [
+				'avgAmountEmergencyLoan' => '0',
+				'lastSixTransactions' => []
+			]);
+		}
+
 		$userId = $_REQUEST['user_id'];
 		$groupId = $_REQUEST['group_id'];
 
@@ -2495,7 +2556,7 @@ class Api extends Base_Controller
 			'status' => '4'
 		], [
 			'field' => 'SUM(loan_amount) as total_payment',
-			'single' => true
+			'single'
 		]);
 
 		$avgAmountEmergencyLoan = (float) ($emergencyLoanSummary['total_payment'] ?? 0);
@@ -2509,7 +2570,7 @@ class Api extends Base_Controller
 		]);
 
 		// Optional: reverse to chronological order
-		$lastSixTransactions = array_reverse($lastSixDesc);
+		$lastSixTransactions = !empty($lastSixDesc) ? array_reverse($lastSixDesc) : [];
 
 		// Return response
 		$this->response(true, 'Amount fetched successfully', [
@@ -3379,6 +3440,10 @@ class Api extends Base_Controller
 		$messageContent = $this->load->view('template/common-mail', $data, true);
 		$this->sendMail($approver['email'], $subject, $messageContent);
 
+		if ($role === 'second_recommender') {
+			$this->sendRecommendedMemberNotification($recommendedUser, $recommenderName, $secondRecommenderName);
+		}
+
 		// Notify super admins
 		$admins = $this->common->getData('superAdmin', ['admin_type' => '2'], []);
 		foreach ($admins as $admin) {
@@ -3398,6 +3463,35 @@ class Api extends Base_Controller
 			$adminMessage = $this->load->view('template/common-mail', $adminData, true);
 			$this->sendMail($admin['email'], $adminSubject, $adminMessage);
 		}
+	}
+
+	private function sendRecommendedMemberNotification($recommendedUser, $recommenderName, $secondRecommenderName)
+	{
+		if (empty($recommendedUser['email'])) {
+			return;
+		}
+
+		$recommendedName = trim(($recommendedUser['first_name'] ?? '') . ' ' . ($recommendedUser['last_name'] ?? ''));
+
+		$data['sendername'] = $recommendedName;
+		$data['useremail'] = $recommendedUser['email'];
+		$data['message'] = "
+			<p>Hey {$recommendedName},</p>
+			<p><strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> have recently recommended you to become a member of the Interfriends Savings Club/Co-operative by joining their Circle.</p>
+			<p>We're letting you know that your recommendation is currently undergoing approval. You may receive a call or an email from us (Interfriends) inviting you to participate in our Welcome Presentation to learn more about Interfriends.</p>
+			<p><strong>Next Steps;</strong></p>
+			<ol>
+				<li>Wait for your approval process to complete</li>
+				<li>Attend our Welcome presentation</li>
+				<li>Complete your application after the presentation and provide relevant identification</li>
+				<li>Wait for approval.</li>
+			</ol>
+			<p>Thank you<br>Interfriends Membership Relations</p>
+			<p>In the meantime, you can learn more about Interfriends by visiting <a href='https://www.interfriends.uk'>www.interfriends.uk</a></p>
+		";
+
+		$messageContent = $this->load->view('template/common-mail', $data, true);
+		$this->sendMail($recommendedUser['email'], 'You Have Been Recommended to Join Interfriends', $messageContent);
 	}
 
 	// created by @krishn on 01-May-25
@@ -3635,7 +3729,108 @@ class Api extends Base_Controller
 		}
 	}
 
+	// API created by @krishn on 10/06/26
+	public function getMyRecommendedUsers($id)
+	{
+		$myId = $id;
+		$recommendData = $this->common->getData('recommend_user', array('user_id' => $myId), array('all'));
+
+		if ($recommendData) {
+			$this->response(true, "Data fetch Successfully.", array("users" => $recommendData));
+		} else {
+			$this->response(false, "Data not found.");
+		}
+	}
+
 	// created by @krishn on 27/05/25
+	// public function getAllCircleUsers()
+	// {
+	// 	$userId = $_REQUEST['user_id'] ?? null;
+
+	// 	if (!$userId) {
+	// 		$this->response(false, "User ID is required.");
+	// 		return;
+	// 	}
+
+	// 	// Get existing user
+	// 	$existingUser = $this->common->getData('user', ['user_id' => $userId], ['single']);
+	// 	if (empty($existingUser)) {
+	// 		$this->response(false, "User not found");
+	// 		return;
+	// 	}
+
+	// 	// Get user's circle info
+	// 	$existingUserDetails = $this->common->getData('user_circle', ['user_id' => $userId], ['single']);
+	// 	if (empty($existingUserDetails)) {
+	// 		$this->response(false, "User circle details not found");
+	// 		return;
+	// 	}
+
+	// 	$groupId = $existingUserDetails['group_id'];
+	// 	$circleId = $existingUserDetails['circle_id'];
+
+	// 	// Pagination
+	// 	$start = !empty($_REQUEST['start']) ? (int)$_REQUEST['start'] : 0;
+	// 	$limit = 10;
+
+	// 	// Get all users in the same circle except the current user
+	// 	$circleUsers = $this->common->getData('user_circle', [
+	// 		'group_id' => $groupId,
+	// 		'circle_id' => $circleId,
+	// 	]);
+
+	// 	if (empty($circleUsers)) {
+	// 		$this->response(false, "No users found in the circle");
+	// 		return;
+	// 	}
+
+	// 	$userIds = [];
+	// 	foreach ($circleUsers as $cu) {
+	// 		if ($cu['user_id'] != $userId) {
+	// 			$userIds[] = (int) $cu['user_id'];
+	// 		}
+	// 	}
+
+	// 	if (empty($userIds)) {
+	// 		$this->response(false, "No other users found in the circle");
+	// 		return;
+	// 	}
+
+	// 	// Build WHERE clause for the user table
+	// 	$userIdStr = implode(',', $userIds);
+	// 	$where = "user_id IN ($userIdStr) AND status != 2 AND recommended = 0";
+
+	// 	if (!empty($_REQUEST['search_keyword'])) {
+	// 		$keyword = $this->db->escape_like_str($_REQUEST['search_keyword']);
+	// 		$where .= " AND (first_name LIKE '%$keyword%' OR last_name LIKE '%$keyword%' OR email LIKE '%$keyword%')";
+	// 	}
+
+	// 	// Fetch users with pagination
+	// 	$circleUserData = $this->common->getData('user', $where, [], $limit, $start);
+	// 	$totalCount = $this->common->getData('user', $where, ['count']);
+
+	// 	$circleInfo = $this->common->getData('group_circle', ['id' => $circleId], ['single']);
+
+	// 	$sno = $start + 1;
+	// 	foreach ($circleUserData as $key => $value) {
+	// 		$circleUserData[$key]['sno'] = $sno++;
+
+	// 		if (!empty($value['profile_image'])) {
+	// 			$circleUserData[$key]['profile_image'] = base_url($value['profile_image']);
+	// 			$circleUserData[$key]['profile_image_thumb'] = base_url($value['profile_image_thumb']);
+	// 		} else {
+	// 			$circleUserData[$key]['profile_image'] = "assets/img/default-user-icon.jpg";
+	// 			$circleUserData[$key]['profile_image_thumb'] = "assets/img/default-user-icon.jpg";
+	// 		}
+	// 	}
+
+	// 	$this->response(true, "Circle users fetched successfully", [
+	// 		"circleName" => $circleInfo['circle_name'] ?? '',
+	// 		"users" => $circleUserData,
+	// 		"totalCount" => $totalCount
+	// 	]);
+	// }
+
 	public function getAllCircleUsers()
 	{
 		$userId = $_REQUEST['user_id'] ?? null;
@@ -3666,7 +3861,7 @@ class Api extends Base_Controller
 		$start = !empty($_REQUEST['start']) ? (int)$_REQUEST['start'] : 0;
 		$limit = 10;
 
-		// Get all users in the same circle except the current user
+		// Get all users in the same circle
 		$circleUsers = $this->common->getData('user_circle', [
 			'group_id' => $groupId,
 			'circle_id' => $circleId,
@@ -3678,14 +3873,24 @@ class Api extends Base_Controller
 		}
 
 		$userIds = [];
+		$roles = [];
+
 		foreach ($circleUsers as $cu) {
-			if ($cu['user_id'] != $userId) {
-				$userIds[] = (int) $cu['user_id'];
+			$userIds[] = (int)$cu['user_id'];
+
+			if ($cu['circle_lead'] == 1 && $cu['deputycirclelead'] == 1) {
+				$roles[$cu['user_id']] = 'Circle Lead & Deputy Circle Lead';
+			} elseif ($cu['circle_lead'] == 1) {
+				$roles[$cu['user_id']] = 'Circle Lead';
+			} elseif ($cu['deputycirclelead'] == 1) {
+				$roles[$cu['user_id']] = 'Deputy Circle Lead';
+			} else {
+				$roles[$cu['user_id']] = 'Member';
 			}
 		}
 
 		if (empty($userIds)) {
-			$this->response(false, "No other users found in the circle");
+			$this->response(false, "No users found in the circle");
 			return;
 		}
 
@@ -3695,7 +3900,11 @@ class Api extends Base_Controller
 
 		if (!empty($_REQUEST['search_keyword'])) {
 			$keyword = $this->db->escape_like_str($_REQUEST['search_keyword']);
-			$where .= " AND (first_name LIKE '%$keyword%' OR last_name LIKE '%$keyword%' OR email LIKE '%$keyword%')";
+			$where .= " AND (
+			first_name LIKE '%$keyword%' 
+			OR last_name LIKE '%$keyword%' 
+			OR email LIKE '%$keyword%'
+		)";
 		}
 
 		// Fetch users with pagination
@@ -3706,7 +3915,11 @@ class Api extends Base_Controller
 
 		$sno = $start + 1;
 		foreach ($circleUserData as $key => $value) {
+
 			$circleUserData[$key]['sno'] = $sno++;
+
+			// Add role
+			$circleUserData[$key]['role'] = $roles[$value['user_id']] ?? 'Member';
 
 			if (!empty($value['profile_image'])) {
 				$circleUserData[$key]['profile_image'] = base_url($value['profile_image']);

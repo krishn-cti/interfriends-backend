@@ -1,6 +1,8 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 date_default_timezone_set("Asia/Kolkata");
+
+#[\AllowDynamicProperties]
 class Paidapi extends Base_Controller {
 	
 	public function __construct()

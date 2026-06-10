@@ -76,9 +76,22 @@ $query_builder = TRUE;
 $db['default'] = array(
 	'dsn'	=> '',
 	'hostname' => 'localhost',
+
+	// local server database configuration
 	'username' => 'root',
 	'password' => '',
 	'database' => 'interfriends',
+
+	// CTI server database configuration
+	// 'username' => 'creatavv_interfriends',
+	// 'password' => 'f?8fDm05',
+	// 'database' => 'creatavv_interfriends',
+
+	// UK server database configuration
+	// 'username' => 'u447323009_root',
+	// 'password' => 'L1j5033*4a@',
+	// 'database' => 'u447323009_interfriends',
+
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
 	'pconnect' => FALSE,

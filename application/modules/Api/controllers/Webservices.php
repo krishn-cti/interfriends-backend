@@ -1,6 +1,8 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 date_default_timezone_set("Asia/Kolkata");
+
+#[\AllowDynamicProperties]
 class Webservices extends Base_Controller {
 	
 	public function __construct()
@@ -117,9 +119,9 @@ class Webservices extends Base_Controller {
 		if($user){
 			$data = $this->common->updateData('user',array('act_token'=>""),array('act_token'=>$_GET['token']));
 			
-			redirect(ANG_URL.'?status=success');
+			redirect(USER_BASE_URL.'?status=success');
 		}else{ 			
-			redirect(ANG_URL.'?status=info');		
+			redirect(USER_BASE_URL.'?status=info');		
 		}
 	}
 
@@ -337,36 +339,91 @@ class Webservices extends Base_Controller {
 	}
 
 
-	function sendMail($email, $subject, $message) {
-		require_once(APPPATH .'third_party/phpmailer/class.phpmailer.php');
-		require_once(APPPATH .'third_party/phpmailer/class.smtp.php');
+	// function sendMail($email, $subject, $message) {
+	// 	require_once(APPPATH .'third_party/phpmailer/class.phpmailer.php');
+	// 	require_once(APPPATH .'third_party/phpmailer/class.smtp.php');
 						
-		$mail = new PHPMailer();
+	// 	$mail = new PHPMailer();
 	
-		$mail->IsSMTP();
-		$mail->CharSet = 'UTF-8';
-		$mail->Host = "smtp.gmail.com";
+	// 	$mail->IsSMTP();
+	// 	$mail->CharSet = 'UTF-8';
+	// 	$mail->Host = "smtp.gmail.com";
 
-		$mail->SMTPAuth= true;
-		$mail->Port = 587; // Or 587
-		$mail->Username= 'akashbaidya442@gmail.com';
-		$mail->Password= 'gvosukywgcnxxizc';
-		$mail->SMTPSecure = "tls";
-		//$mail->SMTPDebug  = 1;
-		$mail->setFrom("akashbaidya442@gmail.com", 'IRate Pro App');
-		$mail->Body = $message;
+	// 	$mail->SMTPAuth= true;
+	// 	$mail->Port = 587; // Or 587
+	// 	$mail->Username= 'akashbaidya442@gmail.com';
+	// 	$mail->Password= 'gvosukywgcnxxizc';
+	// 	$mail->SMTPSecure = "tls";
+	// 	//$mail->SMTPDebug  = 1;
+	// 	$mail->setFrom("akashbaidya442@gmail.com", 'IRate Pro App');
+	// 	$mail->Body = $message;
 
-		$mail->isHTML(true);
-		$mail->Subject = $subject;
+	// 	$mail->isHTML(true);
+	// 	$mail->Subject = $subject;
 
-	    $mail->addAddress($email);
-	    $send =  $mail->send();
+	//     $mail->addAddress($email);
+	//     $send =  $mail->send();
 
 
-		if ($send != '1') {
+	// 	if ($send != '1') {
+	// 		return false;
+	// 	} else {
+	// 		return true;
+	// 	}
+	// }
+
+	function sendMail($email, $subject, $message)
+	{
+		require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
+		require_once(APPPATH . 'third_party/phpmailer/class.smtp.php');
+
+		try {
+			$mail = new PHPMailer();
+
+			$mail->IsSMTP();
+			$mail->CharSet = 'UTF-8';
+			$mail->Host = "smtp.hostinger.com";
+			$mail->SMTPAuth = true;
+			$mail->Port = 465;
+			$mail->Username = 'admin@interfriends.uk';
+			$mail->Password = 'Mbx9jm!2';
+			$mail->SMTPSecure = "ssl";
+
+			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
+			$mail->isHTML(true);
+			$mail->Subject = $subject;
+			$mail->Body = $message;
+
+			$mail->addAddress($email);
+
+			$send = $mail->send();
+
+			if ($send) {
+				$imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
+				$imapUser = 'admin@interfriends.uk';
+				$imapPass = 'Mbx9jm!2';
+
+				$imapStream = imap_open($imapServer, $imapUser, $imapPass);
+				if ($imapStream) {
+					$mime  = "Date: " . date('r') . "\r\n";
+					$mime .= "From: Interfriends <admin@interfriends.uk>\r\n";
+					$mime .= "To: <$email>\r\n";
+					$mime .= "Subject: $subject\r\n";
+					$mime .= "Message-ID: <" . md5(uniqid(time())) . "@interfriends.uk>\r\n";
+					$mime .= "MIME-Version: 1.0\r\n";
+					$mime .= "Content-Type: text/html; charset=UTF-8\r\n";
+					$mime .= "\r\n";
+					$mime .= $message;
+
+					imap_append($imapStream, $imapServer, $mime, "\\Seen");
+					imap_close($imapStream);
+				}
+				return true;
+			} else {
+				return false;
+			}
+		} catch (Exception $e) {
 			return false;
-		} else {
-			return true;
 		}
 	}
 
