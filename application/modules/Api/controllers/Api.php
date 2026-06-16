@@ -749,9 +749,33 @@ class Api extends Base_Controller
 
 
 	// API created by @krishn on 21/04/25
+	// public function saveInterestedUser()
+	// {
+	// 	$email = $this->common->getData('interested_user', array('email' => $_REQUEST['email']), array('single'));
+	// 	if (!empty($email)) {
+	// 		$this->response(false, "Email already exists");
+	// 		die();
+	// 	}
+
+	// 	$data = $this->common->getField('interested_user', $_REQUEST);
+
+	// 	$inserted = $this->common->insertData('interested_user', $data);
+
+	// 	if ($inserted) {
+	// 		echo json_encode(['status' => true, 'message' => 'Data submitted successfully.']);
+	// 	} else {
+	// 		echo json_encode(['status' => false, 'message' => 'Something went wrong.']);
+	// 	}
+	// }
+
 	public function saveInterestedUser()
 	{
-		$email = $this->common->getData('interested_user', array('email' => $_REQUEST['email']), array('single'));
+		$email = $this->common->getData(
+			'interested_user',
+			array('email' => $_REQUEST['email']),
+			array('single')
+		);
+
 		if (!empty($email)) {
 			$this->response(false, "Email already exists");
 			die();
@@ -762,9 +786,56 @@ class Api extends Base_Controller
 		$inserted = $this->common->insertData('interested_user', $data);
 
 		if ($inserted) {
-			echo json_encode(['status' => true, 'message' => 'Data submitted successfully.']);
+
+			$insert_id = $this->db->insert_id();
+			// ==========================
+			// Send Email to Admin
+			// ==========================
+
+			$adminEmail = "krishn.ctinfotech@gmail.com"; // Replace with actual admin email if needed
+
+			$subject = "New User Interested in Joining Interfriends";
+
+			$messaged1 = "
+			Hello Admin,<br><br>
+
+			A new user has expressed interest in joining Interfriends.<br><br>
+
+			<b>Name:</b> " . ($_REQUEST['first_name'] ?? '') . " " . ($_REQUEST['last_name'] ?? '') . "<br>
+			<b>Email:</b> " . ($_REQUEST['email'] ?? '') . "<br>
+			<b>Phone:</b> " . ($_REQUEST['phone_number'] ?? '') . "<br><br>
+
+			Please review the details and take the necessary action.<br><br>
+
+			Thank you.
+		";
+
+			$this->sendMail($adminEmail, $subject, $messaged1);
+
+			// ==========================
+			// Send Admin Notification
+			// ==========================
+
+			$notificationMessage = "A new user (" . ($_REQUEST['email'] ?? '') . ") is interested in joining Interfriends.";
+
+			$this->send_nofificationAdmin(
+				0, // No user_id available for interested users
+				0, // No group_id available
+				$notificationMessage,
+				$insert_id, // inserted record id
+				"10" // notification type for interested user
+			);
+
+			echo json_encode([
+				'status'  => true,
+				'message' => 'Data submitted successfully.'
+			]);
 		} else {
-			echo json_encode(['status' => false, 'message' => 'Something went wrong.']);
+
+			echo json_encode([
+				'status'  => false,
+				'message' => 'Something went wrong.'
+			]);
 		}
 	}
 
@@ -3476,7 +3547,6 @@ class Api extends Base_Controller
 		$data['sendername'] = $recommendedName;
 		$data['useremail'] = $recommendedUser['email'];
 		$data['message'] = "
-			<p>Hey {$recommendedName},</p>
 			<p><strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> have recently recommended you to become a member of the Interfriends Savings Club/Co-operative by joining their Circle.</p>
 			<p>We're letting you know that your recommendation is currently undergoing approval. You may receive a call or an email from us (Interfriends) inviting you to participate in our Welcome Presentation to learn more about Interfriends.</p>
 			<p><strong>Next Steps;</strong></p>

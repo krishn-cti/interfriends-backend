@@ -4999,8 +4999,19 @@ class Admin extends Base_Controller
 			$end = $_REQUEST['start'];
 		}
 		// limit code end
-		$result = $this->user_model->recommendUser_detail(array(), array(), $start, $end);
-		$recommendUserCount = $this->user_model->recommendUser_detail(array(), array('count'));
+
+		$where = "";
+
+		if (!empty($_REQUEST['search_keyword'])) {
+			$keyword = $this->db->escape_like_str(trim($_REQUEST['search_keyword']));
+
+			$where = "(RU.first_name LIKE '%" . $keyword . "%'
+                OR RU.last_name LIKE '%" . $keyword . "%'
+                OR RU.email LIKE '%" . $keyword . "%')";
+		}
+
+		$result = $this->user_model->recommendUser_detail($where, array(), $start, $end);
+		$recommendUserCount = $this->user_model->recommendUser_detail($where, array('count'));
 
 		$countData = $end;
 		$countData++;
@@ -5011,16 +5022,30 @@ class Admin extends Base_Controller
 				$checkemail = "email = '" . $result[$key]['email'] . "'";
 				$mailcheck = $this->common->getData('user', $checkemail, array("single"));
 				if ($mailcheck) {
-					$result[$key]['recommended_user_id']  = $mailcheck['user_id'];
+					$result[$key]['recommended_user_id'] = $mailcheck['user_id'];
 				} else {
-					$result[$key]['recommended_user_id']  = "0";
+					$result[$key]['recommended_user_id'] = "0";
 				}
 				$result[$key]['sno'] = $countData++;
 			}
 
-			$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $recommendUserCount));
+			$this->response(
+				true,
+				"Data fetch Successfully.",
+				array(
+					"lists" => $result,
+					"listCount" => $recommendUserCount
+				)
+			);
 		} else {
-			$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $recommendUserCount));
+			$this->response(
+				true,
+				"Data fetch Successfully.",
+				array(
+					"lists" => array(),
+					"listCount" => $recommendUserCount
+				)
+			);
 		}
 	}
 
@@ -6982,11 +7007,14 @@ class Admin extends Base_Controller
 
 			$totalCreditpfAmount = $this->common->getData('pf_user', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'payment_type' => '2'), array("field" => 'sum(pf_amount) as pf_total_amount, sum(pf_interest_amount) as pf_interest', "single"));
 
-
-
 			$totalDebitpfAmount = $this->common->getData('pf_user', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'payment_type' => '1'), array("field" => 'sum(pf_amount) as pf_total_amount, sum(pf_interest_amount) as pf_interest', "single"));
 
-			$pfAmount = $totalCreditpfAmount['pf_total_amount'] - $totalDebitpfAmount['pf_total_amount'];
+			$creditPfAmount = (float)($totalCreditpfAmount['pf_total_amount'] ?? 0);
+			$creditPfInterest = (float)($totalCreditpfAmount['pf_interest'] ?? 0);
+			$debitPfAmount = (float)($totalDebitpfAmount['pf_total_amount'] ?? 0);
+			$debitPfInterest = (float)($totalDebitpfAmount['pf_interest'] ?? 0);
+
+			$pfAmount = ($creditPfAmount + $creditPfInterest) - ($debitPfAmount + $debitPfInterest);
 
 			$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount, 'pfAmount' => $pfAmount));
 		} else {
@@ -10506,17 +10534,17 @@ class Admin extends Base_Controller
 				$field = "U.user_id, U.first_name, U.last_name, U.email, UGL.amount, UGL.created_at";
 				break;
 
-			// case 'saving':
-			// 	$table = 'user_group UG, user U, group_lifecycle GL, user_group_lifecycle UGL';
-			// 	$fullWhere = "UG.user_id = U.user_id AND UG.group_id = GL.group_id AND GL.id =UGL.groupLifecycle_id AND UGL.user_id = U.user_id AND UGL.group_id != 0 AND U.status != '2' AND UGL.status = 2 $searchCond";
-			// 	$field = "U.user_id, U.first_name, U.last_name, U.email, UGL.amount, UGL.created_at";
-			// 	break;
-
 			case 'saving':
-				$table = 'user_group UG, user U';
-				$fullWhere = "UG.user_id = U.user_id AND U.status != '2' and UG.group_id != 34 $searchCond";
-				$field = "U.user_id, U.first_name, U.last_name, U.email, UG.amount, UG.created_at";
+				$table = 'user_group UG, user U, group_lifecycle GL, user_group_lifecycle UGL';
+				$fullWhere = "UG.user_id = U.user_id AND UG.group_id = GL.group_id AND GL.id =UGL.groupLifecycle_id AND UGL.user_id = U.user_id AND UGL.group_id != 0 AND U.status != '2' AND UGL.status = 2 $searchCond";
+				$field = "U.user_id, U.first_name, U.last_name, U.email, UGL.amount, UGL.created_at";
 				break;
+
+			// case 'saving':
+			// 	$table = 'user_group UG, user U';
+			// 	$fullWhere = "UG.user_id = U.user_id AND U.status != '2' and UG.group_id != 34 $searchCond";
+			// 	$field = "U.user_id, U.first_name, U.last_name, U.email, UG.amount, UG.created_at";
+			// 	break;
 
 			case 'safekeeping_add':
 				$table = 'safe_keeping SK, user U';
@@ -10637,11 +10665,26 @@ class Admin extends Base_Controller
 
 				$mergedData = array_filter($mergedData, function ($item) use ($fromDate, $toDate) {
 
-					if (empty($item['created_at'])) {
-						return false;
+					$itemDate = '';
+
+					// Saving records use 'date' column
+					if (
+						isset($item['type']) &&
+						strtolower($item['type']) == 'saving' &&
+						!empty($item['date'])
+					) {
+
+						$itemDate = date('Y-m-d', strtotime($item['date']));
+					}
+					// Loan and Miscellaneous use created_at
+					elseif (!empty($item['created_at'])) {
+
+						$itemDate = date('Y-m-d', strtotime($item['created_at']));
 					}
 
-					$itemDate = date('Y-m-d', strtotime($item['created_at']));
+					if (empty($itemDate)) {
+						return false;
+					}
 
 					return (
 						$itemDate >= $fromDate &&
@@ -10842,12 +10885,464 @@ class Admin extends Base_Controller
 	// API created by @krishn on 10/06/26
 	public function getUserNotes($user_id)
 	{
-		$notes = $this->common->getData('user_cycle_status_history', ['user_id' => $user_id], ['all']);
-
-		if ($notes) {
-			$this->response(true, "Notes fetched successfully.", ['notes' => $notes]);
+		// Pagination
+		if (empty($_REQUEST['start'])) {
+			$limit = 10;
+			$offset = 0;
 		} else {
-			$this->response(false, "No notes found for this user.");
+			$limit = 10;
+			$offset = (int)$_REQUEST['start'];
 		}
+
+		// Fetch notes from all tables
+		$cycleNotes = $this->common->getData(
+			'user_cycle_status_history',
+			['user_id' => $user_id],
+			['all']
+		);
+
+		$emergencyLoanNotes = $this->common->getData(
+			'user_emergency_loan_status_history',
+			['user_id' => $user_id],
+			['all']
+		);
+
+		$loanNotes = $this->common->getData(
+			'user_loan_status_history',
+			['user_id' => $user_id],
+			['all']
+		);
+
+		$miscellaneousNotes = $this->common->getData(
+			'user_miscellaneous_status_history', // change if actual table name differs
+			['user_id' => $user_id],
+			['all']
+		);
+
+		// Prevent 500 errors
+		$cycleNotes = is_array($cycleNotes) ? $cycleNotes : [];
+		$emergencyLoanNotes = is_array($emergencyLoanNotes) ? $emergencyLoanNotes : [];
+		$loanNotes = is_array($loanNotes) ? $loanNotes : [];
+		$miscellaneousNotes = is_array($miscellaneousNotes) ? $miscellaneousNotes : [];
+
+		// Add type
+		foreach ($cycleNotes as &$note) {
+			$note['type'] = 'cycle';
+		}
+
+		foreach ($emergencyLoanNotes as &$note) {
+			$note['type'] = 'emergency_loan';
+		}
+
+		foreach ($loanNotes as &$note) {
+			$note['type'] = 'loan';
+		}
+
+		foreach ($miscellaneousNotes as &$note) {
+			$note['type'] = 'miscellaneous';
+		}
+
+		unset($note);
+
+		// Merge all notes
+		$notes = array_merge(
+			$cycleNotes,
+			$emergencyLoanNotes,
+			$loanNotes,
+			$miscellaneousNotes
+		);
+
+		// If no records found
+		if (empty($notes)) {
+			$this->response(
+				false,
+				"No notes found for this user.",
+				[
+					'notes' => [],
+					'totalCount' => 0
+				]
+			);
+			return;
+		}
+
+		// Type Filter
+		if (!empty($_REQUEST['type'])) {
+
+			$type = strtolower(trim($_REQUEST['type']));
+
+			$allowedTypes = [
+				'cycle',
+				'emergency_loan',
+				'loan',
+				'miscellaneous'
+			];
+
+			if (in_array($type, $allowedTypes)) {
+
+				$notes = array_filter($notes, function ($item) use ($type) {
+
+					return isset($item['type']) &&
+						strtolower($item['type']) === $type;
+				});
+			}
+		}
+
+		// Search Filter
+		if (!empty($_REQUEST['search_keyword'])) {
+
+			$keyword = strtolower(trim($_REQUEST['search_keyword']));
+
+			$notes = array_filter($notes, function ($item) use ($keyword) {
+
+				return (
+					(isset($item['note_title']) &&
+						strpos(strtolower($item['note_title']), $keyword) !== false)
+
+					||
+
+					(isset($item['note_description']) &&
+						strpos(strtolower($item['note_description']), $keyword) !== false)
+				);
+			});
+		}
+
+		// Date Range Filter
+		if (!empty($_REQUEST['date_range'])) {
+
+			$dateRange = explode(',', $_REQUEST['date_range']);
+
+			if (count($dateRange) == 2) {
+
+				$fromDate = trim($dateRange[0]);
+				$toDate   = trim($dateRange[1]);
+
+				if (strtotime($fromDate) > strtotime($toDate)) {
+
+					$temp = $fromDate;
+					$fromDate = $toDate;
+					$toDate = $temp;
+				}
+
+				$notes = array_filter($notes, function ($item) use ($fromDate, $toDate) {
+
+					if (empty($item['created_at'])) {
+						return false;
+					}
+
+					$itemDate = date('Y-m-d', strtotime($item['created_at']));
+
+					return (
+						$itemDate >= $fromDate &&
+						$itemDate <= $toDate
+					);
+				});
+			}
+		}
+
+		// Reset indexes
+		$notes = array_values($notes);
+
+		// Sort latest first
+		usort($notes, function ($a, $b) {
+
+			return strtotime($b['created_at']) - strtotime($a['created_at']);
+		});
+
+		$totalCount = count($notes);
+
+		// If filters removed all records
+		if ($totalCount == 0) {
+
+			$this->response(
+				false,
+				"No notes found.",
+				[
+					'notes' => [],
+					'totalCount' => 0
+				]
+			);
+			return;
+		}
+
+		// Pagination
+		$notes = array_slice($notes, $offset, $limit);
+
+		// SNO
+		$sno = $offset + 1;
+
+		foreach ($notes as &$note) {
+
+			$note['sno'] = $sno++;
+		}
+
+		unset($note);
+
+		$this->response(
+			true,
+			"Notes fetched successfully.",
+			[
+				'notes' => $notes,
+				'totalCount' => $totalCount
+			]
+		);
+	}
+
+	// API created by @krishn on 16/06/26
+	public function updateInvestmentRequestStatus()
+	{
+		if (empty($_REQUEST['request_id'])) {
+			$this->response(false, "Request ID is required.");
+			return;
+		}
+
+		if (!isset($_REQUEST['status'])) {
+			$this->response(false, "Status is required.");
+			return;
+		}
+
+		$requestId = $_REQUEST['request_id'];
+		$status = (int)$_REQUEST['status'];
+
+		// Only Approve or Reject
+		if (!in_array($status, [1, 2])) {
+			$this->response(false, "Invalid status.");
+			return;
+		}
+
+		// Check request exists
+		$request = $this->common->getData(
+			'investment_request',
+			['id' => $requestId],
+			['single']
+		);
+
+		if (empty($request)) {
+			$this->response(false, "Investment request not found.");
+			return;
+		}
+
+		// Update request status
+		$updateData = array(
+			'status' => $status
+		);
+
+		$result = $this->common->updateData(
+			'investment_request',
+			$updateData,
+			['id' => $requestId]
+		);
+
+		if ($result) {
+
+			// If Approved, insert into investment table
+			if ($status == 1) {
+
+				$investmentData = array(
+					'user_id'          => $request['user_id'],
+					'group_id'         => $request['group_id'],
+					'property_id'      => $request['property_id'],
+					'amount'           => $request['amount'],
+
+					'investment_type' => 1, // Property
+					'payment_status'  => 2, // Invest
+					'status'          => 1, // Unblock
+					'payment_method'  => 1, // Normal
+
+					'description'      => $_REQUEST['description'] ?? 'Approved by Admin',
+					'note_title'       => $_REQUEST['note_title'] ?? '',
+					'note_description' => $_REQUEST['note_description'] ?? '',
+
+					'created_at'       => date('Y-m-d H:i:s')
+				);
+
+				$this->common->insertData('investment', $investmentData);
+			}
+
+			// Notification message
+			$message = ($status == 1)
+				? "Your investment request has been approved."
+				: "Your investment request has been rejected.";
+
+			// Send notification to user
+			$this->send_nofification(
+				$request['user_id'],
+				$_REQUEST['admin_id'],
+				$request['group_id'],
+				$message,
+				$requestId,
+				"11"
+			);
+
+			$this->response(
+				true,
+				($status == 1)
+					? "Investment request approved successfully."
+					: "Investment request rejected successfully."
+			);
+		} else {
+
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 16/06/26
+	public function sendRecommendUserApprovalReminder()
+	{
+		if (empty($_REQUEST['approval_id'])) {
+			$this->response(false, "Approval ID is required.");
+			return;
+		}
+
+		if (empty($_REQUEST['admin_id'])) {
+			$this->response(false, "Admin ID is required.");
+			return;
+		}
+
+		$approval = $this->common->getData('recommendation_approvals', array('id' => $_REQUEST['approval_id']), array('single'));
+		if (empty($approval)) {
+			$this->response(false, "Approval step not found.");
+			return;
+		}
+
+		if ($approval['status'] != '0') {
+			$this->response(false, "Reminder can be sent only for pending approval.");
+			return;
+		}
+
+		$recommendUser = $this->common->getData('recommend_user', array('id' => $approval['recommend_id']), array('single'));
+		if (empty($recommendUser)) {
+			$this->response(false, "Recommended user not found.");
+			return;
+		}
+
+		$admin = $this->common->getData('superAdmin', array('id' => $_REQUEST['admin_id']), array('single'));
+		if (empty($admin)) {
+			$this->response(false, "Admin not found.");
+			return;
+		}
+
+		if ($approval['approver_role'] == 'admin') {
+			$approver = $this->common->getData('superAdmin', array('id' => $approval['approver_id']), array('single'));
+			$approverName = !empty($approver) ? $approver['name'] : "";
+		} else {
+			$approver = $this->common->getData('user', array('user_id' => $approval['approver_id']), array('single'));
+			$approverName = !empty($approver) ? trim($approver['first_name'] . ' ' . $approver['last_name']) : "";
+		}
+
+		if (empty($approver) || empty($approver['email'])) {
+			$this->response(false, "Approver email not found.");
+			return;
+		}
+
+		$recommender = $this->common->getData('user', array('user_id' => $recommendUser['user_id']), array('single'));
+		$secondRecommender = $this->common->getData('user', array('user_id' => $recommendUser['refer_user_id']), array('single'));
+
+		$recommendedName = trim($recommendUser['first_name'] . ' ' . $recommendUser['last_name']);
+		$recommenderName = !empty($recommender) ? trim($recommender['first_name'] . ' ' . $recommender['last_name']) : "";
+		$secondRecommenderName = !empty($secondRecommender) ? trim($secondRecommender['first_name'] . ' ' . $secondRecommender['last_name']) : "";
+
+		switch ($recommendUser['employement_type']) {
+			case 1:
+				$employmentStatus = "Full Time";
+				break;
+			case 2:
+				$employmentStatus = "Part Time";
+				break;
+			case 3:
+				$employmentStatus = "Self Employed";
+				break;
+			case 4:
+				$employmentStatus = "Others";
+				break;
+			default:
+				$employmentStatus = "Not Specified";
+				break;
+		}
+
+		$token = urlencode($approval['token']);
+		$linkApprove = API_BASE_URL . "handleApproval/{$token}/1";
+		$linkDecline = API_BASE_URL . "handleDecline/{$token}/2";
+		$reminderSentAt = date('d M Y h:i A');
+
+		$memberDetails = "
+			<ol>
+				<li><strong>Name of proposed member:</strong> {$recommendUser['first_name']}</li>
+				<li><strong>Telephone number:</strong> {$recommendUser['mobile_number']}</li>
+				<li><strong>Email:</strong> {$recommendUser['email']}</li>
+				<li><strong>Employment status:</strong> {$employmentStatus}</li>
+			</ol>
+		";
+
+		if ($approval['approver_role'] == 'second_recommender') {
+			$message = "
+				<p>This is a reminder that <strong>{$recommenderName}</strong> recommends <strong>{$recommendedName}</strong>. Please find below the pertinent details of the recommended member:</p>
+				{$memberDetails}
+				<p>Please review this recommendation and choose an action below.</p>
+			";
+		} elseif ($approval['approver_role'] == 'circle_lead' || $approval['approver_role'] == 'deputy_circle_lead') {
+			$message = "
+				<p>This is a reminder that <strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> are recommending <strong>{$recommendedName}</strong> to join Interfriends.</p>
+				<p>Please find below the pertinent details of the recommended member:</p>
+				{$memberDetails}
+				<p>Please review this recommendation and choose an action below.</p>
+			";
+		} else {
+			$message = "
+				<p>This is a reminder that <strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> have recommended <strong>{$recommendedName}</strong> for consideration.</p>
+				<p>Below is a summary of their details:</p>
+				{$memberDetails}
+				<p>Please review this recommendation and choose an action below.</p>
+			";
+		}
+
+		$message .= "
+			<p>
+				<a style='background-color:#1bbe83; text-decoration:none; color:#fff;padding:10px 20px;border-radius:10px' href='{$linkApprove}'>Approve</a>
+				<a style='background-color:#ff0000; text-decoration:none; color:#fff;padding:10px 20px;border-radius:10px' href='{$linkDecline}'>Decline</a>
+			</p>
+			<p><small>Reminder sent on {$reminderSentAt}</small></p>
+		";
+
+		$data['sendername'] = $approverName;
+		$data['useremail'] = $approver['email'];
+		$data['message'] = $message;
+
+		$subject = "Reminder: Approval Request for Recommendation #{$approval['recommend_id']}";
+		$mailMessage = $this->load->view('template/common-mail', $data, true);
+		$mail = $this->sendMail($approver['email'], $subject, $mailMessage);
+
+		if (!$mail) {
+			$this->response(false, "Unable to send reminder email. Please try again.");
+			return;
+		}
+
+		$group_id = 0;
+		if (!empty($recommendUser['refer_user_id'])) {
+			$userCircle = $this->common->getData('user_circle', array('user_id' => $recommendUser['refer_user_id']), array('single'));
+			if (!empty($userCircle['group_id'])) {
+				$group_id = $userCircle['group_id'];
+			}
+		}
+
+		$notificationMessage = "Reminder: approval is pending for recommended user {$recommendedName}.";
+
+		if ($approval['approver_role'] == 'admin') {
+			$this->common->query_normal("UPDATE superAdmin SET notification_count = notification_count+1 WHERE `id` = '" . $approval['approver_id'] . "'");
+			$this->common->insertData('notification_admin_tbl', array(
+				"message" => $notificationMessage,
+				"user_id" => $approval['approver_id'],
+				"group_id" => $group_id,
+				"user_send_to" => $approval['approver_id'],
+				"user_send_from" => $_REQUEST['admin_id'],
+				"main_id" => $approval['recommend_id'],
+				"created_at" => date('Y-m-d H:i:s'),
+				"type" => "8",
+				"user_type" => "1"
+			));
+		} else {
+			$this->send_nofification($approval['approver_id'], $_REQUEST['admin_id'], $group_id, $notificationMessage, $approval['recommend_id'], "8");
+		}
+
+		$this->response(true, "Reminder sent successfully.");
 	}
 }
