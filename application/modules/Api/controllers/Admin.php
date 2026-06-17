@@ -1131,73 +1131,171 @@ class Admin extends Base_Controller
 	}
 
 
+	// function updateCreditScore($points, $calculation_type)
+	// {
+	// 	$result = "";
+	// 	$result = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
+
+	// 	$totalScore = 0;
+	// 	$newScore = 0;
+	// 	if (!empty($result)) {
+
+	// 		if ($calculation_type === 'plus') {
+	// 			$totalScore = $result['total_credit_score'] + $points;
+	// 		}
+
+	// 		if ($calculation_type === 'minus') {
+	// 			$totalScore = $result['total_credit_score'] - $points;
+	// 		}
+
+
+	// 		if ($totalScore == 800 || $totalScore > 800) {
+	// 			$newScore = $totalScore + 5;
+	// 		} else if ($totalScore > 900) {
+
+	// 			$newScore = 900 + 5;
+	// 		} else if ($totalScore < 0) {
+
+	// 			$newScore = 0;
+	// 		} else {
+
+	// 			$newScore = $totalScore;
+	// 		}
+
+
+	// 		$result1 = $this->common->getData('credit_score_list', array(''), array(''));
+	// 		foreach ($result1 as $value) {
+	// 			$credit_score2 = "";
+	// 			$credit_score1 = "";
+	// 			$score = $newScore;
+	// 			$min = $value['score1'];
+	// 			$max = $value['score2'];
+	// 			if ($score  >= $min && $score <= $max) {
+	// 				$credit_score1 =  $value['credit_score_name'];
+	// 			}
+	// 			if ($result['total_credit_score'] >= $min && $result['total_credit_score'] <= $max) {
+	// 				$credit_score2 =  $value['credit_score_name'];
+	// 			}
+	// 			if ($credit_score1 != $credit_score2) {
+	// 				if (!empty($credit_score1)) {
+	// 					$credit_score[] = $credit_score1;
+	// 				}
+	// 			}
+	// 		}
+	// 		if ($credit_score[0]) {
+	// 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+	// 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+	// 			$data['useremail'] = "";
+
+	// 			if ($calculation_type === 'plus') {
+	// 				$data['message'] = '<p>Congratulations ' . $userDetailFrom["first_name"] . '. You have reached another milestone as a valued Interfriends member.</p><p> Your Trust Score has moved up a level to ' . $credit_score[0] . ' </p><p>Well done on behalf of all of us at Interfriends.</p><p>Keep it up</p>';
+	// 			} else {
+	// 				$data['message'] = '<p>We regret to inform you that there has been a decrease in your Interfriends Trust score.</p><p>This change may have occurred as a result of various factors, such as a recent application or delayed or missed payments.</p>';
+	// 			}
+	// 			$messaged = $this->load->view('template/common-mail', $data, true);
+	// 			$mail = $this->sendMail($userDetailFrom['email'], 'Trust Score', $messaged);
+	// 		}
+
+	// 		$this->common->updateData('credit_score_user', array("total_credit_score" => $newScore), array('user_id' => $_REQUEST['user_id']));
+	// 	}
+	// }
+
+	// updated by @krishn on 17-06-26
 	function updateCreditScore($points, $calculation_type)
 	{
-		$result = "";
-		$result = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
+		$result = $this->common->getData(
+			'credit_score_user',
+			array('user_id' => $_REQUEST['user_id']),
+			array('single')
+		);
 
-		$totalScore = 0;
-		$newScore = 0;
-		if (!empty($result)) {
+		if (empty($result)) {
+			return;
+		}
 
-			if ($calculation_type === 'plus') {
-				$totalScore = $result['total_credit_score'] + $points;
+		$totalScore = (int)$result['total_credit_score'];
+		$credit_score = array();
+
+		// Calculate new score
+		if ($calculation_type === 'plus') {
+			$totalScore += (int)$points;
+		} elseif ($calculation_type === 'minus') {
+			$totalScore -= (int)$points;
+		}
+
+		// Maintain score between 0 and 900
+		if ($totalScore < 0) {
+			$newScore = 0;
+		} elseif ($totalScore > 900) {
+			$newScore = 900;
+		} else {
+			$newScore = $totalScore;
+		}
+
+		// Get score levels
+		$result1 = $this->common->getData('credit_score_list', array(), array());
+
+		$currentLevel = '';
+		$newLevel = '';
+
+		foreach ($result1 as $value) {
+
+			$min = (int)$value['score1'];
+			$max = (int)$value['score2'];
+
+			if ($newScore >= $min && $newScore <= $max) {
+				$newLevel = $value['credit_score_name'];
 			}
 
-			if ($calculation_type === 'minus') {
-				$totalScore = $result['total_credit_score'] - $points;
+			if ($result['total_credit_score'] >= $min && $result['total_credit_score'] <= $max) {
+				$currentLevel = $value['credit_score_name'];
 			}
+		}
 
+		// Send email only if level changed
+		if (!empty($newLevel) && $newLevel != $currentLevel) {
 
-			if ($totalScore == 800 || $totalScore > 800) {
-				$newScore = $totalScore + 5;
-			} else if ($totalScore > 900) {
+			$userDetailFrom = $this->common->getData(
+				'user',
+				array('user_id' => $_REQUEST['user_id']),
+				array('single')
+			);
 
-				$newScore = 900 + 5;
-			} else if ($totalScore < 0) {
+			if (!empty($userDetailFrom)) {
 
-				$newScore = 0;
-			} else {
-
-				$newScore = $totalScore;
-			}
-
-
-			$result1 = $this->common->getData('credit_score_list', array(''), array(''));
-			foreach ($result1 as $value) {
-				$credit_score2 = "";
-				$credit_score1 = "";
-				$score = $newScore;
-				$min = $value['score1'];
-				$max = $value['score2'];
-				if ($score  >= $min && $score <= $max) {
-					$credit_score1 =  $value['credit_score_name'];
-				}
-				if ($result['total_credit_score'] >= $min && $result['total_credit_score'] <= $max) {
-					$credit_score2 =  $value['credit_score_name'];
-				}
-				if ($credit_score1 != $credit_score2) {
-					if (!empty($credit_score1)) {
-						$credit_score[] = $credit_score1;
-					}
-				}
-			}
-			if ($credit_score[0]) {
-				$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 				$data['useremail'] = "";
 
 				if ($calculation_type === 'plus') {
-					$data['message'] = '<p>Congratulations ' . $userDetailFrom["first_name"] . '. You have reached another milestone as a valued Interfriends member.</p><p> Your Trust Score has moved up a level to ' . $credit_score[0] . ' </p><p>Well done on behalf of all of us at Interfriends.</p><p>Keep it up</p>';
-				} else {
-					$data['message'] = '<p>We regret to inform you that there has been a decrease in your Interfriends Trust score.</p><p>This change may have occurred as a result of various factors, such as a recent application or delayed or missed payments.</p>';
-				}
-				$messaged = $this->load->view('template/common-mail', $data, true);
-				$mail = $this->sendMail($userDetailFrom['email'], 'Trust Score', $messaged);
-			}
 
-			$this->common->updateData('credit_score_user', array("total_credit_score" => $newScore), array('user_id' => $_REQUEST['user_id']));
+					$data['message'] =
+						'<p>Congratulations ' . $userDetailFrom["first_name"] . '. You have reached another milestone as a valued Interfriends member.</p>
+					<p>Your Trust Score has moved up a level to ' . $newLevel . '.</p>
+					<p>Well done on behalf of all of us at Interfriends.</p>
+					<p>Keep it up.</p>';
+				} else {
+
+					$data['message'] =
+						'<p>We regret to inform you that there has been a decrease in your Interfriends Trust Score.</p>
+					<p>This change may have occurred as a result of various factors, such as a recent application or delayed or missed payments.</p>';
+				}
+
+				$messaged = $this->load->view('template/common-mail', $data, true);
+
+				$this->sendMail(
+					$userDetailFrom['email'],
+					'Trust Score',
+					$messaged
+				);
+			}
 		}
+
+		// Update score
+		$this->common->updateData(
+			'credit_score_user',
+			array("total_credit_score" => $newScore),
+			array('user_id' => $_REQUEST['user_id'])
+		);
 	}
 
 
@@ -2577,7 +2675,7 @@ class Admin extends Base_Controller
 
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 			$data['useremail'] = "";
-			$data['message'] = 'This is a confirmation that your Emergency Loan has been fully paid and mark as completed.<p>Payment due date - <b>' . date('d M Y', strtotime($_REQUEST['pay_by'])) . '</b></p>';
+			$data['message'] = 'This is a confirmation that your Emergency Loan has been fully paid and marked as completed.<p>Payment due date - <b>' . date('d M Y', strtotime($_REQUEST['pay_by'])) . '</b></p>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
 		}
@@ -3476,6 +3574,221 @@ class Admin extends Base_Controller
 
 
 
+	// public function editLoan()
+	// {
+	// 	// ini_set('display_errors', 1);
+	// 	$id = $_REQUEST['id'];
+	// 	unset($_REQUEST['id']);
+
+	// 	if ($_REQUEST['status'] === '4') {
+	// 		$loanInfo = $this->common->getData('user_loan', array('id' => $id), array('single'));
+	// 		if (!empty($loanInfo)) {
+	// 			$current_date = date('Y-m-d');
+	// 			$end_date = strtotime("+" . $loanInfo['tenure'] . " month", strtotime($current_date));
+	// 			$_REQUEST['end_date'] = date("Y-m-d", $end_date);
+	// 			$_REQUEST['start_date'] = $current_date;
+	// 		}
+	// 	}
+
+
+	// 	$post = $this->common->getField('user_loan', $_REQUEST);
+
+	// 	if (!empty($post)) {
+	// 		$result = $this->common->updateData('user_loan', $post, array('id' => $id));
+	// 	} else {
+	// 		$result = "";
+	// 	}
+
+	// 	$getloan = $this->common->getData('user_loan', array('id' => $id), array('single'));
+
+
+	// 	$this->common->insertData('user_loan_status_history', array("loan_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
+
+	// 	if ($_REQUEST['status'] === '4') {
+
+	// 		$message = "loan approved";
+	// 		$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "5", "2");
+
+	// 		$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+	// 		$this->updateCreditScore(200, 'minus');
+
+
+	// 		$message2 = "loan accepted by super admin";
+	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "11");
+
+	// 		///sendmail
+	// 		$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+
+	// 		$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+	// 		$data['useremail'] = "";
+
+	// 		if (!empty($getloan['loan_type'])) {
+	// 			$subject = "";
+	// 			if ($getloan['loan_type'] == '1') {
+	// 				$subject = "Assistance";
+	// 			} elseif ($getloan['loan_type'] == '2') {
+	// 				$subject = "Help2 Pay(Car Insurance)";
+	// 			} elseif ($getloan['loan_type'] == '3') {
+	// 				$subject = "Help2 Buy(Car)";
+	// 			} elseif ($getloan['loan_type'] == '4') {
+	// 				$subject = "Help2 Pay(credit card)";
+	// 			} elseif ($getloan['loan_type'] == '5') {
+	// 				$subject = "Help2 Pay(other)";
+	// 			} else {
+	// 				$subject = "Help2 Buy(property)";
+	// 			}
+
+	// 			$referenceNo = $getloan["reference_no"] ?? "#N/A";
+	// 			$data['message'] = '<p>We are writing to inform you that your ' . $subject . '  application has been successfully processed and approved.</p><p>The payment will be deposited into your account within the next 24 hours.</p><p>If you did not initiate this loan application, please get in touch with us immediately to address the issue.</p>
+	// 			<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+	// 				<tr>
+	// 					<td><strong>Assistance</strong></td>
+	// 					<td>£' . $_REQUEST["loan_amount"] . '</td>
+	// 				</tr>
+	// 				<tr>
+	// 					<td><strong>Term</strong></td>
+	// 					<td>' . $_REQUEST["tenure"] . ' Months</td>
+	// 				</tr>
+	// 				<tr>
+	// 					<td><strong>Type</strong></td>
+	// 					<td>' . $subject . '</td>
+	// 				</tr>
+	// 				<tr>
+	// 					<td><strong>Payment Start Date</strong></td>
+	// 					<td>' . date("d M Y", strtotime($getloan['start_date'])) . '</td>
+	// 				</tr>
+	// 				<tr>
+	// 					<td><strong>Monthly Payment</strong></td>
+	// 					<td>£' . $getloan["loan_emi"] . '</td>
+	// 				</tr>
+	// 				<tr>
+	// 					<td><strong>Reference No.</strong></td>
+	// 					<td>' . $referenceNo . '</td>
+	// 				</tr>
+	// 			</table>';
+	// 			$messaged = $this->load->view('template/common-mail', $data, true);
+	// 			$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
+	// 		}
+	// 	}
+
+	// 	if ($_REQUEST['status'] === '3') {
+	// 		$message = "loan declined";
+	// 		$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "6", "2");
+
+	// 		$message2 = "loan has been cancel by super admin";
+	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "12");
+	// 	}
+
+	// 	if ($_REQUEST['status'] === '6') {
+	// 		$message = "loan has been cancel by sub admin";
+	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "10");
+	// 	}
+
+	// 	if ($_REQUEST['status'] === '5') {
+	// 		$message = "loan application in process.";
+	// 		$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "4", "1");
+
+	// 		$message2 = "Loan awaiting approval";
+	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "9");
+	// 	}
+	// 	//new-changes 28-08-2025
+	// 	if ($_REQUEST['status']) {
+	// 		$status     = $_REQUEST['status'];
+	// 		$loan_type  = $_REQUEST['loan_type'];
+	// 		$group_id   = $_REQUEST['group_id'];
+	// 		$created_at = date('Y-m-d H:i:s');
+	// 		$loan_id    = $id;
+	// 		$user_id    = $_REQUEST['user_id'];
+	// 		$month      = $getloan['start_date'];
+	// 		$amount     = $_REQUEST['loan_amount'];
+
+	// 		// Check if record exists for this loan_id
+	// 		$check = $this->common->getData(
+	// 			"payment_notification",
+	// 			array("loan_id" => $loan_id)
+	// 		);
+
+	// 		if (!empty($check)) {
+	// 			// Update existing record
+	// 			$result = $this->common->updateData(
+	// 				"payment_notification",
+	// 				array(
+	// 					"status"     => $status,
+	// 					"group_id"   => $group_id,
+	// 					"month"      => $month,
+	// 					"created_at" => $created_at,
+	// 					"user_id"    => $user_id,
+	// 					"amount"     => $amount,
+	// 					"loan_type"  => $loan_type
+	// 				),
+	// 				array("loan_id" => $loan_id)
+	// 			);
+	// 		} else {
+	// 			// Insert new record
+	// 			$result = $this->common->insertData(
+	// 				"payment_notification",
+	// 				array(
+	// 					"status"     => $status,
+	// 					"group_id"   => $group_id,
+	// 					"month"      => $month,
+	// 					"created_at" => $created_at,
+	// 					"user_id"    => $user_id,
+	// 					"amount"     => $amount,
+	// 					"loan_type"  => $loan_type,
+	// 					"loan_id"    => $loan_id
+	// 				)
+	// 			);
+	// 		}
+	// 	}
+
+	// 	if ($_REQUEST['status'] === '2') {
+
+	// 		$amount = pfTotal($_REQUEST['group_id'], $_REQUEST['user_id']);
+	// 		// 		if($amount >= $_REQUEST['loan_amount']) {
+	// 		$note_title = '';
+	// 		$note_description = '';
+	// 		if (!empty($_REQUEST['note_title'])) {
+	// 			$note_title = $_REQUEST['note_title'];
+	// 		}
+
+	// 		$note_description = '';
+	// 		if (!empty($_REQUEST['note_description'])) {
+	// 			$note_description = $_REQUEST['note_description'];
+	// 		}
+
+	// 		$result = $this->common->insertData('pf_user', array(
+	// 			"user_id" => $_REQUEST['user_id'],
+	// 			'pf_interest_percent' => $getloan['interest_rate'],
+	// 			"pf_interest_amount" => $getloan['interest_payable'],
+	// 			"group_id" => $_REQUEST['group_id'],
+	// 			"main_id" => $id,
+	// 			"pf_amount" => $getloan['interest_payable'],
+	// 			"payment_type" => '2',
+	// 			"payment_by" => '3',
+	// 			"note_title" => $note_title,
+	// 			"note_description" => $note_description,
+	// 			"created_at" => date('Y-m-d H:i:s'),
+	// 			'provident' => $getloan['provident'],
+	// 			'loan_type' => $getloan['loan_type']
+	// 		));
+	// 		//}    
+
+
+	// 		$message2 = "loan completed";
+	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "15");
+
+	// 		$this->common->query_normal("UPDATE credit_score_user SET loan_payment_fully_paid = loan_payment_fully_paid+80 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+	// 		$this->updateCreditScore(80, 'plus');
+	// 	}
+
+	// 	if ($result) {
+	// 		$this->response(true, "Loan Update Successfully");
+	// 	} else {
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
+	// updated by @krishn on 17-06-26
 	public function editLoan()
 	{
 		// ini_set('display_errors', 1);
@@ -3512,7 +3825,7 @@ class Admin extends Base_Controller
 			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "5", "2");
 
 			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(200, 'minus', $_REQUEST['user_id']);
+			$this->updateCreditScore(200, 'minus');
 
 
 			$message2 = "loan accepted by super admin";
@@ -3676,11 +3989,58 @@ class Admin extends Base_Controller
 			//}    
 
 
-			$message2 = "loan approved";
+			$message2 = "loan completed";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "15");
 
 			$this->common->query_normal("UPDATE credit_score_user SET loan_payment_fully_paid = loan_payment_fully_paid+80 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 			$this->updateCreditScore(80, 'plus');
+
+			// Send Loan Completed Email
+			$userDetailFrom = $this->common->getData(
+				'user',
+				array('user_id' => $_REQUEST['user_id']),
+				array('single')
+			);
+
+			if (!empty($userDetailFrom)) {
+
+				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+				$data['useremail'] = "";
+
+				$subject = "Loan Completed";
+
+				$referenceNo = $getloan["reference_no"] ?? "#N/A";
+
+				$data['message'] = '
+				<p>Congratulations! Your loan has been completed successfully.</p>
+
+				<p>Thank you for making all the required payments on time.</p>
+
+				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+					<tr>
+						<td><strong>Reference No.</strong></td>
+						<td>' . $referenceNo . '</td>
+					</tr>
+					<tr>
+						<td><strong>Loan Amount</strong></td>
+						<td>£' . $getloan["loan_amount"] . '</td>
+					</tr>
+					<tr>
+						<td><strong>Completion Date</strong></td>
+						<td>' . date("d M Y") . '</td>
+					</tr>
+				</table>
+
+				<p>We appreciate your commitment and thank you for being a valued Interfriends member.</p>';
+
+				$messaged = $this->load->view('template/common-mail', $data, true);
+
+				$this->sendMail(
+					$userDetailFrom['email'],
+					$subject,
+					$messaged
+				);
+			}
 		}
 
 		if ($result) {
@@ -3689,8 +4049,6 @@ class Admin extends Base_Controller
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
-
-
 
 	public function editLoanPayment()
 	{
@@ -4798,50 +5156,136 @@ class Admin extends Base_Controller
 	}
 
 
+	// public function editUser()
+	// {
+	// 	$user_id = $_REQUEST['user_id'];
+	// 	unset($_REQUEST['user_id']);
+
+	// 	$whereEmail = "email = '" . $_POST['email'] . "' AND user_id != '" . $user_id . "'";
+	// 	$emailExist = $this->common->getData('user', $whereEmail, array('single', 'field' => 'email'));
+
+	// 	if ($emailExist) {
+	// 		$this->response(false, 'Email already exists');
+	// 		die;
+	// 	}
+
+
+
+	// 	if (isset($_FILES['image'])) {
+	// 		$image = $this->common->do_upload_thumb('image', './assets/userfile/profile/');
+	// 		if (isset($image['upload_data'])) {
+	// 			$iname = 'assets/userfile/profile/' . $image['upload_data']['file_name'];
+	// 			$iname_thumb = 'assets/userfile/profile/thumb/' . $image['upload_data']['file_name'];
+	// 			$_REQUEST['profile_image'] = $iname;
+	// 			$_REQUEST['profile_image_thumb'] = $iname_thumb;
+	// 		}
+	// 	}
+
+	// 	if (isset($_FILES['id_proof_image'])) {
+	// 		$idProofImage = $this->common->do_upload_file('id_proof_image', './assets/userfile/profile/idproof/');
+	// 		if (isset($idProofImage['upload_data'])) {
+	// 			$iname_idProof = 'assets/userfile/profile/idproof/' . $idProofImage['upload_data']['file_name'];
+	// 		}
+	// 		$_REQUEST['id_proof_image'] = $iname_idProof;
+	// 	}
+
+	// 	$post = $this->common->getField('user', $_REQUEST);
+
+	// 	if (!empty($post)) {
+	// 		$result = $this->common->updateData('user', $post, array('user_id' => $user_id));
+	// 	} else {
+	// 		$result = "";
+	// 	}
+
+	// 	if ($result) {
+	// 		$this->response(true, "User Update Successfully");
+	// 	} else {
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
+	// updated by @krishn on 17-06-26
 	public function editUser()
 	{
 		$user_id = $_REQUEST['user_id'];
 		unset($_REQUEST['user_id']);
 
-		$whereEmail = "email = '" . $_POST['email'] . "' AND user_id != '" . $user_id . "'";
-		$emailExist = $this->common->getData('user', $whereEmail, array('single', 'field' => 'email'));
+		// Check email already exists
+		$email = isset($_REQUEST['email']) ? trim($_REQUEST['email']) : '';
 
-		if ($emailExist) {
-			$this->response(false, 'Email already exists');
-			die;
+		if (!empty($email)) {
+
+			$whereEmail = "email = '" . $email . "' AND user_id != '" . $user_id . "'";
+
+			$emailExist = $this->common->getData(
+				'user',
+				$whereEmail,
+				array('single', 'field' => 'email')
+			);
+
+			if ($emailExist) {
+				$this->response(false, 'Email already exists');
+				die;
+			}
 		}
 
+		// Profile Image Upload
+		if (isset($_FILES['image']) && !empty($_FILES['image']['name'])) {
 
+			$image = $this->common->do_upload_thumb(
+				'image',
+				'./assets/userfile/profile/'
+			);
 
-		if (isset($_FILES['image'])) {
-			$image = $this->common->do_upload_thumb('image', './assets/userfile/profile/');
 			if (isset($image['upload_data'])) {
-				$iname = 'assets/userfile/profile/' . $image['upload_data']['file_name'];
-				$iname_thumb = 'assets/userfile/profile/thumb/' . $image['upload_data']['file_name'];
+
+				$iname = 'assets/userfile/profile/' .
+					$image['upload_data']['file_name'];
+
+				$iname_thumb = 'assets/userfile/profile/thumb/' .
+					$image['upload_data']['file_name'];
+
 				$_REQUEST['profile_image'] = $iname;
 				$_REQUEST['profile_image_thumb'] = $iname_thumb;
 			}
 		}
 
-		if (isset($_FILES['id_proof_image'])) {
-			$idProofImage = $this->common->do_upload_file('id_proof_image', './assets/userfile/profile/idproof/');
+		// ID Proof Upload
+		if (isset($_FILES['id_proof_image']) && !empty($_FILES['id_proof_image']['name'])) {
+
+			$idProofImage = $this->common->do_upload_file(
+				'id_proof_image',
+				'./assets/userfile/profile/idproof/'
+			);
+
 			if (isset($idProofImage['upload_data'])) {
-				$iname_idProof = 'assets/userfile/profile/idproof/' . $idProofImage['upload_data']['file_name'];
+
+				$iname_idProof = 'assets/userfile/profile/idproof/' .
+					$idProofImage['upload_data']['file_name'];
+
+				$_REQUEST['id_proof_image'] = $iname_idProof;
 			}
-			$_REQUEST['id_proof_image'] = $iname_idProof;
 		}
 
 		$post = $this->common->getField('user', $_REQUEST);
 
 		if (!empty($post)) {
-			$result = $this->common->updateData('user', $post, array('user_id' => $user_id));
+
+			$result = $this->common->updateData(
+				'user',
+				$post,
+				array('user_id' => $user_id)
+			);
 		} else {
-			$result = "";
+
+			$result = false;
 		}
 
 		if ($result) {
+
 			$this->response(true, "User Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -11275,20 +11719,20 @@ class Admin extends Base_Controller
 
 		if ($approval['approver_role'] == 'second_recommender') {
 			$message = "
-				<p>This is a reminder that <strong>{$recommenderName}</strong> recommends <strong>{$recommendedName}</strong>. Please find below the pertinent details of the recommended member:</p>
+				<p><strong>{$recommenderName}</strong> has recommended <strong>{$recommendedName}</strong> to join Interfriends. Please find below the pertinent details of the recommended member:</p>
 				{$memberDetails}
 				<p>Please review this recommendation and choose an action below.</p>
 			";
 		} elseif ($approval['approver_role'] == 'circle_lead' || $approval['approver_role'] == 'deputy_circle_lead') {
 			$message = "
-				<p>This is a reminder that <strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> are recommending <strong>{$recommendedName}</strong> to join Interfriends.</p>
+				<p><strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> has recommended <strong>{$recommendedName}</strong> to join Interfriends.</p>
 				<p>Please find below the pertinent details of the recommended member:</p>
 				{$memberDetails}
 				<p>Please review this recommendation and choose an action below.</p>
 			";
 		} else {
 			$message = "
-				<p>This is a reminder that <strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> have recommended <strong>{$recommendedName}</strong> for consideration.</p>
+				<p><strong>{$recommenderName}</strong> and <strong>{$secondRecommenderName}</strong> have recommended <strong>{$recommendedName}</strong> for consideration.</p>
 				<p>Below is a summary of their details:</p>
 				{$memberDetails}
 				<p>Please review this recommendation and choose an action below.</p>
@@ -11307,7 +11751,7 @@ class Admin extends Base_Controller
 		$data['useremail'] = $approver['email'];
 		$data['message'] = $message;
 
-		$subject = "Reminder: Approval Request for Recommendation #{$approval['recommend_id']}";
+		$subject = "Reminder: Approval Request for Recommendation";
 		$mailMessage = $this->load->view('template/common-mail', $data, true);
 		$mail = $this->sendMail($approver['email'], $subject, $mailMessage);
 

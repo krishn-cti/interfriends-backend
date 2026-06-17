@@ -1452,7 +1452,8 @@ class Api extends Base_Controller
 		$groupCycleList = $this->common->getData('user_group_lifecycle', array('group_id' => '22', 'user_id' =>  $_REQUEST['user_id'], 'updated_at != ' => null), array('sort_by' => 'created_at', 'sort_direction' => 'asc', 'limit' => '6', ''));
 		$user_id = $_REQUEST['user_id'];
 
-		$usercircle = $this->common->getData('user_circle', array('user_id' =>  $_REQUEST['user_id']), array('single'));
+		$usercircle = $this->common->getData('user_circle', array('user_id' =>  $user_id), array('single'));
+		$avg = "";
 		if ($usercircle) {
 			$users = $this->common->getData('user_circle', array('circle_id' =>  $usercircle['circle_id']), array(''));
 			$i = 0;
@@ -1462,7 +1463,7 @@ class Api extends Base_Controller
 				$trustscore += $userinfo['total_credit_score'];
 				$i++;
 			}
-			$avg = "";
+			
 			if ($trustscore) {
 				$avg = $trustscore / $i;
 			}
@@ -3226,6 +3227,7 @@ class Api extends Base_Controller
 		// new-changes 04-06-2024
 		$grouplifecycle = $this->common->getData('group_lifecycle', array("group_id" => $_REQUEST['group_id'], "group_type_id" => '4'), array('sort_by' => 'id', 'sort_direction' => 'desc'));
 		$avgAmount = 0;
+		$avgwelfareAmount = 0;
 		$_REQUEST['group_cycle_id'] = $grouplifecycle[0]['id'];
 		$cycleTransfer = $this->common->getData('cycle_status_management', array('user_id' => $_REQUEST['user_id'], 'group_id' => $_REQUEST['group_id'], 'group_cycle_id' => $_REQUEST['group_cycle_id']), array('single'));
 		if (empty($cycleTransfer)) {
@@ -3556,7 +3558,7 @@ class Api extends Base_Controller
 				<li>Complete your application after the presentation and provide relevant identification</li>
 				<li>Wait for approval.</li>
 			</ol>
-			<p>Thank you<br>Interfriends Membership Relations</p>
+			
 			<p>In the meantime, you can learn more about Interfriends by visiting <a href='https://www.interfriends.uk'>www.interfriends.uk</a></p>
 		";
 
