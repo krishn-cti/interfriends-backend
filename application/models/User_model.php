@@ -1065,10 +1065,53 @@ class User_model extends CI_Model
 	}
 
 
+	// public function payout_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
+	// {
+	// 	$this->db->select('P.*');
+	// 	$this->db->from('payout_cycle as P');
+	// 	if ($where != "") {
+	// 		$this->db->where($where);
+	// 	}
+
+	// 	if ($having != "") {
+	// 		$this->db->having($having);
+	// 	}
+
+	// 	// $this->db->join('tag_tbl as T','T.tag_id = R.tags');
+	// 	$this->db->order_by("P.id", 'DESC');
+
+	// 	if ($limit != '') {
+	// 		$this->db->limit($limit, $start);
+	// 	}
+
+	// 	$res = $this->db->get()->result_array();
+
+	// 	if (!empty($options) && in_array('count', $options)) {
+	// 		return count($res);
+	// 	}
+
+	// 	if ($res) {
+	// 		if (isset($options) && in_array('single', $options)) {
+	// 			return $res[0];
+	// 		} else {
+	// 			return $res;
+	// 		}
+	// 	} else {
+	// 		return false;
+	// 	}
+	// }
+
+
+	// created by krishn 19-06-2026
 	public function payout_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
 	{
 		$this->db->select('P.*');
 		$this->db->from('payout_cycle as P');
+
+		// Added joins
+		$this->db->join('user as U', 'U.user_id = P.user_id', 'left');
+		$this->db->join('user_circle as UC', 'UC.user_id = U.user_id', 'left');
+
 		if ($where != "") {
 			$this->db->where($where);
 		}
@@ -1077,7 +1120,6 @@ class User_model extends CI_Model
 			$this->db->having($having);
 		}
 
-		// $this->db->join('tag_tbl as T','T.tag_id = R.tags');
 		$this->db->order_by("P.id", 'DESC');
 
 		if ($limit != '') {
@@ -1100,7 +1142,6 @@ class User_model extends CI_Model
 			return false;
 		}
 	}
-
 
 
 	public function loan_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
@@ -1371,10 +1412,51 @@ class User_model extends CI_Model
 
 
 
+	// public function safe_keeping_withdral_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
+	// {
+	// 	$this->db->select("SK.*,U.first_name,U.last_name,U.email");
+	// 	$this->db->from('safe_keeping_withdral_request as SK');
+	// 	if ($where != "") {
+	// 		$this->db->where($where);
+	// 	}
+
+	// 	if ($having != "") {
+	// 		$this->db->having($having);
+	// 	}
+
+	// 	$this->db->join('user as U', 'U.user_id = SK.user_id');
+	// 	$this->db->order_by("SK.id", 'DESC');
+
+	// 	if ($limit != '') {
+	// 		$this->db->limit($limit, $start);
+	// 	}
+
+	// 	$res = $this->db->get()->result_array();
+
+	// 	if (!empty($options) && in_array('count', $options)) {
+	// 		return count($res);
+	// 	}
+
+	// 	if ($res) {
+	// 		if (isset($options) && in_array('single', $options)) {
+	// 			return $res[0];
+	// 		} else {
+	// 			return $res;
+	// 		}
+	// 	} else {
+	// 		return array();
+	// 	}
+	// }
+
+	// created by krishn 19-06-2026
 	public function safe_keeping_withdral_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
 	{
 		$this->db->select("SK.*,U.first_name,U.last_name,U.email");
 		$this->db->from('safe_keeping_withdral_request as SK');
+
+		$this->db->join('user as U', 'U.user_id = SK.user_id');
+		$this->db->join('user_circle as UC', 'UC.user_id = U.user_id', 'left');
+
 		if ($where != "") {
 			$this->db->where($where);
 		}
@@ -1383,7 +1465,6 @@ class User_model extends CI_Model
 			$this->db->having($having);
 		}
 
-		$this->db->join('user as U', 'U.user_id = SK.user_id');
 		$this->db->order_by("SK.id", 'DESC');
 
 		if ($limit != '') {
@@ -1406,7 +1487,6 @@ class User_model extends CI_Model
 			return array();
 		}
 	}
-
 
 	public function investment_request_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
 	{
