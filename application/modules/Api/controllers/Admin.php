@@ -1564,13 +1564,8 @@ class Admin extends Base_Controller
 	public function user_list()
 	{
 		// limit code start
-		if (empty($_REQUEST['start'])) {
-			$start = 10;
-			$end = 0;
-		} else {
-			$start = 10;
-			$end = $_REQUEST['start'];
-		}
+		$start = !empty($_REQUEST['limit']) ? (int)$_REQUEST['limit'] : 10;
+		$end   = !empty($_REQUEST['start']) ? (int)$_REQUEST['start'] : 0;
 		// limit code end
 
 		// new-changes add block status   
@@ -3788,6 +3783,77 @@ class Admin extends Base_Controller
 	// 	}
 	// }
 
+	private function getLoanTypeTitle($loanType)
+	{
+		if ($loanType == '1') {
+			return "Assistance";
+		} elseif ($loanType == '2') {
+			return "Help2 Pay(Car Insurance)";
+		} elseif ($loanType == '3') {
+			return "Help2 Buy(Car)";
+		} elseif ($loanType == '4') {
+			return "Help2 Pay(credit card)";
+		} elseif ($loanType == '5') {
+			return "Help2 Pay(other)";
+		}
+
+		return "Help2 Buy(property)";
+	}
+
+	private function addLoanEmiPayments($loan)
+	{
+		if (empty($loan) || empty($loan['id'])) {
+			return false;
+		}
+
+		$existingPayments = $this->common->getData('user_loan_payment', array('loan_id' => $loan['id']));
+		if (!empty($existingPayments)) {
+			return true;
+		}
+
+		$tenure = !empty($loan['tenure']) ? (int)$loan['tenure'] : 0;
+		$emiAmount = !empty($loan['loan_emi']) ? $loan['loan_emi'] : 0;
+
+		if (empty($emiAmount) && !empty($loan['total_payment']) && $tenure > 0) {
+			$emiAmount = $loan['total_payment'] / $tenure;
+		}
+
+		if (empty($emiAmount) && !empty($loan['loan_amount']) && $tenure > 0) {
+			$emiAmount = $loan['loan_amount'] / $tenure;
+		}
+
+		if ($tenure <= 0 || empty($emiAmount)) {
+			return false;
+		}
+
+		$paymentDate = !empty($loan['start_date']) ? $loan['start_date'] : date('Y-m-d');
+
+		for ($month = 1; $month <= $tenure; $month++) {
+			$payment = array(
+				'loan_id' => $loan['id'],
+				'user_id' => $loan['user_id'],
+				'group_id' => $loan['group_id'],
+				'amount' => $emiAmount,
+				'payment_method' => '0',
+				'status' => 0,
+				'month' => $month,
+				'date' => $paymentDate,
+				'created_at' => date('Y-m-d H:i:s')
+			);
+
+			$post = $this->common->getField('user_loan_payment', $payment);
+			$result = $this->common->insertData('user_loan_payment', $post);
+
+			if (!$result) {
+				return false;
+			}
+
+			$paymentDate = date("Y-m-d", strtotime("+1 month", strtotime($paymentDate)));
+		}
+
+		return true;
+	}
+
 	// updated by @krishn on 17-06-26
 	public function editLoan()
 	{
@@ -3821,6 +3887,12 @@ class Admin extends Base_Controller
 
 		if ($_REQUEST['status'] === '4') {
 
+			$emiPaymentResult = $this->addLoanEmiPayments($getloan);
+			if (!$emiPaymentResult) {
+				$this->response(false, "There is a problem, please try again.");
+				return;
+			}
+
 			$message = "loan approved";
 			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "5", "2");
 
@@ -3838,20 +3910,7 @@ class Admin extends Base_Controller
 			$data['useremail'] = "";
 
 			if (!empty($getloan['loan_type'])) {
-				$subject = "";
-				if ($getloan['loan_type'] == '1') {
-					$subject = "Assistance";
-				} elseif ($getloan['loan_type'] == '2') {
-					$subject = "Help2 Pay(Car Insurance)";
-				} elseif ($getloan['loan_type'] == '3') {
-					$subject = "Help2 Buy(Car)";
-				} elseif ($getloan['loan_type'] == '4') {
-					$subject = "Help2 Pay(credit card)";
-				} elseif ($getloan['loan_type'] == '5') {
-					$subject = "Help2 Pay(other)";
-				} else {
-					$subject = "Help2 Buy(property)";
-				}
+				$subject = $this->getLoanTypeTitle($getloan['loan_type']);
 
 				$referenceNo = $getloan["reference_no"] ?? "#N/A";
 				$data['message'] = '<p>We are writing to inform you that your ' . $subject . '  application has been successfully processed and approved.</p><p>The payment will be deposited into your account within the next 24 hours.</p><p>If you did not initiate this loan application, please get in touch with us immediately to address the issue.</p>
@@ -4007,19 +4066,24 @@ class Admin extends Base_Controller
 				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 				$data['useremail'] = "";
 
-				$subject = "Loan Completed";
+				$loanType = $this->getLoanTypeTitle($getloan['loan_type']);
+				$subject = $loanType . " Loan Completed";
 
 				$referenceNo = $getloan["reference_no"] ?? "#N/A";
 
 				$data['message'] = '
 				<p>Congratulations! Your loan has been completed successfully.</p>
 
-				<p>Thank you for making all the required payments on time.</p>
+				<p>This confirms that your ' . $loanType . ' has been paid in full and is now complete.</p>
 
 				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
 					<tr>
 						<td><strong>Reference No.</strong></td>
 						<td>' . $referenceNo . '</td>
+					</tr>
+					<tr>
+						<td><strong>Type</strong></td>
+						<td>' . $loanType . '</td>
 					</tr>
 					<tr>
 						<td><strong>Loan Amount</strong></td>
@@ -5432,6 +5496,68 @@ class Admin extends Base_Controller
 	}
 
 
+	// public function recommendUser_list()
+	// {
+	// 	// limit code start
+	// 	if (empty($_REQUEST['start'])) {
+	// 		$start = 10;
+	// 		$end = 0;
+	// 	} else {
+	// 		$start = 10;
+	// 		$end = $_REQUEST['start'];
+	// 	}
+	// 	// limit code end
+
+	// 	$where = "";
+
+	// 	if (!empty($_REQUEST['search_keyword'])) {
+	// 		$keyword = $this->db->escape_like_str(trim($_REQUEST['search_keyword']));
+
+	// 		$where = "(RU.first_name LIKE '%" . $keyword . "%'
+	//             OR RU.last_name LIKE '%" . $keyword . "%'
+	//             OR RU.email LIKE '%" . $keyword . "%')";
+	// 	}
+
+	// 	$result = $this->user_model->recommendUser_detail($where, array(), $start, $end);
+	// 	$recommendUserCount = $this->user_model->recommendUser_detail($where, array('count'));
+
+	// 	$countData = $end;
+	// 	$countData++;
+	// 	if (!empty($result)) {
+
+	// 		foreach ($result as $key => $value) {
+
+	// 			$checkemail = "email = '" . $result[$key]['email'] . "'";
+	// 			$mailcheck = $this->common->getData('user', $checkemail, array("single"));
+	// 			if ($mailcheck) {
+	// 				$result[$key]['recommended_user_id'] = $mailcheck['user_id'];
+	// 			} else {
+	// 				$result[$key]['recommended_user_id'] = "0";
+	// 			}
+	// 			$result[$key]['sno'] = $countData++;
+	// 		}
+
+	// 		$this->response(
+	// 			true,
+	// 			"Data fetch Successfully.",
+	// 			array(
+	// 				"lists" => $result,
+	// 				"listCount" => $recommendUserCount
+	// 			)
+	// 		);
+	// 	} else {
+	// 		$this->response(
+	// 			true,
+	// 			"Data fetch Successfully.",
+	// 			array(
+	// 				"lists" => array(),
+	// 				"listCount" => $recommendUserCount
+	// 			)
+	// 		);
+	// 	}
+	// }
+
+	// updated by @krishn on 17-06-26
 	public function recommendUser_list()
 	{
 		// limit code start
@@ -5446,30 +5572,91 @@ class Admin extends Base_Controller
 
 		$where = "";
 
+		/* Search */
 		if (!empty($_REQUEST['search_keyword'])) {
+
 			$keyword = $this->db->escape_like_str(trim($_REQUEST['search_keyword']));
 
-			$where = "(RU.first_name LIKE '%" . $keyword . "%'
-                OR RU.last_name LIKE '%" . $keyword . "%'
-                OR RU.email LIKE '%" . $keyword . "%')";
+			$where .= "(
+					RU.first_name LIKE '%{$keyword}%'
+					OR RU.last_name LIKE '%{$keyword}%'
+					OR RU.email LIKE '%{$keyword}%'
+				)";
 		}
 
-		$result = $this->user_model->recommendUser_detail($where, array(), $start, $end);
-		$recommendUserCount = $this->user_model->recommendUser_detail($where, array('count'));
+		/* Group Filter */
+		if (!empty($_REQUEST['group_ids'])) {
 
-		$countData = $end;
-		$countData++;
+			$group_ids = explode(',', $_REQUEST['group_ids']);
+			$group_ids = array_map('trim', $group_ids);
+			$group_ids = array_map('intval', $group_ids);
+
+			$groupCondition = "
+			RU.user_id IN (
+				SELECT user_id
+				FROM user_group
+				WHERE group_id IN (" . implode(',', $group_ids) . ")
+			)
+		";
+
+			if (!empty($where)) {
+				$where .= " AND ";
+			}
+
+			$where .= $groupCondition;
+		}
+
+
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+
+			$circle_ids = explode(',', $_REQUEST['circle_ids']);
+			$circle_ids = array_map('trim', $circle_ids);
+			$circle_ids = array_map('intval', $circle_ids);
+
+			$circleCondition = "
+			RU.user_id IN (
+				SELECT user_id
+				FROM user_circle
+				WHERE circle_id IN (" . implode(',', $circle_ids) . ")
+			)
+		";
+
+			if (!empty($where)) {
+				$where .= " AND ";
+			}
+
+			$where .= $circleCondition;
+		}
+
+
+		$result = $this->user_model->recommendUser_detail($where, array(), $start, $end);
+
+		$recommendUserCount = $this->user_model->recommendUser_detail(
+			$where,
+			array('count')
+		);
+
+		$countData = $end + 1;
+
 		if (!empty($result)) {
 
 			foreach ($result as $key => $value) {
 
-				$checkemail = "email = '" . $result[$key]['email'] . "'";
-				$mailcheck = $this->common->getData('user', $checkemail, array("single"));
+				$checkemail = "email = '" . $value['email'] . "'";
+
+				$mailcheck = $this->common->getData(
+					'user',
+					$checkemail,
+					array("single")
+				);
+
 				if ($mailcheck) {
 					$result[$key]['recommended_user_id'] = $mailcheck['user_id'];
 				} else {
 					$result[$key]['recommended_user_id'] = "0";
 				}
+
 				$result[$key]['sno'] = $countData++;
 			}
 
@@ -5482,6 +5669,7 @@ class Admin extends Base_Controller
 				)
 			);
 		} else {
+
 			$this->response(
 				true,
 				"Data fetch Successfully.",
@@ -5900,6 +6088,43 @@ class Admin extends Base_Controller
 	}
 
 
+	// public function safe_keeping_withdral_request_list()
+	// {
+	// 	// limit code start
+	// 	if (empty($_REQUEST['start'])) {
+	// 		$start = 10;
+	// 		$end = 0;
+	// 	} else {
+	// 		$start = 10;
+	// 		$end = $_REQUEST['start'];
+	// 	}
+	// 	// limit code end
+
+	// 	$where = 'U.status != 2';
+	// 	if (!empty($_REQUEST['group_ids'])) {
+	// 		$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+	// 		$groupIds = implode(',', $groupIds);
+	// 		$where .= " AND SK.group_id IN ($groupIds)";
+	// 	}
+
+	// 	$result = $this->user_model->safe_keeping_withdral_detail($where, array(), $start, $end);
+	// 	$resultCount = $this->user_model->safe_keeping_withdral_detail($where, array('count'));
+
+	// 	$countData = $end;
+	// 	$countData++;
+	// 	if (!empty($result)) {
+
+	// 		foreach ($result as $key => $value) {
+	// 			$result[$key]['sno'] = $countData++;
+	// 		}
+
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount));
+	// 	} else {
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
+	// 	}
+	// }
+
+	// created by krishn 19-06-2026
 	public function safe_keeping_withdral_request_list()
 	{
 		// limit code start
@@ -5912,11 +6137,24 @@ class Admin extends Base_Controller
 		}
 		// limit code end
 
-		$where = 'U.status != 2';
+		$where = "U.status != 2";
+
+		// Filter by groups (only if provided)
 		if (!empty($_REQUEST['group_ids'])) {
-			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
-			$groupIds = implode(',', $groupIds);
-			$where .= " AND SK.group_id IN ($groupIds)";
+			$group_ids = explode(',', $_REQUEST['group_ids']);
+			$group_ids = array_map('trim', $group_ids);
+			$group_ids = array_map('intval', $group_ids);
+
+			$where .= " AND SK.group_id IN (" . implode(',', $group_ids) . ")";
+		}
+
+		// Filter by circles (only if provided)
+		if (!empty($_REQUEST['circle_ids'])) {
+			$circle_ids = explode(',', $_REQUEST['circle_ids']);
+			$circle_ids = array_map('trim', $circle_ids);
+			$circle_ids = array_map('intval', $circle_ids);
+
+			$where .= " AND UC.circle_id IN (" . implode(',', $circle_ids) . ")";
 		}
 
 		$result = $this->user_model->safe_keeping_withdral_detail($where, array(), $start, $end);
@@ -5930,85 +6168,204 @@ class Admin extends Base_Controller
 				$result[$key]['sno'] = $countData++;
 			}
 
-			$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount));
+			$this->response(true, "Data fetch Successfully.", array(
+				"lists" => $result,
+				"listCount" => $resultCount
+			));
 		} else {
-			$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
+			$this->response(true, "Data fetch Successfully.", array(
+				"lists" => array(),
+				"listCount" => $resultCount
+			));
 		}
 	}
 
 	// created by @krishn on 23-06-25
+	// public function safekeeping_request_list()
+	// {
+	// 	// Pagination setup
+	// 	$limit = 10;
+	// 	$start = !empty($_REQUEST['start']) ? (int) $_REQUEST['start'] : 0;
+
+	// 	// Group ID filtering
+	// 	$searchCond = '';
+	// 	if (!empty($_REQUEST['group_ids'])) {
+	// 		$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+	// 		$groupIds = implode(',', $groupIds);
+	// 		$searchCond .= " AND SK.group_id IN ($groupIds)";
+	// 	}
+
+	// 	// Search keyword filtering
+	// 	$search = !empty($_REQUEST['search']) ? $this->db->escape_like_str(trim($_REQUEST['search'])) : '';
+	// 	// if (!empty($search)) {
+	// 	// 	$searchCond .= " AND (U.first_name LIKE '%$search%' OR U.last_name LIKE '%$search%' OR U.email LIKE '%$search%')";
+	// 	// }
+
+	// 	if (!empty($search)) {
+	// 		$searchCond = " AND (
+	// 			U.first_name LIKE '%{$search}%' ESCAPE '!' OR 
+	// 			U.last_name LIKE '%{$search}%' ESCAPE '!' OR 
+	// 			U.email LIKE '%{$search}%' ESCAPE '!'
+	// 		)";
+	// 	}
+
+	// 	// SQL parts
+	// 	$table = 'safe_keeping SK, user U';
+	// 	$field = 'SK.id, SK.user_id, U.first_name, U.last_name, U.email, SK.amount, SK.amount_total, SK.created_at, SK.request_status';
+	// 	$fullWhere = "SK.user_id = U.user_id AND U.status != '2' AND SK.group_id != 34 AND SK.requested_by = 'user' $searchCond";
+
+	// 	// Group by (optional)
+	// 	$groupBy = '';
+	// 	$options = [
+	// 		'field' => $field,
+	// 		'limit' => $limit,
+	// 		'offset' => $start,
+	// 		'sort_by' => 'created_at',
+	// 		'sort_direction' => 'desc',
+	// 	];
+	// 	if (!empty($groupBy)) {
+	// 		$options['group_by'] = $groupBy;
+	// 	}
+
+	// 	// Fetch data
+	// 	$resultList = $this->common->getData($table, $fullWhere, $options);
+
+	// 	// Count total
+	// 	$totalOptions = ['count'];
+	// 	if (!empty($groupBy)) {
+	// 		$totalOptions['group_by'] = $groupBy;
+	// 	}
+	// 	$resultCountData = $this->common->getData($table, $fullWhere, $totalOptions);
+	// 	$resultCount = is_array($resultCountData) ? count($resultCountData) : 0;
+
+	// 	// Add serial numbers
+	// 	$countData = $start + 1;
+	// 	if (!empty($resultList)) {
+	// 		foreach ($resultList as &$row) {
+	// 			$row['sno'] = $countData++;
+	// 		}
+	// 		$this->response(true, "Data fetched successfully.", [
+	// 			"lists" => $resultList,
+	// 			"listCount" => $resultCount
+	// 		]);
+	// 	} else {
+	// 		$this->response(true, "No data found.", [
+	// 			"lists" => [],
+	// 			"listCount" => 0
+	// 		]);
+	// 	}
+	// }
+
+	// updated by @krishn on 19-06-26
 	public function safekeeping_request_list()
 	{
 		// Pagination setup
 		$limit = 10;
-		$start = !empty($_REQUEST['start']) ? (int) $_REQUEST['start'] : 0;
+		$start = !empty($_REQUEST['start']) ? (int)$_REQUEST['start'] : 0;
 
-		// Group ID filtering
-		$searchCond = '';
+		$searchCond = "";
+
+		/* Group Filter */
 		if (!empty($_REQUEST['group_ids'])) {
 			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
 			$groupIds = implode(',', $groupIds);
+
 			$searchCond .= " AND SK.group_id IN ($groupIds)";
 		}
 
-		// Search keyword filtering
-		$search = !empty($_REQUEST['search']) ? $this->db->escape_like_str(trim($_REQUEST['search'])) : '';
-		// if (!empty($search)) {
-		// 	$searchCond .= " AND (U.first_name LIKE '%$search%' OR U.last_name LIKE '%$search%' OR U.email LIKE '%$search%')";
-		// }
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+			$circleIds = array_map('intval', explode(',', $_REQUEST['circle_ids']));
+			$circleIds = implode(',', $circleIds);
 
-		if (!empty($search)) {
-			$searchCond = " AND (
-				U.first_name LIKE '%{$search}%' ESCAPE '!' OR 
-				U.last_name LIKE '%{$search}%' ESCAPE '!' OR 
-				U.email LIKE '%{$search}%' ESCAPE '!'
-			)";
+			$searchCond .= " AND EXISTS (
+			SELECT 1
+			FROM user_circle UC
+			WHERE UC.user_id = SK.user_id
+			AND UC.circle_id IN ($circleIds)
+		)";
 		}
 
-		// SQL parts
-		$table = 'safe_keeping SK, user U';
-		$field = 'SK.id, SK.user_id, U.first_name, U.last_name, U.email, SK.amount, SK.amount_total, SK.created_at, SK.request_status';
-		$fullWhere = "SK.user_id = U.user_id AND U.status != '2' AND SK.group_id != 34 AND SK.requested_by = 'user' $searchCond";
+		/* Search Filter */
+		$search = !empty($_REQUEST['search'])
+			? $this->db->escape_like_str(trim($_REQUEST['search']))
+			: '';
 
-		// Group by (optional)
-		$groupBy = '';
-		$options = [
+		if (!empty($search)) {
+			$searchCond .= " AND (
+			U.first_name LIKE '%{$search}%'
+			OR U.last_name LIKE '%{$search}%'
+			OR U.email LIKE '%{$search}%'
+		)";
+		}
+
+		$table = 'safe_keeping SK, user U';
+
+		$field = '
+			SK.id,
+			SK.user_id,
+			U.first_name,
+			U.last_name,
+			U.email,
+			SK.amount,
+			SK.amount_total,
+			SK.created_at,
+			SK.request_status
+		';
+
+		$fullWhere = "
+			SK.user_id = U.user_id
+			AND U.status != '2'
+			AND SK.group_id != 34
+			AND SK.requested_by = 'user'
+			$searchCond
+		";
+
+		/* Listing */
+		$options = array(
 			'field' => $field,
 			'limit' => $limit,
 			'offset' => $start,
-			'sort_by' => 'created_at',
-			'sort_direction' => 'desc',
-		];
-		if (!empty($groupBy)) {
-			$options['group_by'] = $groupBy;
-		}
+			'sort_by' => 'SK.created_at',
+			'sort_direction' => 'DESC'
+		);
 
-		// Fetch data
-		$resultList = $this->common->getData($table, $fullWhere, $options);
+		$resultList = $this->common->getData(
+			$table,
+			$fullWhere,
+			$options
+		);
 
-		// Count total
-		$totalOptions = ['count'];
-		if (!empty($groupBy)) {
-			$totalOptions['group_by'] = $groupBy;
-		}
-		$resultCountData = $this->common->getData($table, $fullWhere, $totalOptions);
-		$resultCount = is_array($resultCountData) ? count($resultCountData) : 0;
+		/* Count */
+		$resultCountData = $this->common->getData(
+			$table,
+			$fullWhere,
+			array('field' => 'SK.id')
+		);
 
-		// Add serial numbers
+		$resultCount = !empty($resultCountData)
+			? count($resultCountData)
+			: 0;
+
+		/* Serial Number */
 		$countData = $start + 1;
+
 		if (!empty($resultList)) {
+
 			foreach ($resultList as &$row) {
 				$row['sno'] = $countData++;
 			}
-			$this->response(true, "Data fetched successfully.", [
+
+			$this->response(true, "Data fetched successfully.", array(
 				"lists" => $resultList,
 				"listCount" => $resultCount
-			]);
+			));
 		} else {
-			$this->response(true, "No data found.", [
-				"lists" => [],
-				"listCount" => 0
-			]);
+
+			$this->response(true, "No data found.", array(
+				"lists" => array(),
+				"listCount" => $resultCount
+			));
 		}
 	}
 
@@ -6032,6 +6389,43 @@ class Admin extends Base_Controller
 
 
 
+	// public function investment_request_list()
+	// {
+	// 	// limit code start
+	// 	if (empty($_REQUEST['start'])) {
+	// 		$start = 10;
+	// 		$end = 0;
+	// 	} else {
+	// 		$start = 10;
+	// 		$end = $_REQUEST['start'];
+	// 	}
+	// 	// limit code end
+
+	// 	$where = 'U.status != 2';
+	// 	if (!empty($_REQUEST['group_ids'])) {
+	// 		$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+	// 		$groupIds = implode(',', $groupIds);
+	// 		$where .= " AND IR.group_id IN ($groupIds)";
+	// 	}
+
+	// 	$result = $this->user_model->investment_request_detail($where, array(), $start, $end);
+	// 	$resultCount = $this->user_model->investment_request_detail($where, array('count'));
+
+	// 	$countData = $end;
+	// 	$countData++;
+	// 	if (!empty($result)) {
+
+	// 		foreach ($result as $key => $value) {
+	// 			$result[$key]['sno'] = $countData++;
+	// 		}
+
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount));
+	// 	} else {
+	// 		$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
+	// 	}
+	// }
+
+	// created by @krishn on 19-06-26
 	public function investment_request_list()
 	{
 		// limit code start
@@ -6044,31 +6438,72 @@ class Admin extends Base_Controller
 		}
 		// limit code end
 
-		$where = 'U.status != 2';
+		$where = "U.status != 2";
+
+		/* Group Filter */
 		if (!empty($_REQUEST['group_ids'])) {
+
 			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
 			$groupIds = implode(',', $groupIds);
+
 			$where .= " AND IR.group_id IN ($groupIds)";
 		}
 
-		$result = $this->user_model->investment_request_detail($where, array(), $start, $end);
-		$resultCount = $this->user_model->investment_request_detail($where, array('count'));
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+
+			$circleIds = array_map('intval', explode(',', $_REQUEST['circle_ids']));
+			$circleIds = implode(',', $circleIds);
+
+			$where .= " AND EXISTS (
+			SELECT 1
+			FROM user_circle UC
+			WHERE UC.user_id = IR.user_id
+			AND UC.circle_id IN ($circleIds)
+		)";
+		}
+
+		$result = $this->user_model->investment_request_detail(
+			$where,
+			array(),
+			$start,
+			$end
+		);
+
+		$resultCount = $this->user_model->investment_request_detail(
+			$where,
+			array('count')
+		);
 
 		$countData = $end;
 		$countData++;
+
 		if (!empty($result)) {
 
 			foreach ($result as $key => $value) {
 				$result[$key]['sno'] = $countData++;
 			}
 
-			$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount));
+			$this->response(
+				true,
+				"Data fetch Successfully.",
+				array(
+					"lists" => $result,
+					"listCount" => $resultCount
+				)
+			);
 		} else {
-			$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
+
+			$this->response(
+				true,
+				"Data fetch Successfully.",
+				array(
+					"lists" => array(),
+					"listCount" => $resultCount
+				)
+			);
 		}
 	}
-
-
 
 	public function all_user_list()
 	{
@@ -6890,9 +7325,19 @@ class Admin extends Base_Controller
 		$where = "P.requested_by = 'user'";
 
 		if (!empty($_REQUEST['group_ids'])) {
-			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
-			$groupIds = implode(',', $groupIds);
-			$where .= " AND P.group_id IN ($groupIds)";
+			$group_ids = explode(',', $_REQUEST['group_ids']);
+			$group_ids = array_map('trim', $group_ids);
+			$group_ids = array_map('intval', $group_ids);
+
+			$where .= " AND P.group_id IN (" . implode(',', $group_ids) . ")";
+		}
+
+		if (!empty($_REQUEST['circle_ids'])) {
+			$circle_ids = explode(',', $_REQUEST['circle_ids']);
+			$circle_ids = array_map('trim', $circle_ids);
+			$circle_ids = array_map('intval', $circle_ids);
+
+			$where .= " AND UC.circle_id IN (" . implode(',', $circle_ids) . ")";
 		}
 
 		$payout = $this->user_model->payout_detail($where, array(), $start, $end);
@@ -7454,13 +7899,18 @@ class Admin extends Base_Controller
 			$totalDebitpfAmount = $this->common->getData('pf_user', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'payment_type' => '1'), array("field" => 'sum(pf_amount) as pf_total_amount, sum(pf_interest_amount) as pf_interest', "single"));
 
 			$creditPfAmount = (float)($totalCreditpfAmount['pf_total_amount'] ?? 0);
+			$debitPfAmount  = (float)($totalDebitpfAmount['pf_total_amount'] ?? 0);
+
 			$creditPfInterest = (float)($totalCreditpfAmount['pf_interest'] ?? 0);
-			$debitPfAmount = (float)($totalDebitpfAmount['pf_total_amount'] ?? 0);
-			$debitPfInterest = (float)($totalDebitpfAmount['pf_interest'] ?? 0);
+			$debitPfInterest  = (float)($totalDebitpfAmount['pf_interest'] ?? 0);
 
-			$pfAmount = ($creditPfAmount + $creditPfInterest) - ($debitPfAmount + $debitPfInterest);
+			// Same logic as user panel
+			$pfAmount = $creditPfAmount - $debitPfAmount;
 
-			$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount, 'pfAmount' => $pfAmount));
+			// Keep interest separate
+			$pfInterest = $creditPfInterest - $debitPfInterest;
+
+			$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount, 'pfAmount' => $pfAmount, 'pfInterest' => $pfInterest));
 		} else {
 			$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount, 'pfAmount' => 0));
 		}
@@ -8418,10 +8868,15 @@ class Admin extends Base_Controller
 
 		$creditPfAmount = (float)($totalCreditpfAmount['pf_total_amount'] ?? 0);
 		$creditPfInterest = (float)($totalCreditpfAmount['pf_interest'] ?? 0);
+
 		$debitPfAmount = (float)($totalDebitpfAmount['pf_total_amount'] ?? 0);
 		$debitPfInterest = (float)($totalDebitpfAmount['pf_interest'] ?? 0);
 
-		$avgAmountPf = ($creditPfAmount + $creditPfInterest) - ($debitPfAmount + $debitPfInterest);
+		// PF Amount (excluding interest)
+		$avgAmountPf = $creditPfAmount - $debitPfAmount;
+
+		// PF Interest (kept separate if needed)
+		$pfInterest = $creditPfInterest - $debitPfInterest;
 
 
 
@@ -8438,7 +8893,8 @@ class Admin extends Base_Controller
 			'Miscellaneous' => (string)$avgMiscellaneous,
 			'Emergencyloan' => (string)'-' . $avgAmountEmergencyLoan,
 			'avgwelfare' => (string)$avgwelfareAmount,
-			'avgAmountPf' => (string)$avgAmountPf
+			'avgAmountPf' => (string)$avgAmountPf,
+			'pfInterest' => (string)$pfInterest
 		));
 	}
 
@@ -10783,10 +11239,14 @@ class Admin extends Base_Controller
 
 		if (!empty($_REQUEST['date_range'])) {
 			$date_range = explode(',', $_REQUEST['date_range']);
-			if (count($date_range) === 2) {
+			if (count($date_range) == 2) {
 				$startDate = trim($date_range[0]);
-				$endDate = trim($date_range[1]);
-				$searchCond .= " AND DATE($createdAtAlias.created_at) BETWEEN '$startDate' AND '$endDate'";
+				$endDate   = trim($date_range[1]);
+				if ($type == 'saving' || $type == 'saving_pending') {
+					$searchCond .= " AND DATE(UGL.date) BETWEEN '$startDate' AND '$endDate'";
+				} else {
+					$searchCond .= " AND DATE($createdAtAlias.created_at) BETWEEN '$startDate' AND '$endDate'";
+				}
 			}
 		}
 
@@ -11076,6 +11536,52 @@ class Admin extends Base_Controller
 
 		// Merge all data
 		$mergedData = array_merge($allLoan, $allSaving, $allMiscellaneous);
+
+		/* Group Filter */
+		if (!empty($_REQUEST['group_ids'])) {
+
+			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+
+			$mergedData = array_filter($mergedData, function ($item) use ($groupIds) {
+
+				return (
+					isset($item['group_id']) &&
+					in_array((int)$item['group_id'], $groupIds)
+				);
+			});
+		}
+
+
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+
+			$circleIds = array_map('intval', explode(',', $_REQUEST['circle_ids']));
+
+			$mergedData = array_filter($mergedData, function ($item) use ($circleIds) {
+
+				if (empty($item['user_id'])) {
+					return false;
+				}
+
+				$userCircles = $this->common->getData(
+					'user_circle',
+					array('user_id' => $item['user_id'])
+				);
+
+				if (empty($userCircles)) {
+					return false;
+				}
+
+				foreach ($userCircles as $circle) {
+
+					if (in_array((int)$circle['circle_id'], $circleIds)) {
+						return true;
+					}
+				}
+
+				return false;
+			});
+		}
 
 		// Strict Type Filter: only allow loan/saving/miscellaneous
 		if (isset($_REQUEST['type'])) {
@@ -11788,5 +12294,81 @@ class Admin extends Base_Controller
 		}
 
 		$this->response(true, "Reminder sent successfully.");
+	}
+
+	// API created by @krishn on 18/06/26
+	public function sendOutstandingPaymentReminder()
+	{
+		if (
+			empty($_REQUEST['user_id']) ||
+			empty($_REQUEST['type']) ||
+			empty($_REQUEST['amount']) ||
+			empty($_REQUEST['date'])
+		) {
+
+			$this->response(false, "Required fields are missing.");
+			return;
+		}
+
+		$user_id = $_REQUEST['user_id'];
+		$type = ucfirst(strtolower(trim($_REQUEST['type'])));
+		$amount = $_REQUEST['amount'];
+		$date = $_REQUEST['date'];
+
+		$user = $this->common->getData(
+			'user',
+			['user_id' => $user_id],
+			['single']
+		);
+
+		if (empty($user)) {
+			$this->response(false, "User not found.");
+			return;
+		}
+
+		$month = date('F Y', strtotime($date));
+
+		$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+		$data['useremail'] = '';
+
+		$data['message'] = '
+
+		<p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
+
+		<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
+			<tr>
+				<td><strong>Payment Type</strong></td>
+				<td>' . $type . '</td>
+			</tr>
+			<tr>
+				<td><strong>Outstanding Amount</strong></td>
+				<td>£' . number_format($amount, 2) . '</td>
+			</tr>
+			<tr>
+				<td><strong>Overdue Month</strong></td>
+				<td>' . $month . '</td>
+			</tr>
+		</table>
+
+		<p>Please make the payment at your earliest convenience to avoid any disruption to your Interfriends benefits.</p>
+
+		<p>If you have already made this payment, kindly ignore this email.</p>';
+
+		$subject = "Outstanding Payment Reminder";
+		$messaged = $this->load->view('template/common-mail', $data, true);
+
+		$mail = $this->sendMail($user['email'], $subject, $messaged);
+
+		if ($mail) {
+
+			$message = "Outstanding payment reminder sent.";
+
+			$this->send_nofification($user_id, 1, 0, $message, 0, "11");
+
+			$this->response(true, "Reminder email sent successfully.");
+		} else {
+
+			$this->response(false, "Unable to send reminder email.");
+		}
 	}
 }
