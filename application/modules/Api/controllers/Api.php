@@ -791,13 +791,12 @@ class Api extends Base_Controller
 			// ==========================
 			// Send Email to Admin
 			// ==========================
-
-			$adminEmail = "krishn.ctinfotech@gmail.com"; // Replace with actual admin email if needed
+			$superAdmin = $this->common->getData('superAdmin', ['admin_type' => '2'], ['single']);
 
 			$subject = "New User Interested in Joining Interfriends";
 
 			$messaged1 = "
-			Hello Admin,<br><br>
+			Hello " . $superAdmin['name'] . ",<br><br>
 
 			A new user has expressed interest in joining Interfriends.<br><br>
 
@@ -810,7 +809,7 @@ class Api extends Base_Controller
 			Thank you.
 		";
 
-			$this->sendMail($adminEmail, $subject, $messaged1);
+			$this->sendMail($superAdmin['email'], $subject, $messaged1);
 
 			// ==========================
 			// Send Admin Notification
@@ -2053,7 +2052,8 @@ class Api extends Base_Controller
 		$data = array('name' => $_REQUEST['name'], 'email' => $_REQUEST['email'], 'mobile' => $_REQUEST['mobile_number'], 'message' => $_REQUEST['message']);
 		$message = $this->load->view('template/contact-mail', $data, true);
 
-		$toMail = 'interfriendscu@gmail.com';
+		$superAdmin = $this->common->getData('superAdmin', ['admin_type' => '2'], ['single']);
+		$toMail = $superAdmin['email'];
 		$mail = $this->sendMail($toMail, 'Contact Us', $message);
 		if (!$mail) {
 			$this->response(false, "Mail Not delivered");
@@ -2068,7 +2068,8 @@ class Api extends Base_Controller
 		$data = array('name' => $_REQUEST['name'], 'type' => $_REQUEST['type'], 'message' => $_REQUEST['message']);
 		$message = $this->load->view('template/help-mail', $data, true);
 
-		$toMail = 'interfriendscu@gmail.com';
+		$superAdmin = $this->common->getData('superAdmin', ['admin_type' => '2'], ['single']);
+		$toMail = $superAdmin['email'];
 		$mail = $this->sendMail($toMail, 'Help', $message);
 		if (!$mail) {
 			$this->response(false, "Mail Not delivered");

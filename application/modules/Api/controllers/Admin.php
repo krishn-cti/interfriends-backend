@@ -4513,7 +4513,7 @@ class Admin extends Base_Controller
 			$this->common->updateData('superAdmin', array('token' => $data['token']), array('id' => $data['id']));
 			$message = $this->load->view('template/reset-mail-superAdmin', $data, true);
 
-			$mail = $this->sendMail($_REQUEST['email'], 'Forget Password', $message);
+			$mail = $this->sendMail($_REQUEST['email'], 'Forgot Password', $message);
 
 			if ($mail) {
 				$this->response(true, "Thank you, You will receive an e-mail in the next 5 minutes with instructions for resetting your password. If you Don't receive this e-mail, please check your junk mail folder or contact us for further assistance.");
