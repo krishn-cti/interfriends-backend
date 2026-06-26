@@ -71,77 +71,15 @@ class Admin extends Base_Controller
 		]);
 	}
 
-
-	// 	public function dashbaord() {	
-	// 	    ini_set('display_errors', 1);
-	// 		$userCount = $this->common->getData('user','',array('count'));
-	// 		$investment = $this->common->getData('investment', array(), array("field" => 'IFNULL(sum(amount),0) as total',"single"));
-	// 		$payout = $this->common->getData('payout_cycle', array(), array("field" => 'IFNULL(sum(payout_amount),0) as total',"single"));
-	// 		$pf = $this->common->getData('pf_user', array('payment_type'=>'2'), array("field" => 'IFNULL(sum(pf_amount),0) as total',"single"));
-	// 		$pfInterest = $this->common->getData('pf_user', array('payment_type'=>'2'), array("field" => 'IFNULL(sum(pf_interest_amount),0) as total',"single"));
-
-	// 		$safeKeeping = $this->common->getData('safe_keeping', array('pyment_type'=>'2'), array("field" => 'IFNULL(sum(amount),0) as total',"single"));
-
-
-	// 		$emergency_loan_completed = $this->common->getData('user_emergency_loan', array('status'=>'2'), array("field" => 'IFNULL(sum(loan_amount),0) as total',"single"));
-
-	// 		$emergency_loan_active = $this->common->getData('user_emergency_loan', array('status'=>'4'), array("field" => 'IFNULL(sum(loan_amount),0) as total',"single"));
-
-
-	// 		$cycle_pending = $this->common->getData('user_group_lifecycle', array('status'=>'1'), array("field" => 'IFNULL(sum(amount),0) as total',"single"));
-
-	// 		$whereCycle = "status != 1";
-	// 		$cycle = $this->common->getData('user_group_lifecycle',$whereCycle, array("field" => 'IFNULL(sum(amount),0) as total',"single"));
-
-
-	// 		$loan_completed = $this->common->getData('user_loan', array('status'=>'2'), array("field" => 'IFNULL(sum(loan_amount),0) as total',"single"));
-
-	// 		$loan_active = $this->common->getData('user_loan', array('status'=>'4'), array("field" => 'IFNULL(sum(loan_amount),0) as total',"single"));
-
-	// 		$loan_paid_user = $this->common->getData('user_loan_payment', array(), array("field" => 'IFNULL(sum(amount),0) as total',"single"));
-
-	// 		$group_list = $this->user_model->group_detail(array(),array(),"","");
-	// 		$group_data = array();
-	//         if(!empty($group_list)){
-	//         	foreach ($group_list as $key => $value) {
-
-	// 				$where = "UG.group_id = '". $value['id'] ."'";
-	// 	      		$userCount = $this->user_model->user_group_detail($where,array('count'));
-	//         		$value['usercount'] = $userCount;
-	//         		$group_data[] = $value;
-	//         	}
-	//         }
-	//         $savingJnrTotal = $this->savingJnrTotal();
-
-
-	//         $loan_help_to_buycar = $this->common->getData('user_loan', array('status'=>'2','loan_type'=>'3'), array("field" => 'IFNULL(sum(loan_amount),0) as total',"single"));
-
-
-	//         $loan_help_to_buyHSc = $this->common->getData('user_loan', array('status'=>'2','loan_type'=>'6'), array("field" => 'IFNULL(sum(loan_amount),0) as total',"single"));
-
-
-
-	// 		$cyclewelfare = $this->common->getData('user_group_lifecycle',array('status'=>'2','groupLifecycle_id'=>'147'), array("field" => 'IFNULL(sum(amount),0) as total',"single"));
-
-
-
-	// 		$info = array('userCount' => $userCount,'investment' => $investment['total'],'payout' => $payout['total'],'pf' => $pf['total'],
-	// 		'pfInterest' => $pfInterest['total'],'safeKeeping' => $safeKeeping['total'],
-	// 		'emergency_loan_completed' => $emergency_loan_completed['total'],'emergency_loan_active' => $emergency_loan_active['total'],
-	// 		'cycle_pending' => $cycle_pending['total'],'cycle' => $cycle['total'],'loan_completed' => $loan_completed['total'],
-	// 		'loan_active' => $loan_active['total'],'loan_paid_user' => $loan_paid_user['total'],
-	// 		"groups"=>$group_data,'helptobuycar'=>$loan_help_to_buycar['total'],'savingJnrTotal'=>(string)$savingJnrTotal,
-	// 		'help_to_buyHSc'=>(string)$loan_help_to_buyHSc['total'],"totalwelfare"=>$cyclewelfare['total'] );
-
-	// 		$this->response(true,'Dashboard fetch Successfully', array('info'=>$info));
-
-	// 	}
-
 	// created by @krishn on 03-06-25
 	public function dashboard_row_one()
 	{
 		ini_set('display_errors', 1);
 		$userCount = $this->common->getData('user', '', array('count'));
+
+		$activeUserCount = $this->common->getData('user', array('status' => '1'), array('count'));
+
+		$blockedUserCount = $this->common->getData('user', array('status' => '2'), array('count'));
 
 		$investment = $this->common->getData('investment I, user U', "I.user_id = U.user_id AND U.status != '2' AND I.group_id != 34", array("field" => 'IFNULL(sum(amount),0) as total', "single"));
 
@@ -157,6 +95,8 @@ class Admin extends Base_Controller
 
 		$info = array(
 			'userCount' => $userCount,
+			'activeUserCount' => $activeUserCount,
+			'blockedUserCount' => $blockedUserCount,
 			'investment' => $investment['total'],
 			'payout' => $payout['total'],
 			'pf' => $pf['total'],
@@ -3522,7 +3462,8 @@ class Admin extends Base_Controller
 				$this->paymentByPF($id, $_REQUEST['amount'], '3');
 			}
 
-			$cycle_name = 'Miscellaneous Payment';
+			$miscellaneousDetail = $this->common->getData('user_miscellaneous', array("id" => $_REQUEST['loan_id']), array('single'));
+			$cycle_name = $miscellaneousDetail['title'] == '' ? 'Miscellaneous Payment' : $miscellaneousDetail['title'];
 
 			$data["status"] = '#N/A';
 			if ($_REQUEST['status'] == '1') {
@@ -3800,19 +3741,83 @@ class Admin extends Base_Controller
 		return "Help2 Buy(property)";
 	}
 
+	// private function addLoanEmiPayments($loan)
+	// {
+	// 	if (empty($loan) || empty($loan['id'])) {
+	// 		return false;
+	// 	}
+
+	// 	$existingPayments = $this->common->getData('user_loan_payment', array('loan_id' => $loan['id']));
+	// 	if (!empty($existingPayments)) {
+	// 		return true;
+	// 	}
+
+	// 	$tenure = !empty($loan['tenure']) ? (int)$loan['tenure'] : 0;
+	// 	$emiAmount = !empty($loan['loan_emi']) ? $loan['loan_emi'] : 0;
+
+	// 	if (empty($emiAmount) && !empty($loan['total_payment']) && $tenure > 0) {
+	// 		$emiAmount = $loan['total_payment'] / $tenure;
+	// 	}
+
+	// 	if (empty($emiAmount) && !empty($loan['loan_amount']) && $tenure > 0) {
+	// 		$emiAmount = $loan['loan_amount'] / $tenure;
+	// 	}
+
+	// 	if ($tenure <= 0 || empty($emiAmount)) {
+	// 		return false;
+	// 	}
+
+	// 	$paymentDate = !empty($loan['start_date']) ? $loan['start_date'] : date('Y-m-d');
+
+	// 	for ($month = 1; $month <= $tenure; $month++) {
+	// 		$payment = array(
+	// 			'loan_id' => $loan['id'],
+	// 			'user_id' => $loan['user_id'],
+	// 			'group_id' => $loan['group_id'],
+	// 			'amount' => $emiAmount,
+	// 			'payment_method' => '0',
+	// 			'status' => 0,
+	// 			'month' => $month,
+	// 			'date' => $paymentDate,
+	// 			'created_at' => date('Y-m-d H:i:s')
+	// 		);
+
+	// 		$post = $this->common->getField('user_loan_payment', $payment);
+	// 		$result = $this->common->insertData('user_loan_payment', $post);
+
+	// 		if (!$result) {
+	// 			return false;
+	// 		}
+
+	// 		$paymentDate = date("Y-m-d", strtotime("+1 month", strtotime($paymentDate)));
+	// 	}
+
+	// 	return true;
+	// }
+
+	// created by @krishn on 26-06-26
 	private function addLoanEmiPayments($loan)
 	{
 		if (empty($loan) || empty($loan['id'])) {
 			return false;
 		}
 
-		$existingPayments = $this->common->getData('user_loan_payment', array('loan_id' => $loan['id']));
+		$existingPayments = $this->common->getData(
+			'user_loan_payment',
+			array('loan_id' => $loan['id'])
+		);
+
 		if (!empty($existingPayments)) {
 			return true;
 		}
 
-		$tenure = !empty($loan['tenure']) ? (int)$loan['tenure'] : 0;
-		$emiAmount = !empty($loan['loan_emi']) ? $loan['loan_emi'] : 0;
+		$tenure = !empty($loan['tenure'])
+			? (int)$loan['tenure']
+			: 0;
+
+		$emiAmount = !empty($loan['loan_emi'])
+			? $loan['loan_emi']
+			: 0;
 
 		if (empty($emiAmount) && !empty($loan['total_payment']) && $tenure > 0) {
 			$emiAmount = $loan['total_payment'] / $tenure;
@@ -3826,29 +3831,61 @@ class Admin extends Base_Controller
 			return false;
 		}
 
-		$paymentDate = !empty($loan['start_date']) ? $loan['start_date'] : date('Y-m-d');
+
+		$paymentDate = !empty($loan['start_date'])
+			? $loan['start_date']
+			: date('Y-m-d');
+
+		$day = date('d', strtotime($paymentDate));
+
 
 		for ($month = 1; $month <= $tenure; $month++) {
+
 			$payment = array(
-				'loan_id' => $loan['id'],
-				'user_id' => $loan['user_id'],
-				'group_id' => $loan['group_id'],
-				'amount' => $emiAmount,
-				'payment_method' => '0',
-				'status' => 0,
-				'month' => $month,
-				'date' => $paymentDate,
-				'created_at' => date('Y-m-d H:i:s')
+				'loan_id'         => $loan['id'],
+				'user_id'         => $loan['user_id'],
+				'group_id'        => $loan['group_id'],
+				'amount'          => $emiAmount,
+				'payment_method'  => 0,
+				'status'          => 0,
+				'month'           => $month,
+				'emi_date'        => $paymentDate
 			);
 
-			$post = $this->common->getField('user_loan_payment', $payment);
-			$result = $this->common->insertData('user_loan_payment', $post);
+			$post = $this->common->getField(
+				'user_loan_payment',
+				$payment
+			);
+
+			$result = $this->common->insertData(
+				'user_loan_payment',
+				$post
+			);
 
 			if (!$result) {
 				return false;
 			}
 
-			$paymentDate = date("Y-m-d", strtotime("+1 month", strtotime($paymentDate)));
+
+			/* Next EMI Date */
+
+			$nextMonth = strtotime("+1 month", strtotime($paymentDate));
+
+			$year = date('Y', $nextMonth);
+			$monthNo = date('m', $nextMonth);
+
+			$lastDay = cal_days_in_month(
+				CAL_GREGORIAN,
+				$monthNo,
+				$year
+			);
+
+			$emiDay = min($day, $lastDay);
+
+			$paymentDate = date(
+				'Y-m-d',
+				strtotime("$year-$monthNo-$emiDay")
+			);
 		}
 
 		return true;
@@ -3857,22 +3894,69 @@ class Admin extends Base_Controller
 	// updated by @krishn on 17-06-26
 	public function editLoan()
 	{
-		// ini_set('display_errors', 1);
 		$id = $_REQUEST['id'];
 		unset($_REQUEST['id']);
 
-		if ($_REQUEST['status'] === '4') {
-			$loanInfo = $this->common->getData('user_loan', array('id' => $id), array('single'));
+		if (isset($_REQUEST['status']) && $_REQUEST['status'] == '4') {
+
+			$loanInfo = $this->common->getData(
+				'user_loan',
+				['id' => $id],
+				['single']
+			);
+
 			if (!empty($loanInfo)) {
-				$current_date = date('Y-m-d');
-				$end_date = strtotime("+" . $loanInfo['tenure'] . " month", strtotime($current_date));
-				$_REQUEST['end_date'] = date("Y-m-d", $end_date);
-				$_REQUEST['start_date'] = $current_date;
+
+				$startDate = !empty($_REQUEST['start_date'])
+					? $_REQUEST['start_date']
+					: date('Y-m-d');
+
+				$tenure = (int)$loanInfo['tenure'];
+
+				// Start date always saved
+				$_REQUEST['start_date'] = $startDate;
+
+				// Calculate end date keeping same day as start date
+				$originalDay = (int)date('d', strtotime($startDate));
+
+				$date = new DateTime($startDate);
+
+				// Last installment month
+				$date->modify('+' . ($tenure - 1) . ' month');
+
+				$year  = $date->format('Y');
+				$month = $date->format('m');
+
+				// Last day of that month
+				$lastDay = cal_days_in_month(
+					CAL_GREGORIAN,
+					$month,
+					$year
+				);
+
+				// Use original day if exists otherwise last day
+				$day = min($originalDay, $lastDay);
+
+				$_REQUEST['end_date'] = sprintf(
+					'%04d-%02d-%02d',
+					$year,
+					$month,
+					$day
+				);
 			}
 		}
 
-
 		$post = $this->common->getField('user_loan', $_REQUEST);
+
+		if (!empty($post)) {
+			$result = $this->common->updateData(
+				'user_loan',
+				$post,
+				['id' => $id]
+			);
+		} else {
+			$result = "";
+		}
 
 		if (!empty($post)) {
 			$result = $this->common->updateData('user_loan', $post, array('id' => $id));
@@ -8662,7 +8746,6 @@ class Admin extends Base_Controller
 	public function userTabsTotal()
 	{
 		//ini_set('display_errors', 1);
-		$user_id = $_REQUEST['user_id'];
 		$usercycle = 0;
 		$usercyclejnr = 0;
 		$usercyclehelp2buy = 0;
@@ -10276,9 +10359,97 @@ class Admin extends Base_Controller
 		}
 	}
 
+	// public function getCircleBygroupid()
+	// {
+	// 	//ini_set('display_errors', 1);
+	// 	if (empty($_POST['group_id'])) {
+	// 		$this->response(false, "Please enter your group id");
+	// 		die();
+	// 	}
+
+	// 	$circleIds = explode(",", $_POST['circle_ids']);
+
+	// 	if (!empty($_POST['circle_ids'])) {
+	// 		// When circle_ids is available
+	// 		$groupcircle = $this->common->getData(
+	// 			'group_circle',
+	// 			array('group_id' => $_POST['group_id']),
+	// 			array(
+	// 				'colname'  => 'id',
+	// 				'where_in' => $circleIds
+	// 			)
+	// 		);
+	// 	} else {
+	// 		// When circle_ids is NOT available
+	// 		$groupcircle = $this->common->getData(
+	// 			'group_circle',
+	// 			array('group_id' => $_POST['group_id']),
+	// 			array()
+	// 		);
+	// 	}
+
+	// 	$array = [];
+	// 	if ($groupcircle) {
+
+
+	// 		foreach ($groupcircle as $value) {
+	// 			$i = 0;
+	// 			$trustscore = 0;
+	// 			$usercircle = $this->common->getData('user_circle', array('circle_id' => $value['id'], 'circle_lead' => '1'), array('single'));
+
+	// 			$usercircle_dep = $this->common->getData('user_circle', array('circle_id' => $value['id'], 'deputycirclelead' => '1'), array('single'));
+
+	// 			$usercircledata = $this->common->getData('user_circle', array('circle_id' => $value['id']), array(''));
+	// 			if (!empty($usercircledata)) {
+	// 				foreach ($usercircledata as $value1) {
+	// 					$i++;
+	// 					$userinfo = get_user_details($value1['user_id']);
+	// 					if ($userinfo) {
+	// 						$trustscore += $userinfo['total_credit_score'];
+	// 					}
+	// 				}
+	// 			}
+	// 			if ($i != 0) {
+	// 				$value['trust_score'] = $trustscore / $i;
+	// 			} else {
+	// 				$value['trust_score'] = 0;
+	// 			}
+
+	// 			if ($usercircle_dep) {
+	// 				$userdeputy = $this->common->getData('user', array('user_id' => $usercircle_dep['user_id']), array('single'));
+	// 				if ($userdeputy) {
+	// 					$deputyname = $userdeputy['first_name'] . " " . $userdeputy['last_name'];
+	// 				} else {
+	// 					$deputyname = "";
+	// 				}
+	// 			} else {
+	// 				$deputyname = "";
+	// 			}
+	// 			if ($usercircle) {
+	// 				$user = $this->common->getData('user', array('user_id' => $usercircle['user_id']), array('single'));
+	// 				if ($user) {
+	// 					$name =  $user['first_name'] . " " . $user['last_name'];
+	// 				} else {
+	// 					$name = "";
+	// 				}
+	// 			} else {
+	// 				$name = "";
+	// 			}
+
+	// 			$value['deputy_lead_name'] = $deputyname;
+	// 			$value['circle_lead_name'] = $name;
+	// 			$array[] = $value;
+	// 		}
+
+	// 		$this->response(true, "Succesfully fetched circle!", array("data" => $array, "circle_lead" => ""));
+	// 	} else {
+	// 		$this->response(false, "Circle not found. Please check your details.");
+	// 	}
+	// }
+
+	// created by @krishn on 23-06-26
 	public function getCircleBygroupid()
 	{
-		//ini_set('display_errors', 1);
 		if (empty($_POST['group_id'])) {
 			$this->response(false, "Please enter your group id");
 			die();
@@ -10287,7 +10458,7 @@ class Admin extends Base_Controller
 		$circleIds = explode(",", $_POST['circle_ids']);
 
 		if (!empty($_POST['circle_ids'])) {
-			// When circle_ids is available
+
 			$groupcircle = $this->common->getData(
 				'group_circle',
 				array('group_id' => $_POST['group_id']),
@@ -10297,7 +10468,7 @@ class Admin extends Base_Controller
 				)
 			);
 		} else {
-			// When circle_ids is NOT available
+
 			$groupcircle = $this->common->getData(
 				'group_circle',
 				array('group_id' => $_POST['group_id']),
@@ -10306,60 +10477,104 @@ class Admin extends Base_Controller
 		}
 
 		$array = [];
+
 		if ($groupcircle) {
 
-
 			foreach ($groupcircle as $value) {
+
 				$i = 0;
 				$trustscore = 0;
-				$usercircle = $this->common->getData('user_circle', array('circle_id' => $value['id'], 'circle_lead' => '1'), array('single'));
 
-				$usercircle_dep = $this->common->getData('user_circle', array('circle_id' => $value['id'], 'deputycirclelead' => '1'), array('single'));
+				$usercircle = $this->common->getData(
+					'user_circle',
+					array(
+						'circle_id' => $value['id'],
+						'circle_lead' => '1'
+					),
+					array('single')
+				);
 
-				$usercircledata = $this->common->getData('user_circle', array('circle_id' => $value['id']), array(''));
+				$usercircle_dep = $this->common->getData(
+					'user_circle',
+					array(
+						'circle_id' => $value['id'],
+						'deputycirclelead' => '1'
+					),
+					array('single')
+				);
+
+				// Total members in the circle excluding recommended users and inactive users
+				$whereForMember = "UG.circle_id = '" . $value['id']	 . "'" . " AND UG.group_id = '" . $_POST['group_id'] . "'" . " AND U.status != '2'" . "AND U.recommended = '0'";
+				$usercircledata = $this->user_model->user_circle_detail($whereForMember, array());
+
+				$value['total_members'] = !empty($usercircledata) ? count($usercircledata) : 0;
+
 				if (!empty($usercircledata)) {
+
 					foreach ($usercircledata as $value1) {
+
 						$i++;
+
 						$userinfo = get_user_details($value1['user_id']);
+
 						if ($userinfo) {
 							$trustscore += $userinfo['total_credit_score'];
 						}
 					}
 				}
+
 				if ($i != 0) {
 					$value['trust_score'] = $trustscore / $i;
 				} else {
 					$value['trust_score'] = 0;
 				}
 
+
 				if ($usercircle_dep) {
-					$userdeputy = $this->common->getData('user', array('user_id' => $usercircle_dep['user_id']), array('single'));
-					if ($userdeputy) {
-						$deputyname = $userdeputy['first_name'] . " " . $userdeputy['last_name'];
-					} else {
-						$deputyname = "";
-					}
+
+					$userdeputy = $this->common->getData(
+						'user',
+						array('user_id' => $usercircle_dep['user_id']),
+						array('single')
+					);
+
+					$deputyname = $userdeputy
+						? $userdeputy['first_name'] . " " . $userdeputy['last_name']
+						: '';
 				} else {
-					$deputyname = "";
+
+					$deputyname = '';
 				}
+
+
 				if ($usercircle) {
-					$user = $this->common->getData('user', array('user_id' => $usercircle['user_id']), array('single'));
-					if ($user) {
-						$name =  $user['first_name'] . " " . $user['last_name'];
-					} else {
-						$name = "";
-					}
+
+					$user = $this->common->getData(
+						'user',
+						array('user_id' => $usercircle['user_id']),
+						array('single')
+					);
+
+					$name = $user
+						? $user['first_name'] . " " . $user['last_name']
+						: '';
 				} else {
-					$name = "";
+
+					$name = '';
 				}
+
 
 				$value['deputy_lead_name'] = $deputyname;
 				$value['circle_lead_name'] = $name;
+
 				$array[] = $value;
 			}
 
-			$this->response(true, "Succesfully fetched circle!", array("data" => $array, "circle_lead" => ""));
+			$this->response(true, "Succesfully fetched circle!", array(
+				"data" => $array
+			));
 		} else {
+
 			$this->response(false, "Circle not found. Please check your details.");
 		}
 	}
@@ -11178,13 +11393,18 @@ class Admin extends Base_Controller
 	public function getDownloadableData()
 	{
 		// ini_set('display_errors', 1);
+		// // limit code start
+		// if (empty($_REQUEST['start'])) {
+		// 	$start = 0;
+		// } else {
+		// 	$start = $_REQUEST['start'];
+		// }
+		// $limit = 200;
+		// // limit code end
+
 		// limit code start
-		if (empty($_REQUEST['start'])) {
-			$start = 0;
-		} else {
-			$start = $_REQUEST['start'];
-		}
-		$limit = 200;
+		$limit = !empty($_REQUEST['limit']) ? (int)$_REQUEST['limit'] : 200;
+		$start = !empty($_REQUEST['start']) ? (int)$_REQUEST['start'] : 0;
 		// limit code end
 
 		$search = !empty($_REQUEST['search']) ? $this->db->escape_like_str(trim($_REQUEST['search'])) : '';
@@ -11327,7 +11547,7 @@ class Admin extends Base_Controller
 
 			case 'loan_approved':
 				$table = 'user_loan UL, user U';
-				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND UL.loan_type = 1 $searchCond";
+				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND UL.loan_type = 1 AND UL.status = '4' $searchCond";
 				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, UL.loan_amount AS amount, UL.created_at';
 				break;
 
@@ -11417,7 +11637,7 @@ class Admin extends Base_Controller
 			case 'miscellaneous':
 				$table = 'user_miscellaneous UM, user U';
 				$fullWhere = "UM.user_id = U.user_id AND U.status != '2' and UM.group_id != 34 $searchCond";
-				$field = 'UM.user_id, U.first_name, U.last_name, U.email, UM.amount, UM.created_at';
+				$field = 'UM.user_id, UM.title, U.first_name, U.last_name, U.email, UM.amount, UM.created_at';
 				break;
 
 			case 'welfare_cycle':
@@ -11491,7 +11711,7 @@ class Admin extends Base_Controller
 
 		$countData = $start + 1;
 		foreach ($resultList as &$row) {
-			$row['type'] = $type;
+			$row['type'] = $type == 'miscellaneous' ? $row['title'] : $type;
 			$row['sno'] = $countData++;
 		}
 
@@ -11515,7 +11735,7 @@ class Admin extends Base_Controller
 		}
 
 		$where1 = "L.status = '1'";
-		$where2 = "status = 1";
+		$where2 = "status = '1'";
 		$where3 = "UM.user_id = '1'";
 
 		// Fetch all data first (no limit)
@@ -11584,16 +11804,42 @@ class Admin extends Base_Controller
 		}
 
 		// Strict Type Filter: only allow loan/saving/miscellaneous
+		// if (isset($_REQUEST['type'])) {
+		// 	$type = trim(strtolower(trim($_REQUEST['type'])));
+		// 	$allowedTypes = ['loan', 'saving', 'miscellaneous'];
+
+		// 	if (in_array($type, $allowedTypes, true)) {
+		// 		$mergedData = array_filter($mergedData, function ($item) use ($type) {
+		// 			return isset($item['type']) && strtolower($item['type']) === $type;
+		// 		});
+		// 	}
+		// 	// if type not in whitelist, no filter is applied
+		// }
+
+		/* Type Filter */
 		if (isset($_REQUEST['type'])) {
-			$type = trim(strtolower(trim($_REQUEST['type'])));
+
+			$type = trim(strtolower($_REQUEST['type']));
 			$allowedTypes = ['loan', 'saving', 'miscellaneous'];
 
-			if (in_array($type, $allowedTypes, true)) {
+			// If type key comes but value is blank
+			if ($type == '') {
+
+				$mergedData = [];
+			} elseif (in_array($type, $allowedTypes, true)) {
+
 				$mergedData = array_filter($mergedData, function ($item) use ($type) {
-					return isset($item['type']) && strtolower($item['type']) === $type;
+
+					return (
+						isset($item['type']) &&
+						strtolower($item['type']) == $type
+					);
 				});
+			} else {
+
+				// Invalid type
+				$mergedData = [];
 			}
-			// if type not in whitelist, no filter is applied
 		}
 
 		// Date Range Filter
@@ -11660,18 +11906,90 @@ class Admin extends Base_Controller
 			});
 		}
 
-		// Reset indexes after filtering
+		// // Reset indexes after filtering
+		// $mergedData = array_values($mergedData);
+		// $mergedCount = count($mergedData);
+
+		// // Pagination
+		// $paginatedData = array_slice($mergedData, $end, $start);
+
+		// Sort data by date DESC
+		// Sort by latest date DESC
+		usort($mergedData, function ($a, $b) {
+
+			// Saving records should use `date`
+			if (
+				isset($a['type']) &&
+				$a['type'] == 'saving' &&
+				!empty($a['date'])
+			) {
+				$dateA = strtotime($a['date']);
+			} else {
+				$dateA = !empty($a['created_at'])
+					? strtotime($a['created_at'])
+					: 0;
+			}
+
+
+			// Saving records should use `date`
+			if (
+				isset($b['type']) &&
+				$b['type'] == 'saving' &&
+				!empty($b['date'])
+			) {
+				$dateB = strtotime($b['date']);
+			} else {
+				$dateB = !empty($b['created_at'])
+					? strtotime($b['created_at'])
+					: 0;
+			}
+
+
+			// Descending order
+			if ($dateA == $dateB) {
+				return 0;
+			}
+
+			return ($dateA < $dateB) ? 1 : -1;
+		});
+
+
+		// Reset indexes
 		$mergedData = array_values($mergedData);
+
 		$mergedCount = count($mergedData);
 
-		// Pagination
-		$paginatedData = array_slice($mergedData, $end, $start);
 
+		// Pagination
+		$paginatedData = array_slice(
+			$mergedData,
+			$end,
+			$start
+		);
 		// Append user_info and SNO
 		$sno = $end + 1;
+		// foreach ($paginatedData as $key => &$value) {
+		// 	$value['sno'] = $sno++;
+		// 	$value['user_info'] = get_user_details($value['user_id']);
+		// }
+
 		foreach ($paginatedData as $key => &$value) {
+
+			// Saving records should expose date in created_at
+			if (
+				isset($value['type']) &&
+				$value['type'] == 'saving' &&
+				!empty($value['date'])
+			) {
+
+				$value['created_at'] = $value['date'];
+			}
+
 			$value['sno'] = $sno++;
-			$value['user_info'] = get_user_details($value['user_id']);
+
+			$value['user_info'] = get_user_details(
+				$value['user_id']
+			);
 		}
 
 		$this->response(true, "Missed Payment Data fetched successfully.", array(
@@ -12038,6 +12356,104 @@ class Admin extends Base_Controller
 	}
 
 	// API created by @krishn on 16/06/26
+	// public function updateInvestmentRequestStatus()
+	// {
+	// 	if (empty($_REQUEST['request_id'])) {
+	// 		$this->response(false, "Request ID is required.");
+	// 		return;
+	// 	}
+
+	// 	if (!isset($_REQUEST['status'])) {
+	// 		$this->response(false, "Status is required.");
+	// 		return;
+	// 	}
+
+	// 	$requestId = $_REQUEST['request_id'];
+	// 	$status = (int)$_REQUEST['status'];
+
+	// 	// Only Approve or Reject
+	// 	if (!in_array($status, [1, 2])) {
+	// 		$this->response(false, "Invalid status.");
+	// 		return;
+	// 	}
+
+	// 	// Check request exists
+	// 	$request = $this->common->getData(
+	// 		'investment_request',
+	// 		['id' => $requestId],
+	// 		['single']
+	// 	);
+
+	// 	if (empty($request)) {
+	// 		$this->response(false, "Investment request not found.");
+	// 		return;
+	// 	}
+
+	// 	// Update request status
+	// 	$updateData = array(
+	// 		'status' => $status
+	// 	);
+
+	// 	$result = $this->common->updateData(
+	// 		'investment_request',
+	// 		$updateData,
+	// 		['id' => $requestId]
+	// 	);
+
+	// 	if ($result) {
+
+	// 		// If Approved, insert into investment table
+	// 		if ($status == 1) {
+
+	// 			$investmentData = array(
+	// 				'user_id'          => $request['user_id'],
+	// 				'group_id'         => $request['group_id'],
+	// 				'property_id'      => $request['property_id'],
+	// 				'amount'           => $request['amount'],
+
+	// 				'investment_type' => 1, // Property
+	// 				'payment_status'  => 2, // Invest
+	// 				'status'          => 1, // Unblock
+	// 				'payment_method'  => 1, // Normal
+
+	// 				'description'      => $_REQUEST['description'] ?? 'Approved by Admin',
+	// 				'note_title'       => $_REQUEST['note_title'] ?? '',
+	// 				'note_description' => $_REQUEST['note_description'] ?? '',
+
+	// 				'created_at'       => date('Y-m-d H:i:s')
+	// 			);
+
+	// 			$this->common->insertData('investment', $investmentData);
+	// 		}
+
+	// 		// Notification message
+	// 		$message = ($status == 1)
+	// 			? "Your investment request has been approved."
+	// 			: "Your investment request has been rejected.";
+
+	// 		// Send notification to user
+	// 		$this->send_nofification(
+	// 			$request['user_id'],
+	// 			$_REQUEST['admin_id'],
+	// 			$request['group_id'],
+	// 			$message,
+	// 			$requestId,
+	// 			"11"
+	// 		);
+
+	// 		$this->response(
+	// 			true,
+	// 			($status == 1)
+	// 				? "Investment request approved successfully."
+	// 				: "Investment request rejected successfully."
+	// 		);
+	// 	} else {
+
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
+	// updated by @krishn on 23/06/26
 	public function updateInvestmentRequestStatus()
 	{
 		if (empty($_REQUEST['request_id'])) {
@@ -12050,8 +12466,8 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		$requestId = $_REQUEST['request_id'];
-		$status = (int)$_REQUEST['status'];
+		$requestId = (int)$_REQUEST['request_id'];
+		$status    = (int)$_REQUEST['status'];
 
 		// Only Approve or Reject
 		if (!in_array($status, [1, 2])) {
@@ -12059,7 +12475,7 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		// Check request exists
+		// Get request details
 		$request = $this->common->getData(
 			'investment_request',
 			['id' => $requestId],
@@ -12071,20 +12487,16 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		// Update request status
-		$updateData = array(
-			'status' => $status
-		);
-
+		// Update status
 		$result = $this->common->updateData(
 			'investment_request',
-			$updateData,
+			['status' => $status],
 			['id' => $requestId]
 		);
 
 		if ($result) {
 
-			// If Approved, insert into investment table
+			// Insert into investment table when approved
 			if ($status == 1) {
 
 				$investmentData = array(
@@ -12093,10 +12505,10 @@ class Admin extends Base_Controller
 					'property_id'      => $request['property_id'],
 					'amount'           => $request['amount'],
 
-					'investment_type' => 1, // Property
-					'payment_status'  => 2, // Invest
-					'status'          => 1, // Unblock
-					'payment_method'  => 1, // Normal
+					'investment_type'  => 1,
+					'payment_status'   => 2,
+					'status'           => 1,
+					'payment_method'   => 1,
 
 					'description'      => $_REQUEST['description'] ?? 'Approved by Admin',
 					'note_title'       => $_REQUEST['note_title'] ?? '',
@@ -12108,12 +12520,44 @@ class Admin extends Base_Controller
 				$this->common->insertData('investment', $investmentData);
 			}
 
-			// Notification message
-			$message = ($status == 1)
-				? "Your investment request has been approved."
-				: "Your investment request has been rejected.";
 
-			// Send notification to user
+			/*---------------------------------------
+			| User Information
+			---------------------------------------*/
+			$user = $this->common->getData('user', array('user_id' => $request['user_id']), array('single'));
+
+
+			/*---------------------------------------
+			| Notification Message
+			---------------------------------------*/
+			if ($status == 1) {
+
+				$message = "Your investment request has been approved.";
+
+				$emailMessage = "
+                <p>We are pleased to inform you that your investment request has been approved successfully.</p>
+
+                <p><strong>Investment Amount:</strong> £{$request['amount']}</p>
+
+                <p>Thank you for investing with Interfriends.</p>
+            ";
+			} else {
+
+				$message = "Your investment request has been rejected.";
+
+				$emailMessage = "
+                <p>We regret to inform you that your investment request has been rejected.</p>
+
+                <p><strong>Investment Amount:</strong> £{$request['amount']}</p>
+
+                <p>If you have any questions, please contact the administrator.</p>
+            ";
+			}
+
+
+			/*---------------------------------------
+			| Push Notification
+			---------------------------------------*/
 			$this->send_nofification(
 				$request['user_id'],
 				$_REQUEST['admin_id'],
@@ -12123,6 +12567,31 @@ class Admin extends Base_Controller
 				"11"
 			);
 
+
+			/*---------------------------------------
+			| Send Email
+			---------------------------------------*/
+			$mailData = [];
+			$mailData['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+			$mailData['message'] = $emailMessage;
+
+			$body = $this->load->view(
+				'template/common-mail',
+				$mailData,
+				true
+			);
+
+			$subject = ($status == 1)
+				? 'Investment Request Approved'
+				: 'Investment Request Rejected';
+
+			$this->sendMail(
+				$user['email'],
+				$subject,
+				$body
+			);
+
+
 			$this->response(
 				true,
 				($status == 1)
@@ -12131,7 +12600,10 @@ class Admin extends Base_Controller
 			);
 		} else {
 
-			$this->response(false, "There is a problem, please try again.");
+			$this->response(
+				false,
+				"There is a problem, please try again."
+			);
 		}
 	}
 
