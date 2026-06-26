@@ -553,7 +553,7 @@ class Api extends Base_Controller
 		if ($result) {
 			$id = $this->db->insert_id();
 			$message = "request safekeeping withdrawal";
-			$send_message = $this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $id, "7");
+			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $id, "7");
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 			$userDetailTo = $this->common->getData('superAdmin', array('admin_type' => '2'));
