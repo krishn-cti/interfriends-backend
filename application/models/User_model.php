@@ -10,45 +10,6 @@ class User_model extends CI_Model
 		parent::__construct();
 	}
 
-
-	// public function user_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
-	// {
-	// 	$this->db->select('U.*,IFNULL((SELECT total_credit_score FROM credit_score_user where user_id=U.user_id), 0) as total_credit_score');
-
-	// 	//	$this->db->select('U.*,IFNULL(700, 0) as total_credit_score');
-	// 	$this->db->from('user as U');
-	// 	if ($where != "") {
-	// 		$this->db->where($where);
-	// 	}
-
-	// 	if ($having != "") {
-	// 		$this->db->having($having);
-	// 	}
-
-	// 	// $this->db->join('tag_tbl as T','T.tag_id = R.tags');
-	// 	$this->db->order_by("U.user_id", 'DESC');
-
-	// 	if ($limit != '') {
-	// 		$this->db->limit($limit, $start);
-	// 	}
-
-	// 	$res = $this->db->get()->result_array();
-
-	// 	if (!empty($options) && in_array('count', $options)) {
-	// 		return count($res);
-	// 	}
-
-	// 	if ($res) {
-	// 		if (isset($options) && in_array('single', $options)) {
-	// 			return $res[0];
-	// 		} else {
-	// 			return $res;
-	// 		}
-	// 	} else {
-	// 		return false;
-	// 	}
-	// }
-
 	public function user_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
 	{
 		$this->db->select('
@@ -1146,19 +1107,41 @@ class User_model extends CI_Model
 
 	public function loan_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
 	{
-		$this->db->select("L.*, IFNULL((SELECT SUM(amount) FROM user_loan_payment where user_id='" . $_REQUEST['user_id'] . "' AND group_id='" . $_REQUEST['group_id'] . "' AND loan_id=L.id), 0) as paid_amount,U.first_name as gurarantor_first_name,U.last_name as gurarantor_last_name,U.email as gurarantor_email");
+		// $this->db->select("L.*, IFNULL((SELECT SUM(amount) FROM user_loan_payment where user_id='" . $_REQUEST['user_id'] . "' AND group_id='" . $_REQUEST['group_id'] . "' AND loan_id=L.id), 0) as paid_amount,U.first_name as gurarantor_first_name,U.last_name as gurarantor_last_name,U.email as gurarantor_email");
+
+		$this->db->select("
+			L.*,
+			IFNULL(
+				(
+					SELECT SUM(amount)
+					FROM user_loan_payment
+					WHERE user_id = L.user_id
+					AND group_id = L.group_id
+					AND loan_id = L.id
+				),
+				0
+			) AS paid_amount,
+			U.first_name AS gurarantor_first_name,
+			U.last_name AS gurarantor_last_name,
+			U.email AS gurarantor_email
+		");
 
 		$this->db->from('user_loan as L');
+
 		if ($where != "") {
 			$this->db->where($where);
 		}
+
+		$this->db->join('user as UU', 'UU.user_id = L.user_id');
+		$this->db->where('UU.status !=', 2);
+
+		$this->db->join('user as U', 'U.user_id = L.gurarantor', 'left');
 
 		if ($having != "") {
 			$this->db->having($having);
 		}
 
-		$this->db->join('user as U', 'U.user_id = L.gurarantor', 'left');
-		$this->db->order_by("L.id", 'DESC');
+		$this->db->order_by("L.id", "DESC");
 
 		if ($limit != '') {
 			$this->db->limit($limit, $start);
@@ -1270,6 +1253,9 @@ class User_model extends CI_Model
 		if ($having != "") {
 			$this->db->having($having);
 		}
+
+		$this->db->join('user U', 'U.user_id = UM.user_id');
+		$this->db->where('U.status !=', 2);
 
 		// $this->db->join('user as U','U.user_id = UE.gurarantor', 'left');
 		$this->db->order_by("UM.id", 'DESC');
@@ -1599,6 +1585,46 @@ class User_model extends CI_Model
 			}
 		} else {
 			return false;
+		}
+	}
+
+	public function saving_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
+	{
+		$this->db->select('UGL.*');
+		$this->db->from('user_group_lifecycle as UGL');
+
+		if ($where != "") {
+			$this->db->where($where);
+		}
+
+		if ($having != "") {
+			$this->db->having($having);
+		}
+
+		// Exclude blocked users
+		$this->db->join('user as U', 'U.user_id = UGL.user_id');
+		$this->db->where('U.status !=', 2);
+
+		$this->db->order_by('UGL.id', 'DESC');
+
+		if ($limit != '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$res = $this->db->get()->result_array();
+
+		if (!empty($options) && in_array('count', $options)) {
+			return count($res);
+		}
+
+		if ($res) {
+			if (isset($options) && in_array('single', $options)) {
+				return $res[0];
+			} else {
+				return $res;
+			}
+		} else {
+			return array();
 		}
 	}
 }

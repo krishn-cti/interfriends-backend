@@ -20,24 +20,6 @@ class Admin extends Base_Controller
 		header('Access-Control-Allow-Credentials: true');
 	}
 
-
-	// public function login()
-	// {
-	// 	$_POST['password'] = md5($_POST['password']);
-	// 	$email = $this->common->getData('superAdmin', array('email' => $_POST['email'], 'password' => $_POST['password']), array('single'));
-	// 	if (empty($email)) {
-	// 		$this->response(false, 'Invalid email or password');
-	// 		die;
-	// 	}
-	// 	if ($email['status']=='2') {
-	// 		$this->response(false, 'You are blocked by Admin');
-	// 		die;
-	// 	}
-
-	// 	$token = 'dfsdfsdfsdfsdf';
-	// 	$this->response(true, 'Successfully Login', array("user_id" => $email["id"], "email" => $email["email"], "token" => $token, "name" => $email["name"], "admin_type" => $email["admin_type"]));
-	// }
-
 	// created by @krishn on 16-05-25
 	public function login()
 	{
@@ -272,379 +254,6 @@ class Admin extends Base_Controller
 
 		$this->response(true, 'Dashboard fourth row fetch Successfully', array('info' => $info));
 	}
-
-	public function dashbaord()
-	{
-		ini_set('display_errors', 1);
-		$userCount = $this->common->getData('user', '', array('count'));
-
-		$investment = $this->common->getData('investment I, user U', "I.user_id = U.user_id AND U.status != '2' AND I.group_id != 34", array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-
-		$payout = $this->common->getData('payout_cycle', array(), array("field" => 'IFNULL(sum(payout_amount),0) as total', "single"));
-
-		$pf = $this->common->getData('pf_user PF, user U', "PF.user_id = U.user_id AND U.status != '2' AND PF.group_id != 34 AND PF.payment_type = 2", array("field" => 'IFNULL(sum(PF.pf_amount),0) as total, IFNULL(sum(PF.pf_interest_amount),0) as pf_interest', "single"));
-
-		$pfInterest = $this->common->getData('pf_user', array('payment_type' => '2'), array("field" => 'IFNULL(sum(pf_interest_amount),0) as total', "single"));
-
-		$safeKeeping =  $this->safekeepingTotalAmount();
-
-		$emergency_loan_completed = $this->common->getData('user_emergency_loan', array(), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$emergency_loan_active = $this->common->getData('user_emergency_loan', array('status' => '4'), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$cycle_pending = $this->savingTotalnewPending();
-
-		$cycle = $this->savingTotalnew();
-
-
-		$loan_completed = $this->common->getData('user_loan', array(), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$loan_active = $this->common->getData('user_loan UL, user U', "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND UL.status != '4'", array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$loan_paid_user = $this->common->getData('user_loan_payment ULP, user U', "ULP.user_id = U.user_id AND U.status != '2' AND ULP.group_id != 34", array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-
-		// echo "<pre>"; print_r($loan_paid_user); echo "</pre>"
-		$group_list = $this->user_model->group_detail(array(), array(), "", "");
-		$group_data = array();
-		if (!empty($group_list)) {
-			foreach ($group_list as $key => $value) {
-
-				$where = "UG.group_id = '" . $value['id'] . "'";
-				$userCount = $this->user_model->user_group_detail($where, array('count'));
-				$value['usercount'] = $userCount;
-				$group_data[] = $value;
-			}
-		}
-		$savingJnrTotal = $this->savingJnrTotal();
-
-		$loan_help_to_buycar = $this->common->getData(
-			'user_loan UL, user U',
-			"UL.loan_type = '3' AND UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34",
-			array("field" => 'IFNULL(SUM(UL.loan_amount), 0) AS total', "single")
-		);
-
-		$loan_help_to_CC = $this->common->getData(
-			'user_loan UL, user U',
-			"UL.loan_type = '4' AND UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34",
-			array("field" => 'IFNULL(SUM(UL.loan_amount), 0) AS total', "single")
-		);
-
-		// Check if both results are arrays and have the 'total' key
-		if (!empty($loan_help_to_buycar) && isset($loan_help_to_buycar['total']) && !empty($loan_help_to_CC) && isset($loan_help_to_CC['total'])) {
-			$totalLoanAmount = (float)$loan_help_to_buycar['total'] + (float)$loan_help_to_CC['total'];
-		} else {
-			$totalLoanAmount = 0;
-		}
-
-
-		$loan_help_to_buyHSc = $this->common->getData(
-			'user_loan UL, user U',
-			"UL.loan_type = '6' AND UL.user_id = U.user_id AND U.status != '2' and UL.group_id != 34",
-			array("field" => 'IFNULL(sum(UL.loan_amount),0) as total', "single")
-		);
-
-		// echo "<pre>"; print_r($loan_help_to_buyHSc); echo "</pre>";
-		if (is_array($loan_help_to_buyHSc) && isset($loan_help_to_buyHSc['total'])) {
-			$totalLoanAmountBuyHSc = $loan_help_to_buyHSc['total'];
-		} else {
-			$totalLoanAmountBuyHSc = 0;
-		}
-
-		$cyclewelfare = $this->common->getData(
-			'user_group_lifecycle UGL, user U',
-			"UGL.groupLifecycle_id = '147' AND UGL.user_id = U.user_id AND U.status != '2' and UGL.group_id != 34",
-			array("field" => 'IFNULL(sum(UGL.amount),0) as total', "single")
-		);
-
-		// all miscellaneous payment @krishn on 20-05-25
-		$miscellaneousTotal = $this->common->getData(
-			'user_miscellaneous UM, user U',
-			"UM.user_id = U.user_id AND U.status != '2' and UM.group_id != 34",
-			array("field" => 'IFNULL(sum(UM.amount),0) as total', "single")
-		);
-
-		$totalMiscellaneousAmount = "";
-		if (!empty($miscellaneousTotal['total'])) {
-			$totalMiscellaneousAmount = $miscellaneousTotal['total'];
-		} else {
-			$totalMiscellaneousAmount = "0";
-		}
-
-		// all dividend payment @krishn on 20-05-25
-		$dividendTotal = $this->common->getData(
-			'investment',
-			"group_id != 34 AND payment_status = '1'",
-			array("field" => 'IFNULL(sum(amount),0) as total', "single")
-		);
-
-
-		$totalDividendAmount = "";
-		if (!empty($dividendTotal['total'])) {
-			$totalDividendAmount = $dividendTotal['total'];
-		} else {
-			$totalDividendAmount = "0";
-		}
-
-		$info = array(
-			// 'new_loan_active_paid_loan' => $new_loan_active,
-			'userCount' => $userCount,
-			'investment' => $investment['total'],
-			'payout' => $payout['total'],
-			'pf' => $pf['total'],
-			// 'pf' => $pf_active_users[0]['total'],
-			'pfInterest' => $pf['pf_interest'],
-			// 'pfInterest' => $pfInterest['total'],
-			'safeKeeping' => $safeKeeping,
-			'emergency_loan_completed' => $emergency_loan_completed['total'],
-			'emergency_loan_active' => $emergency_loan_active['total'],
-			'cycle_pending' => $cycle_pending,
-			//'cycle' => $cycle[0]['total'], //$totalCycle,
-			'cycle' => $cycle,
-			'loan_completed' => $loan_completed['total'],
-			// 'loan_active' => $loan_active['total'],
-			'loan_active' => $loan_completed['total'] - $loan_paid_user['total'],
-			'loan_paid_user' => $loan_paid_user['total'],
-			"groups" => $group_data,
-			// 'helptobuycar' => $loan_help_to_buycar['total'],
-			'helptobuycar' => (string)$totalLoanAmount,
-			'savingJnrTotal' => (string)$savingJnrTotal,
-			// 'help_to_buyHSc' => (string)$loan_help_to_buyHSc['total'],
-			'help_to_buyHSc' => (string)$totalLoanAmountBuyHSc,
-			"totalwelfare" => $cyclewelfare['total'],
-			// "totalwelfare" => $cyclewelfareTotal
-			"totalMiscellaneousAmount" => $totalMiscellaneousAmount,
-			"totalDividendAmount" => $totalDividendAmount
-		);
-
-		$this->response(true, 'Dashboard fetch Successfully', array('info' => $info));
-	}
-
-	public function dashbaord_backup_030625()
-	{
-		ini_set('display_errors', 1);
-		$userCount = $this->common->getData('user', '', array('count'));
-
-		// $investment = $this->common->getData('investment', array(), array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-		$investment = $this->common->getData('investment I, user U', "I.user_id = U.user_id AND U.status != '2' AND I.group_id != 34", array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-		$payout = $this->common->getData('payout_cycle', array(), array("field" => 'IFNULL(sum(payout_amount),0) as total', "single"));
-
-		// $pf = $this->common->getData('pf_user', array('payment_type' => '2'), array("field" => 'IFNULL(sum(pf_amount),0) as total', "single"));
-
-		// $pf = $this->common->getData('pf_user', array('payment_type' => '2'), array("field" => 'IFNULL(sum(pf_amount),0) as total, IFNULL(sum(pf_interest_amount),0) as pf_interest', "single"));
-
-		$pf = $this->common->getData('pf_user PF, user U', "PF.user_id = U.user_id AND U.status != '2' AND PF.group_id != 34 AND PF.payment_type = 2", array("field" => 'IFNULL(sum(PF.pf_amount),0) as total, IFNULL(sum(PF.pf_interest_amount),0) as pf_interest', "single"));
-
-		// $this->db->select('IFNULL(sum(pf.pf_amount),0) as total, IFNULL(sum(pf.pf_interest_amount),0) as pf_interest');
-		// $this->db->from('pf_user pf');
-		// $this->db->join('user us', 'us.user_id = pf.user_id');
-		// $this->db->where('pf.payment_type', 2);
-		// $this->db->where('us.status !=', 2);
-		// $this->db->where('pf.group_id !=', 34);
-		// $this->db->where('us.recommended', 0);
-
-		// $pf_active_users = $this->db->get()->result_array();
-
-
-		// $totalDebitpfAmount = $this->common->getData('pf_user', array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'payment_type' => '1'), array("field" => 'sum(pf_amount) as pf_total_amount, sum(pf_interest_amount) as pf_interest', "single"));
-
-		$pfInterest = $this->common->getData('pf_user', array('payment_type' => '2'), array("field" => 'IFNULL(sum(pf_interest_amount),0) as total', "single"));
-
-		//	$safeKeeping =  $this->common->getData('safe_keeping', array('pyment_type' => '2'), array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-		$safeKeeping =  $this->safekeepingTotalAmount();
-
-		$emergency_loan_completed = $this->common->getData('user_emergency_loan', array(), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$emergency_loan_active = $this->common->getData('user_emergency_loan', array('status' => '4'), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-
-		//	$cycle_pending = $this->common->getData('user_group_lifecycle', array('status' => '1'), array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-
-		$cycle_pending = $this->savingTotalnewPending();
-
-		//  	$whereCycle = "status != 1";
-		//  	$cycle = $this->common->getData('user_group_lifecycle',$whereCycle, array("field" => 'IFNULL(sum(amount),0) as total',"single"));
-
-		// 		$this->db->select('IFNULL(sum(ugl.amount),0) as total');
-		// 		$this->db->from('group_lifecycle gl');
-		// 		$this->db->join('user_group_lifecycle ugl', 'ugl.groupLifecycle_id = gl.id');
-		// 		$this->db->join('user us', 'us.user_id = ugl.user_id');
-		// 		$this->db->where('gl.group_type_id', 1);
-		// 		$this->db->where('us.status !=', 2);
-		// 		$this->db->where('us.recommended', 0);
-
-		// 		$cycle = $this->db->get()->result_array();
-
-
-		$cycle = $this->savingTotalnew();
-
-
-		$loan_completed = $this->common->getData('user_loan', array(), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		// $loan_active = $this->common->getData('user_loan', array('status' => '4'), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$loan_active = $this->common->getData('user_loan UL, user U', "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND UL.status != '4'", array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		// $loan_active1 = $this->common->getData('user_loan UL, user U', "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34", array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-
-		// $new_loan_active = $loan_completed['total'] - $loan_active['total'];
-		// $loan_paid_user = $this->common->getData('user_loan_payment', array(), array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-
-		$loan_paid_user = $this->common->getData('user_loan_payment ULP, user U', "ULP.user_id = U.user_id AND U.status != '2' AND ULP.group_id != 34", array("field" => 'IFNULL(sum(amount),0) as total', "single"));
-
-		// echo "<pre>"; print_r($loan_paid_user); echo "</pre>"
-		$group_list = $this->user_model->group_detail(array(), array(), "", "");
-		$group_data = array();
-		if (!empty($group_list)) {
-			foreach ($group_list as $key => $value) {
-
-				$where = "UG.group_id = '" . $value['id'] . "'";
-				$userCount = $this->user_model->user_group_detail($where, array('count'));
-				$value['usercount'] = $userCount;
-				$group_data[] = $value;
-			}
-		}
-		$savingJnrTotal = $this->savingJnrTotal();
-
-
-		// $loan_help_to_buycar = $this->common->getData('user_loan', array('loan_type' => '3'), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$loan_help_to_buycar = $this->common->getData(
-			'user_loan UL, user U',
-			"UL.loan_type = '3' AND UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34",
-			array("field" => 'IFNULL(SUM(UL.loan_amount), 0) AS total', "single")
-		);
-
-		$loan_help_to_CC = $this->common->getData(
-			'user_loan UL, user U',
-			"UL.loan_type = '4' AND UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34",
-			array("field" => 'IFNULL(SUM(UL.loan_amount), 0) AS total', "single")
-		);
-
-		// Check if both results are arrays and have the 'total' key
-		if (!empty($loan_help_to_buycar) && isset($loan_help_to_buycar['total']) && !empty($loan_help_to_CC) && isset($loan_help_to_CC['total'])) {
-			$totalLoanAmount = (float)$loan_help_to_buycar['total'] + (float)$loan_help_to_CC['total'];
-		} else {
-			$totalLoanAmount = 0;
-		}
-
-
-		// $loan_help_to_buyHSc = $this->common->getData('user_loan', array('loan_type' => '6'), array("field" => 'IFNULL(sum(loan_amount),0) as total', "single"));
-
-		$loan_help_to_buyHSc = $this->common->getData(
-			'user_loan UL, user U',
-			"UL.loan_type = '6' AND UL.user_id = U.user_id AND U.status != '2' and UL.group_id != 34",
-			array("field" => 'IFNULL(sum(UL.loan_amount),0) as total', "single")
-		);
-		// echo "<pre>"; print_r($loan_help_to_buyHSc); echo "</pre>";
-
-		if (is_array($loan_help_to_buyHSc) && isset($loan_help_to_buyHSc['total'])) {
-			$totalLoanAmountBuyHSc = $loan_help_to_buyHSc['total'];
-		} else {
-			$totalLoanAmountBuyHSc = 0;
-		}
-
-		$cyclewelfare = $this->common->getData(
-			'user_group_lifecycle UGL, user U',
-			"UGL.groupLifecycle_id = '147' AND UGL.user_id = U.user_id AND U.status != '2' and UGL.group_id != 34",
-			array("field" => 'IFNULL(sum(UGL.amount),0) as total', "single")
-		);
-
-		// all miscellaneous payment @krishn on 20-05-25
-		$miscellaneousTotal = $this->common->getData(
-			'user_miscellaneous UM, user U',
-			"UM.user_id = U.user_id AND U.status != '2' and UM.group_id != 34",
-			array("field" => 'IFNULL(sum(UM.amount),0) as total', "single")
-		);
-
-		$totalMiscellaneousAmount = "";
-		if (!empty($miscellaneousTotal['total'])) {
-			$totalMiscellaneousAmount = $miscellaneousTotal['total'];
-		} else {
-			$totalMiscellaneousAmount = "0";
-		}
-
-		// all dividend payment @krishn on 20-05-25
-		$dividendTotal = $this->common->getData(
-			'investment',
-			"group_id != 34 AND payment_status = '1'",
-			array("field" => 'IFNULL(sum(amount),0) as total', "single")
-		);
-
-
-		$totalDividendAmount = "";
-		if (!empty($dividendTotal['total'])) {
-			$totalDividendAmount = $dividendTotal['total'];
-		} else {
-			$totalDividendAmount = "0";
-		}
-
-		// $cyclewelfare = $this->common->getData(
-		// 	'user_group_lifecycle UGL, user U',
-		// 	"UGL.groupLifecycle_id = '147' AND UGL.user_id = U.user_id AND U.status != '2' AND UGL.group_id != 34",
-		// 	array("field" => 'IFNULL(sum(UGL.amount),0) as total', "single")
-		// );
-
-		// $cyclewelfare = $this->common->getData(
-		// 	'user_group_lifecycle UGL, user U',
-		// 	array(
-		// 		'UGL.groupLifecycle_id' => '147',
-		// 		'UGL.group_id !=' => 34,
-		// 		'U.status !=' => 2
-		// 	),
-		// 	array(
-
-		// 		'field' => 'UGL.user_id, SUM(UGL.amount) as total',
-		// 		'group_by' => 'UGL.user_id',
-		// 		'single' => false
-		// 	)
-		// );
-
-		// $cyclewelfareTotal = 0;
-		// if($cyclewelfare){
-		// 	foreach($cyclewelfare as $value){
-		// 		$cyclewelfareTotal += $value['total'];
-		// 	}
-		// }else{
-		// 	$cyclewelfareTotal = 0;
-		// }
-		// echo "<pre>"; print_r($cyclewelfare); echo "</pre>";
-
-		$info = array(
-			// 'new_loan_active_paid_loan' => $new_loan_active,
-			'userCount' => $userCount,
-			'investment' => $investment['total'],
-			'payout' => $payout['total'],
-			'pf' => $pf['total'],
-			// 'pf' => $pf_active_users[0]['total'],
-			'pfInterest' => $pf['pf_interest'],
-			// 'pfInterest' => $pfInterest['total'],
-			'safeKeeping' => $safeKeeping,
-			'emergency_loan_completed' => $emergency_loan_completed['total'],
-			'emergency_loan_active' => $emergency_loan_active['total'],
-			'cycle_pending' => $cycle_pending,
-			//'cycle' => $cycle[0]['total'], //$totalCycle,
-			'cycle' => $cycle,
-			'loan_completed' => $loan_completed['total'],
-			// 'loan_active' => $loan_active['total'],
-			'loan_active' => $loan_completed['total'] - $loan_paid_user['total'],
-			'loan_paid_user' => $loan_paid_user['total'],
-			"groups" => $group_data,
-			// 'helptobuycar' => $loan_help_to_buycar['total'],
-			'helptobuycar' => (string)$totalLoanAmount,
-			'savingJnrTotal' => (string)$savingJnrTotal,
-			// 'help_to_buyHSc' => (string)$loan_help_to_buyHSc['total'],
-			'help_to_buyHSc' => (string)$totalLoanAmountBuyHSc,
-			"totalwelfare" => $cyclewelfare['total'],
-			// "totalwelfare" => $cyclewelfareTotal
-			"totalMiscellaneousAmount" => $totalMiscellaneousAmount,
-			"totalDividendAmount" => $totalDividendAmount
-		);
-
-		$this->response(true, 'Dashboard fetch Successfully', array('info' => $info));
-	}
-
-
 
 	public function getUserDetail()
 	{
@@ -1069,76 +678,6 @@ class Admin extends Base_Controller
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
-
-
-	// function updateCreditScore($points, $calculation_type)
-	// {
-	// 	$result = "";
-	// 	$result = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-	// 	$totalScore = 0;
-	// 	$newScore = 0;
-	// 	if (!empty($result)) {
-
-	// 		if ($calculation_type === 'plus') {
-	// 			$totalScore = $result['total_credit_score'] + $points;
-	// 		}
-
-	// 		if ($calculation_type === 'minus') {
-	// 			$totalScore = $result['total_credit_score'] - $points;
-	// 		}
-
-
-	// 		if ($totalScore == 800 || $totalScore > 800) {
-	// 			$newScore = $totalScore + 5;
-	// 		} else if ($totalScore > 900) {
-
-	// 			$newScore = 900 + 5;
-	// 		} else if ($totalScore < 0) {
-
-	// 			$newScore = 0;
-	// 		} else {
-
-	// 			$newScore = $totalScore;
-	// 		}
-
-
-	// 		$result1 = $this->common->getData('credit_score_list', array(''), array(''));
-	// 		foreach ($result1 as $value) {
-	// 			$credit_score2 = "";
-	// 			$credit_score1 = "";
-	// 			$score = $newScore;
-	// 			$min = $value['score1'];
-	// 			$max = $value['score2'];
-	// 			if ($score  >= $min && $score <= $max) {
-	// 				$credit_score1 =  $value['credit_score_name'];
-	// 			}
-	// 			if ($result['total_credit_score'] >= $min && $result['total_credit_score'] <= $max) {
-	// 				$credit_score2 =  $value['credit_score_name'];
-	// 			}
-	// 			if ($credit_score1 != $credit_score2) {
-	// 				if (!empty($credit_score1)) {
-	// 					$credit_score[] = $credit_score1;
-	// 				}
-	// 			}
-	// 		}
-	// 		if ($credit_score[0]) {
-	// 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
-	// 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-	// 			$data['useremail'] = "";
-
-	// 			if ($calculation_type === 'plus') {
-	// 				$data['message'] = '<p>Congratulations ' . $userDetailFrom["first_name"] . '. You have reached another milestone as a valued Interfriends member.</p><p> Your Trust Score has moved up a level to ' . $credit_score[0] . ' </p><p>Well done on behalf of all of us at Interfriends.</p><p>Keep it up</p>';
-	// 			} else {
-	// 				$data['message'] = '<p>We regret to inform you that there has been a decrease in your Interfriends Trust score.</p><p>This change may have occurred as a result of various factors, such as a recent application or delayed or missed payments.</p>';
-	// 			}
-	// 			$messaged = $this->load->view('template/common-mail', $data, true);
-	// 			$mail = $this->sendMail($userDetailFrom['email'], 'Trust Score', $messaged);
-	// 		}
-
-	// 		$this->common->updateData('credit_score_user', array("total_credit_score" => $newScore), array('user_id' => $_REQUEST['user_id']));
-	// 	}
-	// }
 
 	// updated by @krishn on 17-06-26
 	function updateCreditScore($points, $calculation_type)
@@ -1651,19 +1190,58 @@ class Admin extends Base_Controller
 		}
 	}
 
-
-
+	// created by @krishn on 29-06-25
 	public function userDetailInfo()
 	{
-		$user_id = $_REQUEST['user_id'];
-		$userinfo = get_user_details($user_id);
-		if (!empty($userinfo)) {
-			$this->response(true, "Profile Fetch Successfully.", array("userinfo" => $userinfo));
+		if (empty($_REQUEST['user_id'])) {
+			$this->response(false, "User ID is required.", array("userinfo" => array()));
+			return;
+		}
+
+		$result = $this->common->getData(
+			'user',
+			array('user_id' => $_REQUEST['user_id']),
+			array('single')
+		);
+
+		if (!empty($result)) {
+
+			// Profile Image
+			if (!empty($result['profile_image'])) {
+				$result['profile_image'] = base_url($result['profile_image']);
+			} else {
+				$result['profile_image'] = base_url('assets/img/default-user-icon.jpg');
+			}
+
+			// Profile Thumbnail
+			if (!empty($result['profile_image_thumb'])) {
+				$result['profile_image_thumb'] = base_url($result['profile_image_thumb']);
+			} else {
+				$result['profile_image_thumb'] = base_url('assets/img/default-user-icon.jpg');
+			}
+
+			// ID Proof Image
+			if (!empty($result['id_proof_image'])) {
+				$result['id_proof_image'] = base_url($result['id_proof_image']);
+			} else {
+				$result['id_proof_image'] = base_url('assets/img/blank.webp');
+			}
+
+			$this->response(
+				true,
+				"Profile Fetch Successfully.",
+				array("userinfo" => $result)
+			);
 		} else {
-			$this->response(false, "There Is Some Problem.Please Try Again.", array("userinfo" => array()));
+
+			$this->response(
+				false,
+				"There Is Some Problem. Please Try Again.",
+				array("userinfo" => array())
+			);
 		}
 	}
-
+	
 
 	public function category_detail()
 	{
@@ -2097,72 +1675,6 @@ class Admin extends Base_Controller
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
-
-	// created by @krishn on 14-05-25
-	// public function addMiscellaneous()
-	// {
-	// 	$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-	// 	$_REQUEST['active_date'] = date('Y-m-d H:i:s');
-	// 	$_REQUEST['total_payment'] = $_REQUEST['amount'];
-
-	// 	$current_date = $_REQUEST['start_date'];
-	// 	$end_date = strtotime("+" . $_REQUEST['tenure'] . " month", strtotime($current_date));
-	// 	$_REQUEST['end_date'] = date("Y-m-d", $end_date);
-	// 	$_REQUEST['start_date'] = $current_date;
-
-	// 	$_REQUEST['loan_emi'] = $_REQUEST['total_payment'] / $_REQUEST['tenure'];
-
-	// 	// Credit Score Update Logic
-	// 	$user_id = $_REQUEST['user_id'];
-	// 	$paid_status = $_REQUEST['paid_status'];
-
-	// 	if ($paid_status === '1') {
-	// 		$this->common->query_normal("UPDATE credit_score_user SET misc_paid_on_time = misc_paid_on_time+20 WHERE user_id = '$user_id'");
-	// 		$this->updateCreditScore(20, 'plus');
-	// 	}
-
-	// 	if ($paid_status === '2') {
-	// 		$this->common->query_normal("UPDATE credit_score_user SET late_misc_payment = late_misc_payment-60 WHERE user_id = '$user_id'");
-	// 		$this->updateCreditScore(60, 'minus');
-	// 	}
-
-	// 	if ($paid_status === '3') {
-	// 		$this->common->query_normal("UPDATE credit_score_user SET three_or_more_missed_misc_deadline = three_or_more_missed_misc_deadline+1 WHERE user_id = '$user_id'");
-
-	// 		$creditScoreInfo = $this->common->getData('credit_score_user', array('user_id' => $user_id), array('single'));
-
-	// 		if (!empty($creditScoreInfo)) {
-	// 			if ($creditScoreInfo['three_or_more_missed_savings_deadline'] > 2) {
-	// 				$this->common->query_normal("UPDATE credit_score_user SET missed_misc_deadline = missed_misc_deadline-300 WHERE user_id = '$user_id'");
-	// 				$this->updateCreditScore(300, 'minus');
-	// 			} else {
-	// 				$this->common->query_normal("UPDATE credit_score_user SET missed_misc_deadline = missed_misc_deadline-100 WHERE user_id = '$user_id'");
-	// 				$this->updateCreditScore(100, 'minus');
-	// 			}
-	// 		}
-	// 	}
-
-	// 	// Insert Miscellaneous Loan
-	// 	$post = $this->common->getField('user_miscellaneous', $_REQUEST);
-	// 	$result = $this->common->insertData('user_miscellaneous', $post);
-	// 	$miscellaneous_id = $this->db->insert_id();
-
-	// 	if ($result) {
-	// 		$this->common->insertData('user_miscellaneous_status_history', array(
-	// 			"miscellaneous_id" => $miscellaneous_id,
-	// 			"user_id" => $_REQUEST['user_id'],
-	// 			"note_title" => $_REQUEST['note_title'],
-	// 			"note_description" => $_REQUEST['note_description'],
-	// 			"status" => $_REQUEST['status'],
-	// 			"created_at" => date('Y-m-d H:i:s')
-	// 		));
-
-	// 		$this->response(true, "Miscellaneous add submitted successfully", array("miscellaneous_id" => $miscellaneous_id));
-	// 	} else {
-	// 		$this->response(false, "There is a problem, please try again.");
-	// 	}
-	// }
-
 
 	// changes by chandni 07-05-2024
 	public function editMiscellaneous()
@@ -3218,59 +2730,6 @@ class Admin extends Base_Controller
 			$this->response(true, "Payment fetch Successfully.", array("paymentList" => array(), 'totalPaidAmount' => (int)$totalAmount, 'loanAmount' => (int)$loanAmount, 'interest_rate' => (int)$interest_rate, 'interest_payable' => (int)$interest_payable, 'loanAmount_initital' => (int)$loanAmount_initital, 'provident' => (int)$provident));
 		}
 	}
-
-	// public function loanPaymentList()
-	// {
-	// 	$user_id = $_REQUEST['user_id'];
-	// 	$group_id = $_REQUEST['group_id'];
-	// 	$loan_id = $_REQUEST['loan_id'];
-
-	// 	if (empty($user_id) || empty($group_id) || empty($loan_id)) {
-	// 		$this->response(false, "Missing required parameters.");
-	// 		return;
-	// 	}
-
-	// 	$where = array(
-	// 		'user_id' => $user_id,
-	// 		'group_id' => $group_id,
-	// 		'loan_id' => $loan_id
-	// 	);
-
-	// 	// Fetch payment list, ordered by created_at DESC
-	// 	$PaymentList = $this->common->getData('user_loan_payment', $where, array(
-	// 		'sort_by' => 'id',
-	// 		'sort_direction' => 'DESC'
-	// 	));
-
-	// 	// Fetch total paid amount grouped by user_id
-	// 	$PaymentTotal = $this->common->getData('user_loan_payment', $where, array(
-	// 		'field' => 'user_id, SUM(amount) as total_amount',
-	// 		'group_by' => 'user_id',
-	// 		'single' => true
-	// 	));
-
-	// 	$totalAmount = !empty($PaymentTotal['total_amount']) ? (float)$PaymentTotal['total_amount'] : 0.00;
-
-	// 	// Loan details
-	// 	$LoanDetail = $this->common->getData('user_loan', array("id" => $loan_id), array('single' => true));
-
-	// 	$loanAmount_initital = isset($LoanDetail['loan_amount']) ? (float)$LoanDetail['loan_amount'] : 0;
-	// 	$loanAmount = isset($LoanDetail['total_payment']) ? (float)$LoanDetail['total_payment'] : 0;
-	// 	$interest_rate = isset($LoanDetail['interest_rate']) ? (float)$LoanDetail['interest_rate'] : 0;
-	// 	$interest_payable = isset($LoanDetail['interest_payable']) ? (float)$LoanDetail['interest_payable'] : 0;
-	// 	$provident = isset($LoanDetail['provident']) ? (float)$LoanDetail['provident'] : 0;
-
-	// 	$this->response(true, "Payment fetch successfully.", array(
-	// 		"paymentList" => !empty($PaymentList) ? array_reverse($PaymentList) : array(),
-	// 		"totalPaidAmount" => $totalAmount,
-	// 		"loanAmount" => $loanAmount,
-	// 		"interest_rate" => $interest_rate,
-	// 		"interest_payable" => $interest_payable,
-	// 		"loanAmount_initital" => $loanAmount_initital,
-	// 		"provident" => $provident
-	// 	));
-	// }
-
 
 
 	public function loanMiscellaneousPaymentList()
@@ -4620,50 +4079,6 @@ class Admin extends Base_Controller
 			$this->response(false, 'Link expired. Please reset password again');
 		}
 	}
-
-
-	// function sendMail($email, $subject, $message)
-	// {
-	// 	require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
-	// 	require_once(APPPATH . 'third_party/phpmailer/class.smtp.php');
-
-	// 	try {
-	// 		$mail = new PHPMailer();
-
-	// 		$mail->IsSMTP();
-	// 		$mail->CharSet = 'UTF-8';
-	// 		// $mail->Host = "smtp.gmail.com";
-	// 		$mail->Host = "smtp.hostinger.com";
-
-	// 		$mail->SMTPAuth = true;
-	// 		$mail->Port = 465; // Or 587
-	// 		// $mail->Username = 'interfriendscu@gmail.com';
-	// 		$mail->Username = 'admin@interfriends.uk';
-	// 		// $mail->Password = 'zbkydsoaizmbqnhm';
-	// 		$mail->Password = 'Mbx9jm!2';
-	// 		$mail->SMTPSecure = "ssl";
-	// 		//$mail->SMTPDebug  = 1;
-	// 		// $mail->setFrom("interfriendscu@gmail.com", 'Interfriends');
-	// 		$mail->setFrom("admin@interfriends.uk", 'Interfriends');
-	// 		$mail->Body = $message;
-
-	// 		$mail->isHTML(true);
-	// 		$mail->Subject = $subject;
-
-	// 		$mail->addAddress($email);
-	// 		$send =  $mail->send();
-
-
-	// 		if ($send != '1') {
-
-	// 			return false;
-	// 		} else {
-	// 			return true;
-	// 		}
-	// 	} catch (Exception $e) {
-	// 		//  echo "An error occurred while sending the email: " . $e->getMessage();
-	// 	}
-	// }
 
 	// created by @krishn on 12-08-25
 	function sendMail($email, $subject, $message)
@@ -6670,92 +6085,6 @@ class Admin extends Base_Controller
 		}
 	}
 
-
-
-
-	// public function addPayout()
-	// {
-	// 	$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-
-	// 	$payOutExist = $this->common->getData('payout_cycle', array('user_id' => $_POST['user_id'], 'group_id' => $_POST['group_id'], 'group_cycle_id' => $_POST['group_cycle_id']), array('single'));
-
-	// 	if (!empty($payOutExist)) {
-	// 		$this->response(false, "Payout already done");
-	// 		die();
-	// 	}
-
-
-	// 	$groupPercentResult = $this->user_model->getLifeCyclePercent(array('GL.id' => $_POST['group_cycle_id']), array('single'));
-
-	// 	$pfPercent = 10;
-	// 	if (!empty($groupPercentResult)) {
-	// 		$pfPercent = (int)$groupPercentResult['percent'];
-	// 	}
-
-	// 	$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $_REQUEST['group_cycle_id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-	// 	$payout_amount_total = $result['total_amount'];
-	// 	if (!empty($pfPercent)) {
-	// 		$payout_pf_amount = ($result['total_amount'] * $pfPercent) / 100;
-	// 		$_REQUEST['payout_amount'] = $payout_amount_total - $payout_pf_amount;
-	// 		$_REQUEST['pf_interest_amount'] = ($payout_pf_amount * $pfPercent) / 100;
-	// 	} else {
-	// 		$payout_pf_amount = 0;
-	// 		$_REQUEST['payout_amount'] = $payout_amount_total;
-	// 		$_REQUEST['pf_interest_amount'] = 0;
-	// 	}
-
-	// 	$_REQUEST['payout_pf_percent'] = $pfPercent . "%";
-	// 	$_REQUEST['pf_interest_percent'] = $pfPercent . "%";
-	// 	$_REQUEST['payout_amount_total'] = $payout_amount_total;
-	// 	$_REQUEST['payout_pf_amount'] = $payout_pf_amount;
-
-	// 	$post = $this->common->getField('payout_cycle', $_REQUEST);
-	// 	$result = $this->common->insertData('payout_cycle', $post);
-	// 	$payout_id = $this->db->insert_id();
-
-	// 	if ($result) {
-	// 		$this->common->insertData('cycle_status_management', array("group_id" => $_REQUEST['group_id'], "group_cycle_id" => $_REQUEST['group_cycle_id'], "user_id" => $_REQUEST['user_id'], "type" => '1', 'created_at' => $_REQUEST['created_at']));
-
-	// 		$this->common->insertData('pf_user', array("group_id" => $_REQUEST['group_id'], "user_id" => $_REQUEST['user_id'], "pf_type" => '1', "payment_type" => '2', 'created_at' => $_REQUEST['created_at'], 'pf_amount' => $payout_pf_amount, 'pf_percent' => $_REQUEST['payout_pf_percent'], 'pf_interest_amount' => $_REQUEST['pf_interest_amount'], 'pf_interest_percent' => $_REQUEST['pf_interest_percent'], 'main_id' => $_REQUEST['group_cycle_id'], 'other_main_id' => $payout_id));
-
-	// 		$message = "your bulk funds is now paid";
-	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $payout_id, "13");
-
-
-	// 		$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-	// 		$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-	// 		$data['useremail'] = "";
-	// 		$data['message'] = '<p>This is a confirmation that your PAYOUT for this cycle has been processed and paid into your account.</p><p>If you were not expecting this payment, please do let us know.</p>';
-	// 		$messaged = $this->load->view('template/common-mail', $data, true);
-	// 		$mail = $this->sendMail($userDetailFrom['email'], 'Payout', $messaged);
-
-	// 		if ($mail) {
-	// 			$group_id = $_REQUEST['group_id'];
-
-	// 			$where = "FIND_IN_SET('$group_id', group_ids) > 0 OR admin_type = 2";
-	// 			$superAdmin = $this->common->getData('superAdmin', $where);
-
-	// 			foreach ($superAdmin as $adminUser) {
-	// 				$subject = "Payout Successfully Processed";
-
-	// 				$data['sendername'] = $adminUser['name'];
-	// 				$data['message'] = '<p>We’re pleased to inform you that the payout for this cycle has been successfully processed and transferred to your account.</p>
-	// 				<p>If you did not expect this payment or believe there is an issue, please contact our support team immediately.</p>
-	// 				<p>Thank you for your continued support.</p>';
-
-	// 				$messaged = $this->load->view('template/common-mail', $data, true);
-	// 				$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
-	// 			}
-	// 		}
-
-	// 		$this->response(true, "Payout Successfully");
-	// 	} else {
-	// 		$this->response(false, "There is a problem, please try again.");
-	// 	}
-	// }
-
 	// created by @krishn on 22-05-25
 	public function addPayout()
 	{
@@ -6961,86 +6290,6 @@ class Admin extends Base_Controller
 
 		$this->response(true, "fetch status successfully", array("showPayoutButton" => $showPayoutButton, "showAlertMessage" => $showAlertMessage, "showAlredyPayoutAlertMessage" => !$showPayoutButton));
 	}
-
-
-
-
-	// public function addSafeKeeping()
-	// {
-
-	// 	$dataExist = $this->common->getData('cycle_status_management', array('user_id' => $_POST['user_id'], 'group_id' => $_POST['group_id'], 'group_cycle_id' => $_POST['group_cycle_id']), array('single'));
-
-	// 	if (!empty($dataExist)) {
-	// 		$this->response(false, "Cycle already transfer");
-	// 		die();
-	// 	}
-
-	// 	$groupPercentResult = $this->user_model->getLifeCyclePercent(array('GL.id' => $_POST['group_cycle_id']), array('single'));
-
-	// 	$pfPercent = 10;
-	// 	if (!empty($groupPercentResult)) {
-	// 		$pfPercent = (int)$groupPercentResult['percent'];
-	// 	}
-
-
-	// 	$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-	// 	$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $_REQUEST['group_cycle_id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-	// 	$amount_total = $result['total_amount'];
-	// 	if (!empty($pfPercent)) {
-	// 		$pf_amount = ($result['total_amount'] * $pfPercent) / 100;
-	// 		$_REQUEST['amount'] = $amount_total - $pf_amount;
-	// 		$_REQUEST['pf_interest_amount'] = ($pf_amount * $pfPercent) / 100;
-	// 	} else {
-	// 		$pf_amount = 0;
-	// 		$_REQUEST['amount'] = $amount_total;
-	// 		$_REQUEST['pf_interest_amount'] = 0;
-	// 	}
-
-
-	// 	$_REQUEST['pf_percent'] = $pfPercent . "%";
-	// 	$_REQUEST['pf_interest_percent'] = $pfPercent . "%";
-	// 	$_REQUEST['amount_total'] = $amount_total;
-	// 	$_REQUEST['pf_amount'] = $pf_amount;
-
-
-
-	// 	$post = $this->common->getField('safe_keeping', $_REQUEST);
-	// 	$result = $this->common->insertData('safe_keeping', $post);
-	// 	$insert_id = $this->db->insert_id();
-
-	// 	if ($result) {
-
-	// 		$this->common->insertData('cycle_status_management', array("group_id" => $_REQUEST['group_id'], "group_cycle_id" => $_REQUEST['group_cycle_id'], "user_id" => $_REQUEST['user_id'], "type" => '2', 'created_at' => $_REQUEST['created_at']));
-
-	// 		$this->common->insertData('pf_user', array("group_id" => $_REQUEST['group_id'], "user_id" => $_REQUEST['user_id'], "pf_type" => '2', "payment_type" => '2', 'created_at' => $_REQUEST['created_at'], 'pf_amount' => $pf_amount, 'pf_percent' => $_REQUEST['pf_percent'], 'pf_interest_amount' => $_REQUEST['pf_interest_amount'], 'pf_interest_percent' => $_REQUEST['pf_interest_percent'], 'main_id' => $_REQUEST['group_cycle_id'], 'other_main_id' => $insert_id));
-
-	// 		$message = "your bulk funds sent for safekeeping";
-	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $insert_id, "14");
-
-
-	// 		$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-	// 		$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-	// 		$data['useremail'] = "";
-	// 		// $data['message'] = '<p>This is a confirmation that your PAYOUT for this cycle has been processed and paid into your SAFEKEEPING account.</p><p>If you are not expecting this payment, please do let us know.</p>';
-	// 		$data['message'] = '<p>This confirms that your Welfare PAYOUT has been successfully processed and deposited into your account or securely placed in safekeeping where applicable.</p><p>If you have any questions or concerns about this payment, please do not hesitate to contact us.</p>';
-
-	// 		$messaged = $this->load->view('template/common-mail', $data, true);
-	// 		$mail = $this->sendMail($userDetailFrom['email'], 'Safekeeping', $messaged);
-
-
-	// 		$this->common->query_normal("UPDATE credit_score_user SET safekeeping_money = safekeeping_money+0 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-	// 		$this->updateCreditScore(0, 'plus');
-
-
-
-	// 		$this->response(true, "Add Safe Keeping Successfully");
-	// 	} else {
-	// 		$this->response(false, "There is a problem, please try again.");
-	// 	}
-	// }
 
 	//  created by @krishn on 24-06-25
 	public function addSafeKeeping()
@@ -7301,69 +6550,6 @@ class Admin extends Base_Controller
 		}
 	}
 
-	// public function safeKeeping_list()
-	// {
-	// 	// limit code start
-	// 	if (empty($_REQUEST['start'])) {
-	// 		$start = 10;
-	// 		$end = 0;
-	// 	} else {
-	// 		$start = 10;
-	// 		$end = $_REQUEST['start'];
-	// 	}
-	// 	// limit code end
-	// 	$where = "SK.user_id = '" . $_REQUEST['user_id'] . "' AND SK.group_id = '" . $_REQUEST['group_id'] . "'";
-	// 	$result = $this->user_model->safeKeeping_detail($where, array(), $start, $end);
-	// 	$resultCount = $this->user_model->safeKeeping_detail($where, array('count'));
-
-	// 	$countData = $end;
-	// 	$countData++;
-	// 	if (!empty($result)) {
-
-	// 		foreach ($result as $key => $value) {
-	// 			$result[$key]['sno'] = $countData++;
-	// 		}
-
-
-	// 		// Fetch total credit
-	// 		$totalCreditAmount = $this->common->getData(
-	// 			'safe_keeping',
-	// 			array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 2),
-	// 			array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
-	// 		);
-
-	// 		// Fetch total debit
-	// 		$totalDebitAmount = $this->common->getData(
-	// 			'safe_keeping',
-	// 			array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id'], 'pyment_type' => 1),
-	// 			array("field" => 'SUM(amount) as safe_keeping_total_amount', "single")
-	// 		);
-
-	// 		// Prevent null values
-	// 		$creditSafeKeeping = $totalCreditAmount['safe_keeping_total_amount'] ?? 0;
-	// 		$debitSafeKeeping  = $totalDebitAmount['safe_keeping_total_amount'] ?? 0;
-
-	// 		// Fetch latest credit request details (if needed for condition)
-	// 		$latestCredit = $this->common->getData(
-	// 			'safe_keeping',
-	// 			array('group_id' => $_REQUEST['group_id'], 'user_id' => $_REQUEST['user_id']),
-	// 			array("field" => 'id, requested_by, request_status'),
-	// 		);
-
-	// 		$lastCreditRecord = array_reverse($latestCredit);
-
-	// 		if (!empty($lastCreditRecord) && $lastCreditRecord[0]['requested_by'] === "user" && $lastCreditRecord[0]['request_status'] == 1) {
-	// 			$safeKeepingAmount = $creditSafeKeeping - $debitSafeKeeping;
-	// 		} else {
-	// 			$safeKeepingAmount = 0 - $debitSafeKeeping;
-	// 		}
-
-	// 		$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount, 'safeKeepingAmount' => $safeKeepingAmount));
-	// 	} else {
-	// 		$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount, 'safeKeepingAmount' => 0));
-	// 	}
-	// }
-
 
 	public function payout_list()
 	{
@@ -7523,46 +6709,6 @@ class Admin extends Base_Controller
 			$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
 		}
 	}
-
-	// public function loanList_Help2pay1()
-	// {
-	// 	// limit code start
-	// 	if (empty($_REQUEST['start'])) {
-	// 		$start = 10;
-	// 		$end = 0;
-	// 	} else {
-	// 		$start = 10;
-	// 		$end = $_REQUEST['start'];
-	// 	}
-	// 	// limit code end
-
-	// 	$where = "L.user_id = '" . $_REQUEST['user_id'] . "' AND L.group_id = '" . $_REQUEST['group_id'] . "' AND  L.loan_type = '" . $_REQUEST['loan_type'] . "'";
-
-	// 	if (!empty($_REQUEST['admin_type'] === '2')) {
-	// 		$where .= " AND L.status != '6'";
-	// 	}
-
-	// 	$result = $this->user_model->loan_detail($where, array(), $start, $end);
-	// 	$resultCount = $this->user_model->loan_detail($where, array('count'), $start, $end);
-	// 	$countData = $end;
-	// 	$countData++;
-	// 	if (!empty($result)) {
-
-	// 		foreach ($result as $key => $value) {
-	// 			$result[$key]['sno'] = $countData++;
-
-	// 			if (!empty($value['document_image'])) {
-	// 				$result[$key]['document_image'] = base_url($value['document_image']);
-	// 			} else {
-	// 				$result[$key]['document_image'] = "assets/img/default-user-icon.jpg";
-	// 			}
-	// 		}
-
-	// 		$this->response(true, "Data fetch Successfully.", array("lists" => $result, "listCount" => $resultCount));
-	// 	} else {
-	// 		$this->response(true, "Data fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
-	// 	}
-	// }
 
 	// created by @krishn on 31-07-25
 	public function loanList_Help2pay()
@@ -8400,68 +7546,6 @@ class Admin extends Base_Controller
 			$this->response(true, "loan fetch Successfully.", array("loanList" => array()));
 		}
 	}
-	///////////////////////////23/01/2023 chandni///////////////////////////////////////////
-	// public function addBanner()
-	// {
-	// 	$iname = "";
-	// 	if (isset($_FILES['image'])) {
-	// 		$image = $this->common->multi_upload('image', './assets/banners/');
-	// 		if (!empty($image[0])) {
-	// 			foreach ($image as $key => $value) {
-	// 				$_REQUEST['image'] = 'assets/banners/' . $value['file_name'];
-	// 				$post = $this->common->getField('tbl_banners', $_REQUEST);
-	// 				$result = $this->common->insertData('tbl_banners', $post);
-	// 				$banners = $this->db->insert_id();
-	// 			}
-	// 		} else {
-	// 			$_REQUEST['image'] = '';
-	// 		}
-	// 	} else {
-	// 		$_REQUEST['image'] = '';
-	// 		$post = $this->common->getField('tbl_banners', $_REQUEST);
-	// 		$result = $this->common->insertData('tbl_banners', $post);
-	// 		$banners = $this->db->insert_id();
-	// 	}
-
-	// 	$result_banner = $this->common->getData('tbl_banners');
-	// 	if (!empty($result_banner)) {
-	// 		$this->response(true, "banners fetch Successfully.", array("banners" => $result_banner));
-	// 	} else {
-	// 		$this->response(true, "banners fetch Successfully.", array("banners" => array()));
-	// 	}
-	// }
-
-	// public function delete_banner()
-	// {
-	// 	if (!empty($_REQUEST['id'])) {
-	// 		$where = " id ='" . $_REQUEST['id'] . "'";
-	// 		$value = $this->common->deleteData('tbl_banners', $where);
-	// 		$this->response(true, "Delete Successfully.");
-	// 	} else {
-	// 		$this->response(false, "Id Can't be empty.");
-	// 	}
-	// }
-
-	// public function allBanners()
-	// {
-
-	// 	$result_banner = $this->common->getData('tbl_banners');
-	// 	$data = array();
-	// 	if (!empty($result_banner)) {
-	// 		foreach ($result_banner as $key => $value) {
-	// 			if (!empty($value['image'])) {
-	// 				$value['image'] = base_url() . $value['image'];
-	// 			} else {
-	// 				$value['image'] = "";
-	// 			}
-
-	// 			$data[] = $value;
-	// 		}
-	// 		$this->response(true, "banners fetch Successfully.", array("banners" => $data));
-	// 	} else {
-	// 		$this->response(true, "banners fetch Successfully.", array("banners" => array()));
-	// 	}
-	// }
 
 	// created by @krishn on 11-08-25
 	public function addBanner()
@@ -8609,45 +7693,6 @@ class Admin extends Base_Controller
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
-
-
-	// public function editBanner()
-	// {
-	// 	$iname = "";
-	// 	$result_banner = $this->common->getData('tbl_banners', array('id' => $_REQUEST['id']), array('single'));
-
-	// 	if (isset($_FILES['image'])) {
-	// 		$image = $this->common->do_upload('image', './assets/banners/');
-	// 		if (!empty($image['upload_data'])) {
-	// 			$_REQUEST['image'] = 'assets/banners/' . $image['upload_data']['file_name'];
-	// 		} else {
-	// 			$_REQUEST['image'] = $result_banner['image'];
-	// 		}
-	// 	} else {
-	// 		$_REQUEST['image'] = $result_banner['image'];
-	// 	}
-
-
-	// 	if (!empty($_REQUEST['title'])) {
-	// 		$_REQUEST['title'] = $_REQUEST['title'];
-	// 	} else {
-	// 		$_REQUEST['title'] = $result_banner['title'];
-	// 	}
-
-	// 	if (!empty($_REQUEST)) {
-	// 		$result = $this->common->updateData('tbl_banners', array(
-	// 			'title' => $_REQUEST['title'],
-	// 			'image' => $_REQUEST['image']
-	// 		), array('id' => $_REQUEST['id']));
-	// 	} else {
-	// 		$result = "";
-	// 	}
-	// 	if ($result) {
-	// 		$this->response(true, "Update Successfully");
-	// 	} else {
-	// 		$this->response(false, "There is a problem, please try again.");
-	// 	}
-	// }
 
 	// created by @krishn on 11-08-25
 	public function editBanner()
@@ -9008,28 +8053,6 @@ class Admin extends Base_Controller
 		return $totalJnr;
 	}
 
-	// public function savingJnrTotal()
-	// {
-	// 	// $where = "UG.group_id != 0";
-	// 	$where = "UG.group_id != 34 and UG.group_id != 0 and U.status != 2";
-	// 	$users = $this->user_model->user_group_detail($where, array(''));
-	// 	// echo "<pre>"; print_r($users); echo "</pre>";
-	// 	$usercyclejnr = 0;
-	// 	foreach ($users as $key => $value) {
-	// 		$_REQUEST['user_id'] =  $value['user_id'];
-	// 		$_REQUEST['group_id'] =  $value['group_id'];
-	// 		$result3 = $this->common->getData('group_lifecycle', array("group_id" => $value['group_id'], "group_type_id" => '2'));
-	// 		// echo "<pre>"; print_r($result3); echo "</pre>";
-	// 		if (!empty($result3)) {
-	// 			foreach ($result3 as $valuejnr) {
-
-	// 				$usercyclejnr += $this->savingAvgCal($valuejnr['id']);
-	// 			}
-	// 		}
-	// 	}
-	// 	return  $usercyclejnr;
-	// }
-
 	//created by @krishn on 03-06-25
 	public function savingTotalnew()
 	{
@@ -9055,38 +8078,6 @@ class Admin extends Base_Controller
 
 		return $total_completed;
 	}
-
-	// public function savingTotalnew()
-	// {
-	// 	$where = "UG.group_id != 0 and U.status != 2";
-	// 	$users = $this->user_model->user_group_detail($where, array(''));
-	// 	$usercyclejnr = 0;
-	// 	foreach ($users as $key => $value) {
-	// 		$_REQUEST['user_id'] =  $value['user_id'];
-	// 		$_REQUEST['group_id'] =  $value['group_id'];
-	// 		$result3 = $this->common->getData('group_lifecycle', array("group_id" => $value['group_id'], "group_type_id" => '1'));
-	// 		if (!empty($result3)) {
-	// 			foreach ($result3 as $valuejnr) {
-
-	// 				$paidWhere = "group_id = '" . $value['group_id'] . "' AND groupLifecycle_id = '" . $valuejnr['id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status ='2'";
-	// 				$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
-
-	// 				if (!empty($paidResult['total_payment'])) {
-	// 					$paidAvgAmount = $paidResult['total_payment'];
-	// 				} else {
-	// 					$paidAvgAmount = 0;
-	// 				}
-	// 				$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $valuejnr['id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-	// 				$payout_amount_total = $result['total_amount'];
-	// 				$usercyclejnr  +=    $payout_amount_total - $paidAvgAmount;
-	// 				//	$usercyclejnr += $this->savingAvgCal($valuejnr['id']);
-	// 			}
-	// 		}
-	// 	}
-	// 	return  $usercyclejnr;
-	// }
-
 
 
 
@@ -9118,37 +8109,6 @@ class Admin extends Base_Controller
 		return $total_pending;
 	}
 
-	// public function savingTotalnewPending()
-	// {
-	// 	$where = "UG.group_id != 0 and U.status != 2";
-	// 	$users = $this->user_model->user_group_detail($where, array(''));
-	// 	$usercyclejnr = 0;
-	// 	foreach ($users as $key => $value) {
-	// 		$_REQUEST['user_id'] =  $value['user_id'];
-	// 		$_REQUEST['group_id'] =  $value['group_id'];
-	// 		$result3 = $this->common->getData('group_lifecycle', array("group_id" => $value['group_id'], "group_type_id" => '1'));
-	// 		if (!empty($result3)) {
-	// 			foreach ($result3 as $valuejnr) {
-
-	// 				$paidWhere = "group_id = '" . $value['group_id'] . "' AND groupLifecycle_id = '" . $valuejnr['id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='2'";
-	// 				$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
-
-	// 				if (!empty($paidResult['total_payment'])) {
-	// 					$paidAvgAmount = $paidResult['total_payment'];
-	// 				} else {
-	// 					$paidAvgAmount = 0;
-	// 				}
-	// 				$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $valuejnr['id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-	// 				$payout_amount_total = $result['total_amount'];
-	// 				$usercyclejnr  +=    $payout_amount_total - $paidAvgAmount;
-	// 				//	$usercyclejnr += $this->savingAvgCal($valuejnr['id']);
-	// 			}
-	// 		}
-	// 	}
-	// 	return  $usercyclejnr;
-	// }
-
 
 	public function safekeepingTotalAmount()
 	{
@@ -9160,18 +8120,6 @@ class Admin extends Base_Controller
 		}
 		return  $usercyclejnr;
 	}
-
-	// public function safekeepingTotalAmount()
-	// {
-	// 	$where = "UG.group_id != 0 and U.status != 2";
-	// 	$users = $this->user_model->user_group_detail($where, array(''));
-	// 	$usercyclejnr = 0;
-	// 	foreach ($users as $key => $value) {
-	// 		$usercyclejnr  +=   safekeepingTotal($value['group_id'], $value['user_id']);
-	// 	}
-	// 	return  $usercyclejnr;
-	// }
-	//new end  12-09-2024
 
 	public function savingTotal_all()
 	{
@@ -9286,41 +8234,6 @@ class Admin extends Base_Controller
 		}
 	}
 
-
-
-	//   public function welfareList() {
-	// 		// limit code start
-	// 		if(empty($_REQUEST['start'])) {
-	// 				$start = 10;
-	// 				$end = 0;
-	// 		} else {
-	// 			$start = 10;
-	// 			$end = $_REQUEST['start'];
-	// 		}
-	// 		// limit code end
-
-	// 		$where = "L.user_id = '". $_REQUEST['user_id'] ."' AND L.group_id = '". $_REQUEST['group_id'] ."' AND  L.loan_type = '7'";
-
-	// 		if(!empty($_REQUEST['admin_type']) === '2') {
-	//         	$where.= " AND L.status != '6'";
-	//         }
-
-	//         $result = $this->user_model->loan_detail($where,array(),$start,$end);
-	//         $resultCount = $this->user_model->loan_detail($where,array('count'),$start,$end);
-	//         $countData = $end;
-	// 		$countData++;
-	//         if(!empty($result)) { 
-
-	//         	foreach ($result as $key => $value) {
-	//         		$result[$key]['sno'] = $countData++;
-	//         	}
-
-	// 			$this->response(true,"Data fetch Successfully.",array("lists" => $result,"listCount" => $resultCount));			
-	// 		}else{
-	// 			$this->response(true,"Data fetch Successfully.",array("lists" => array(),"listCount" => $resultCount));
-	// 		}
-	// 	}
-
 	// created by @krishn on 18-07-25
 	public function welfareList()
 	{
@@ -9383,18 +8296,6 @@ class Admin extends Base_Controller
 			$this->response(true, 'group not found', array('lists' => array()));
 		}
 	}
-
-
-	// public function welfareList()
-	// {
-	// 	$groupCycleList = $this->common->getData('user_group_lifecycle', array('group_id' => $_REQUEST['group_id'], 'groupLifecycle_id' => $_REQUEST['groupLifecycle_id'], 'user_id' => $_REQUEST['user_id'], 'is_completed' => 0));
-	// 	if (!empty($groupCycleList)) {
-	// 		$this->response(true, 'group fetch successfully', array('lists' => $groupCycleList));
-	// 	} else {
-	// 		$this->response(true, 'group not found', array('lists' => array()));
-	// 	}
-	// }
-
 
 
 
@@ -9490,203 +8391,6 @@ class Admin extends Base_Controller
 			$this->response(true, 'welfare not found', array('loanDetail' => array()));
 		}
 	}
-
-
-	// public function editwelfareCycle()
-	// {
-
-	// 	$id = $_REQUEST['id'];
-
-	// 	unset($_REQUEST['id']);
-
-	// 	if ($_REQUEST['payment_method'] == '3') {
-	// 		$this->paymentBySafekeeping($id, $_REQUEST['amount'], '2', "0");
-	// 	}
-
-	// 	if ($_REQUEST['payment_method'] == '2') {
-	// 		$this->paymentByPF($id, $_REQUEST['amount'], '2');
-	// 	}
-
-
-	// 	$getcycle = $this->common->getData('user_group_lifecycle', array(
-	// 		"group_id" => $_REQUEST['group_id'],
-	// 		'status!=' => '1',
-	// 		'loan_amount_status' => 1,
-	// 		"user_id" => $_REQUEST['user_id']
-	// 	), array('sort_by' => 'id', 'sort_direction' => 'desc', 'limit' => 1));
-
-	// 	$_REQUEST['loan_amount_status'] = 1;
-	// 	if ($_REQUEST['created_at']) {
-	// 		$_REQUEST['date'] = $_REQUEST['created_at'];
-	// 	}
-
-	// 	$post = $this->common->getField('user_group_lifecycle', $_REQUEST);
-
-	// 	if (!empty($post)) {
-	// 		if (!empty($getcycle)) {
-	// 			if ($getcycle[0]['total_payment'] > 0) {
-	// 				$amount =  $getcycle[0]['total_payment'] - $_REQUEST['amount'];
-	// 				$result = $this->common->updateData('user_group_lifecycle', array('total_payment' => $amount), array('id' => $id));
-	// 			}
-	// 		}
-
-	// 		$post['total_payment'] = $post['amount'] * $post['month'];
-
-	// 		// if welfare closed
-	// 		if (isset($_REQUEST['welfare_uuid']) && isset($_REQUEST['is_completed']) && $_REQUEST['is_completed'] == '1') {
-	// 			$this->common->updateData(
-	// 				'user_group_lifecycle',
-	// 				array('is_completed' => '1'),
-	// 				array('welfare_uuid' => $_REQUEST['welfare_uuid'])
-	// 			);
-	// 		}
-
-	// 		$result = $this->common->updateData('user_group_lifecycle', $post, array('id' => $id));
-	// 	} else {
-	// 		$result = "";
-	// 	}
-
-	// 	if ($result) {
-
-	// 		$this->common->insertData('user_cycle_status_history', array("lifecycle_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
-	// 		//user_loan_payment
-
-	// 		$wherePendingwel = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "'AND groupLifecycle_id = '147' GROUP BY user_id,grand_total_amount,group_id,groupLifecycle_id,id ";
-
-	// 		$resultwelTotal = $this->common->getData('user_group_lifecycle', $wherePendingwel, array("field" => 'user_id,group_id,groupLifecycle_id,grand_total_amount,id', ""));
-
-	// 		$user_loan_payment = $this->common->insertData(
-	// 			'user_loan_payment',
-	// 			array(
-	// 				"loan_id" => $resultwelTotal[0]['id'],
-	// 				"group_id" => $_REQUEST['group_id'],
-	// 				"amount" => $_REQUEST['amount'],
-	// 				"payment_method" => $_REQUEST['payment_method'],
-	// 				"user_id" => $_REQUEST['user_id'],
-	// 				"note_title" => $_REQUEST['note_title'],
-	// 				"note_description" => $_REQUEST['note_description'],
-	// 				"status" => $_REQUEST['status'],
-	// 				"created_at" => date('Y-m-d H:i:s')
-	// 			)
-	// 		);
-
-
-
-	// 		$message = "Your cycle info has been updated";
-	// 		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "1");
-
-
-	// 		if ($_REQUEST['status'] === '3') {
-
-	// 			$this->common->query_normal("UPDATE credit_score_user SET three_or_more_missed_savings_deadline = three_or_more_missed_savings_deadline+1 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-	// 			$creditScoreInfo = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-	// 			if (!empty($creditScoreInfo)) {
-
-	// 				if ($creditScoreInfo['three_or_more_missed_savings_deadline'] > 2) {
-	// 					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-	// 					$this->updateCreditScore(300, 'minus');
-	// 				} else {
-	// 					$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-	// 					$this->updateCreditScore(100, 'minus');
-	// 				}
-	// 			}
-	// 		}
-
-
-
-	// 		if ($_REQUEST['status'] === '2') {
-
-	// 			$this->common->query_normal("UPDATE credit_score_user SET saving_paid_on_time = saving_paid_on_time+20 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-	// 			$this->updateCreditScore(20, 'plus');
-
-
-
-	// 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-	// 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-	// 			$data['useremail'] = "";
-	// 			$data['message'] = '<p>This is a confirmation that your WELFARE payment for this month has been received and recorded. Check your app for confirmation.</p>';
-	// 			$messaged = $this->load->view('template/common-mail', $data, true);
-	// 			$mail = $this->sendMail($userDetailFrom['email'], 'Welfare', $messaged);
-	// 		}
-
-
-	// 		if ($_REQUEST['status'] === '4') {
-	// 			$data['status'] = "Missed Payment Deadline";
-	// 			// added super email 
-	// 			$usersuper = $this->common->getData('superAdmin', array('admin_type' => '2', 'status!=' => '2'), array('single'));
-	// 			$data1['sendername'] = $usersuper['name'];
-	// 			// $data1['message'] = '<p>This is a confirmation that we have received and recorded Welfare for this month. Refer to your app for confirmation</p><p>Amount paid: £' . $_REQUEST["amount"] . '</p><p>Payment date: ' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</p><p>Payment status: ' . $_REQUEST['status'] . '</p>';
-	// 			$data1['message'] = '<p>This is a confirmation that we have received and recorded Welfare for this month. Refer to your app for confirmation.</p>
-	// 			<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
-	// 				<tr>
-	// 					<td><strong>Amount paid</strong></td>
-	// 					<td>£' . $_REQUEST["amount"] . '</td>
-	// 				</tr>
-	// 				<tr>
-	// 					<td><strong>Payment date</strong></td>
-	// 					<td>' . date("d M Y", strtotime($_REQUEST['created_at'])) . '</td>
-	// 				</tr>
-	// 				<tr>
-	// 					<td><strong>Payment status</strong></td>
-	// 					<td>' . $data['status'] . '</td>
-	// 				</tr>
-	// 			</table>';
-
-	// 			$messaged1 = $this->load->view('template/common-mail', $data1, true);
-	// 			$mail = $this->sendMail($usersuper['email'], 'Welfare', $messaged1);
-
-	// 			$this->common->query_normal("UPDATE credit_score_user SET late_savings_payment = late_savings_payment-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-	// 			$this->updateCreditScore(60, 'minus');
-	// 		}
-	// 		//new-changes 12-06-2024
-	// 		if ($_REQUEST['status']) {
-	// 			$status = $_REQUEST['status'];
-	// 			$group_type_id = '4';
-	// 			$group_id = $_REQUEST['group_id'];
-	// 			$created_at = date('Y-m-d H:i:s');
-	// 			$groupLifecycle_id = '147';
-	// 			$user_id = $_REQUEST['user_id'];
-	// 			$month = $_REQUEST['month'];
-	// 			$amount = $_REQUEST['amount'];
-	// 			$result = $this->common->query_normal("INSERT INTO payment_notification(status,group_type_id,group_id,month,created_at,
-	//            groupLifecycle_id,user_id,amount) VALUES('$status','$group_type_id','$group_id','$month','$created_at','$groupLifecycle_id','$user_id','$amount')");
-	// 		}
-	// 		//changes
-	// 		// $userDetailFrom = $this->common->getData('user',array('user_id'=>$_REQUEST['user_id']),array('single'));
-	// 		// $checkuser = $this->common->getData('user_circle',array("user_id"=>$_REQUEST['user_id']),array('single'));
-	// 		//  if(!empty($checkuser)){
-	// 		//  $checkusercircle = $this->common->getData('user_circle',array("circle_id"=>$checkuser['circle_id']),array());
-	// 		//   if($checkusercircle){
-	// 		//       foreach($checkusercircle as $value){
-	// 		//           $chuser = $this->common->getData('user',array("user_id"=>$value['user_id']),array('single'));
-	// 		//             $data['sendername'] = $userDetailFrom['first_name']." ".$userDetailFrom['last_name'];
-	// 		// 			$data['useremail'] = "";
-
-	// 		// 		    if($_REQUEST['status'] ==='4'){
-	// 		//     	$data['message'] = '<p>Hello Team members Someone in your circle has paid late</p>';
-	// 		//     	$messaged = $this->load->view('template/common-mail',$data,true);
-	// 		//       $mail = $this->sendMail($chuser['email'],'Welfare',$messaged);
-	// 		//             }
-	// 		//             if($_REQUEST['status'] ==='3'){
-	// 		//     $data['message'] = '<p>Hello Team members Someone in your circle has missed a payment</p>';
-	// 		//     $messaged = $this->load->view('template/common-mail',$data,true);
-	// 		//       $mail = $this->sendMail($chuser['email'],'Welfare',$messaged);
-	// 		//             }
-
-
-	// 		//       }
-	// 		//   }
-	// 		//  }
-
-	// 		$this->response(true, "User Welfare Cycle Update Successfully");
-	// 	} else {
-	// 		$this->response(false, "There is a problem, please try again.");
-	// 	}
-	// }
 
 	// created by @krishn on 18-07-25
 	public function editwelfareCycle()
@@ -9920,134 +8624,6 @@ class Admin extends Base_Controller
 
 		$this->response(true, "User Welfare Cycle Update Successfully");
 	}
-
-
-	// public function addWelfareCycle()
-	// {
-	// 	$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-
-	// 	$_REQUEST['status'] = '0';
-
-	// 	$user_id = $_REQUEST['user_id'];
-	// 	$group_id = $_REQUEST['group_id'];
-	// 	$amount = $_REQUEST['amount'];
-
-	// 	$groupDetail = $this->common->getData('group_lifecycle', array('group_id' => $group_id, 'id' => $_REQUEST['groupLifecycle_id'], 'group_type_id' => '4'));
-	// 	if (!empty($groupDetail)) {
-	// 		$welfareUuid = strtoupper(substr(bin2hex(random_bytes(8)), 0, 10));
-
-	// 		foreach ($groupDetail as $key => $value) {
-	// 			$x = 1;
-	// 			//$cycleDate = $value['start_date'];
-
-	// 			$cycleDate = $_REQUEST['date'];
-	// 			while ($x <= $value['month_count']) {
-
-	// 				$cycleArr = array(
-	// 					"group_id" => $group_id,
-	// 					"welfare_uuid" => $welfareUuid,
-	// 					"groupLifecycle_id" => $value['id'],
-	// 					"user_id" => $user_id,
-	// 					"amount" => $amount,
-	// 					"month" => $x,
-	// 					"created_at" => date('Y-m-d H:i:s'),
-	// 					"date" => $cycleDate,
-	// 					'loan_emi' => $_REQUEST['loan_emi'],
-	// 					'admin_risk' => $_REQUEST['admin_risk'],
-	// 					'provident' => $_REQUEST['provident'],
-	// 					// 'total_payment'=>$_REQUEST['total_payment'],
-	// 					'total_payment' => 0,
-	// 					'grand_total_amount' => $_REQUEST['total_payment']
-	// 				);
-
-	// 				$post = $this->common->getField('user_group_lifecycle', $cycleArr);
-	// 				$result = $this->common->insertData('user_group_lifecycle', $post);
-	// 				$id = $this->db->insert_id();
-	// 				$cycleDate = strtotime("+1 month", strtotime($cycleDate));
-	// 				$cycleDate = date("Y-m-d", $cycleDate);
-	// 				$x++;
-	// 			}
-	// 		}
-
-
-	// 		$this->response(true, "Insert Data Successfully");
-	// 	} else {
-	// 		$this->response(false, "Group Data Not Found");
-	// 	}
-	// }
-
-	// public function addWelfareCycle()
-	// {
-	// 	$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-	// 	$_REQUEST['status'] = '0';
-
-	// 	$user_id  = $_REQUEST['user_id'];
-	// 	$group_id = $_REQUEST['group_id'];
-	// 	$groupLifecycleId = $_REQUEST['groupLifecycle_id'];
-	// 	$amount   = $_REQUEST['amount'];
-
-	// 	$checkExistingWelfareCycle = $this->common->getData('user_group_lifecycle', [
-	// 		'group_id'       => $group_id,
-	// 		'id'             => $groupLifecycleId,
-	// 		'user_id'        => $user_id,
-	// 		'is_completed'	 => '0'
-	// 	]);
-
-	// 	if(!empty($checkExistingWelfareCycle))
-	// 	{
-	// 		$this->response(false, "Complete the current welfare cycle before starting a new one.");
-	// 		die();
-	// 	}
-
-	// 	// Fetch group lifecycle details
-	// 	$groupDetail = $this->common->getData('group_lifecycle', [
-	// 		'group_id'       => $group_id,
-	// 		'id'             => $groupLifecycleId,
-	// 		'group_type_id'  => '4'
-	// 	]);
-
-	// 	if (!empty($groupDetail)) {
-	// 		// Generate a 10-character uppercase unique string
-	// 		$welfareUuid = strtoupper(substr(bin2hex(random_bytes(8)), 0, 10));
-
-	// 		foreach ($groupDetail as $value) {
-	// 			$x = 1;
-	// 			$cycleDate = $_REQUEST['date']; // starting date
-
-	// 			while ($x <= $value['month_count']) {
-	// 				$cycleArr = [
-	// 					"group_id"           => $group_id,
-	// 					"welfare_uuid"       => $welfareUuid,
-	// 					"groupLifecycle_id"  => $value['id'],
-	// 					"user_id"            => $user_id,
-	// 					"amount"             => $amount,
-	// 					"month"              => $x,
-	// 					"created_at"         => date('Y-m-d H:i:s'),
-	// 					"date"               => $cycleDate,
-	// 					"loan_emi"           => $_REQUEST['loan_emi'] ?? 0,
-	// 					"admin_risk"         => $_REQUEST['admin_risk'] ?? 0,
-	// 					"provident"          => $_REQUEST['provident'] ?? 0,
-	// 					"total_payment"      => 0,
-	// 					"grand_total_amount" => $_REQUEST['total_payment'] ?? 0
-	// 				];
-
-	// 				// Sanitize & get valid fields only
-	// 				$post = $this->common->getField('user_group_lifecycle', $cycleArr);
-
-	// 				// Insert data into DB
-	// 				$result = $this->common->insertData('user_group_lifecycle', $post);
-
-	// 				// Update next cycle date
-	// 				$cycleDate = date("Y-m-d", strtotime("+1 month", strtotime($cycleDate)));
-	// 				$x++;
-	// 			}
-	// 		}
-
-	// 		$this->response(true, "Insert Data Successfully");
-	// 	} else {
-	// 		$this->response(false, "Group Data Not Found");
-	// 	}
-	// }
 
 	// created by @krishn on 27-05-25
 	public function addWelfareCycle()
@@ -10359,94 +8935,6 @@ class Admin extends Base_Controller
 		}
 	}
 
-	// public function getCircleBygroupid()
-	// {
-	// 	//ini_set('display_errors', 1);
-	// 	if (empty($_POST['group_id'])) {
-	// 		$this->response(false, "Please enter your group id");
-	// 		die();
-	// 	}
-
-	// 	$circleIds = explode(",", $_POST['circle_ids']);
-
-	// 	if (!empty($_POST['circle_ids'])) {
-	// 		// When circle_ids is available
-	// 		$groupcircle = $this->common->getData(
-	// 			'group_circle',
-	// 			array('group_id' => $_POST['group_id']),
-	// 			array(
-	// 				'colname'  => 'id',
-	// 				'where_in' => $circleIds
-	// 			)
-	// 		);
-	// 	} else {
-	// 		// When circle_ids is NOT available
-	// 		$groupcircle = $this->common->getData(
-	// 			'group_circle',
-	// 			array('group_id' => $_POST['group_id']),
-	// 			array()
-	// 		);
-	// 	}
-
-	// 	$array = [];
-	// 	if ($groupcircle) {
-
-
-	// 		foreach ($groupcircle as $value) {
-	// 			$i = 0;
-	// 			$trustscore = 0;
-	// 			$usercircle = $this->common->getData('user_circle', array('circle_id' => $value['id'], 'circle_lead' => '1'), array('single'));
-
-	// 			$usercircle_dep = $this->common->getData('user_circle', array('circle_id' => $value['id'], 'deputycirclelead' => '1'), array('single'));
-
-	// 			$usercircledata = $this->common->getData('user_circle', array('circle_id' => $value['id']), array(''));
-	// 			if (!empty($usercircledata)) {
-	// 				foreach ($usercircledata as $value1) {
-	// 					$i++;
-	// 					$userinfo = get_user_details($value1['user_id']);
-	// 					if ($userinfo) {
-	// 						$trustscore += $userinfo['total_credit_score'];
-	// 					}
-	// 				}
-	// 			}
-	// 			if ($i != 0) {
-	// 				$value['trust_score'] = $trustscore / $i;
-	// 			} else {
-	// 				$value['trust_score'] = 0;
-	// 			}
-
-	// 			if ($usercircle_dep) {
-	// 				$userdeputy = $this->common->getData('user', array('user_id' => $usercircle_dep['user_id']), array('single'));
-	// 				if ($userdeputy) {
-	// 					$deputyname = $userdeputy['first_name'] . " " . $userdeputy['last_name'];
-	// 				} else {
-	// 					$deputyname = "";
-	// 				}
-	// 			} else {
-	// 				$deputyname = "";
-	// 			}
-	// 			if ($usercircle) {
-	// 				$user = $this->common->getData('user', array('user_id' => $usercircle['user_id']), array('single'));
-	// 				if ($user) {
-	// 					$name =  $user['first_name'] . " " . $user['last_name'];
-	// 				} else {
-	// 					$name = "";
-	// 				}
-	// 			} else {
-	// 				$name = "";
-	// 			}
-
-	// 			$value['deputy_lead_name'] = $deputyname;
-	// 			$value['circle_lead_name'] = $name;
-	// 			$array[] = $value;
-	// 		}
-
-	// 		$this->response(true, "Succesfully fetched circle!", array("data" => $array, "circle_lead" => ""));
-	// 	} else {
-	// 		$this->response(false, "Circle not found. Please check your details.");
-	// 	}
-	// }
-
 	// created by @krishn on 23-06-26
 	public function getCircleBygroupid()
 	{
@@ -10728,51 +9216,6 @@ class Admin extends Base_Controller
 			$this->response(false, "No lead found for this user in the specified circle and group.");
 		}
 	}
-
-	// public function circleUser_list()
-	// {
-	// 	// limit code start
-
-	// 	if (empty($_REQUEST['start'])) {
-	// 		$start = 10;
-	// 		$end = 0;
-	// 	} else {
-	// 		$start = 10;
-	// 		$end = $_REQUEST['start'];
-	// 	}
-	// 	// limit code end
-
-	// 	$where = "UG.group_id = '" . $_REQUEST['group_id'] . "' AND UG.circle_id = '" . $_REQUEST['circle_id'] . "' AND U.status != '2' AND U.recommended = 0";
-
-	// 	if (!empty($_REQUEST['search_keyword'])) {
-	// 		$where .= " AND  (U.first_name LIKE '%" . $_REQUEST['search_keyword'] . "%' OR U.last_name LIKE '%" . $_REQUEST['search_keyword'] . "%' OR U.email LIKE '%" . $_REQUEST['search_keyword'] . "%') ";
-	// 	}
-
-	// 	$result = $this->user_model->user_circle_detail($where, array(), "", "");
-	// 	$userCount = $this->user_model->user_circle_detail($where, array('count'));
-
-	// 	$countData = 0;
-	// 	$countData++;
-	// 	if (!empty($result)) {
-	// 		foreach ($result as $key => $value) {
-
-	// 			if (!empty($value['profile_image'])) {
-	// 				$result[$key]['profile_image'] = base_url($value['profile_image']);
-	// 				$result[$key]['profile_image_thumb'] = base_url($value['profile_image']);
-	// 			} else {
-	// 				$result[$key]['profile_image'] = "assets/img/default-user-icon.jpg";
-	// 				$result[$key]['profile_image_thumb'] = "assets/img/default-user-icon.jpg";
-	// 			}
-
-	// 			$result[$key]['sno'] = $countData++;
-	// 		}
-
-	// 		$groupcircle = $this->common->getData('group_circle', array('id' => $_REQUEST['circle_id']), array('single'));
-	// 		$this->response(true, "User fetch Successfully.", array("userList" => $result, "userCount" => $userCount, "circle_name" => $groupcircle['circle_name']));
-	// 	} else {
-	// 		$this->response(true, "User fetch Successfully.", array("userList" => array(), "userCount" => $userCount));
-	// 	}
-	// }
 
 	public function circleUser_list()
 	{
@@ -11104,60 +9547,6 @@ class Admin extends Base_Controller
 			$this->response(false, "User id is required, please try again.");
 		}
 	}
-	// changes19_07_2024
-	// public function sendEmailtoUserGroupAll()
-	// {
-	// 	//ini_set('display_errors', 1);
-	// 	$created_at = date('Y-m-d');
-	// 	$date = strtotime($created_at);
-	// 	$month = date("m", $date);
-
-	// 	$check = $this->common->getData('mail_records', array("Month(created_at)" => $month, "group_id" => $_REQUEST['group_id']), array('single'));
-	// 	if (!empty($check)) {
-	// 		$this->response(false, "Already mail set to all for this month.");
-	// 		die();
-	// 	}
-
-
-	// 	if ($_REQUEST['group_id']) {
-	// 		// ini_set('display_errors', 1);
-
-	// 		$where = "UG.group_id = '" . $_REQUEST['group_id'] . "' and U.status != '2'";
-	// 		$this->db->select('U.*');
-	// 		$this->db->from('user_group as UG');
-	// 		$this->db->where($where);
-	// 		$this->db->join('user as U', 'U.user_id = UG.user_id');
-	// 		$this->db->order_by("UG.id", 'DESC');
-	// 		$res = $this->db->get()->result_array();
-	// 		$data2 = [];
-	// 		foreach ($res as $key => $value) {
-	// 			$id  = $value['user_id'];
-	// 			$ecode = base64_encode($id);
-	// 			$data['sendername'] = $value['first_name'] . " " . $value['last_name'];
-	// 			$data['useremail'] = "";
-	// 			$data["link"] = ADMIN_BASE_URL.'user/UpdateUserPayment/' . $ecode;
-	// 			$data['message'] = '<p>As we prepare for the upcoming Interfriends cycle, we kindly request that you confirm your monthly savings and anticipated payout date.</p><p>To provide this important information, please click on the link provided below.</p><a href="' . $data["link"] . '">click here</a>
-	//             <p>Thank you for your prompt attention to this matter.</p>';
-	// 			$messaged = $this->load->view('template/common-mail', $data, true);
-	// 			$mail = $this->sendMail($value['email'], "New Savings Cycle Decision", $messaged);
-
-	// 			// print_r($mail);
-	// 			if ($mail) {
-	// 				$data2[] = 1;
-	// 			}
-	// 		}
-
-	// 		if ($data1) {
-	// 			$group_id = $_REQUEST['group_id'];
-	// 			$result = $this->common->query_normal("INSERT INTO mail_records(mail_sent,created_at,group_id) VALUES('1','$created_at','$group_id')");
-	// 			$this->response(true, "Mail sent successfully!");
-	// 		} else {
-	// 			$this->response(false, "There is a problem, please try again.");
-	// 		}
-	// 	} else {
-	// 		$this->response(false, "group id is required, please try again.");
-	// 	}
-	// }
 
 	// created by @krishn on 06-06-25
 	public function sendEmailtoUserGroupAll()
@@ -11254,64 +9643,6 @@ class Admin extends Base_Controller
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
-
-	// public function paymentallNotification()
-	// {
-	// 	if (empty($_REQUEST['start'])) {
-	// 		$start = 10;
-	// 		$end = 0;
-	// 	} else {
-	// 		$start = 10;
-	// 		$end = $_REQUEST['start'];
-	// 	}
-
-	// 	$where = " U.status != '2' AND U.recommended = 0";
-
-	// 	if (!empty($_REQUEST['search_keyword'])) {
-	// 		$keyword = $_REQUEST['search_keyword'];
-	// 		$where .= " AND (
-	// 			U.first_name LIKE '%$keyword%' OR
-	// 			U.last_name LIKE '%$keyword%' OR
-	// 			U.email LIKE '%$keyword%' OR
-	// 			UG.amount LIKE '%$keyword%'
-	// 		)";
-	// 	}
-
-	// 	// Filter by loan_type dropdown
-	// 	if (!empty($_REQUEST['loan_type'])) {
-	// 		$loan_type = $_REQUEST['loan_type'];
-	// 		$where .= " AND UG.loan_type = '$loan_type'";
-	// 	}
-
-	// 	// Filter by status dropdown
-	// 	if (!empty($_REQUEST['status'])) {
-	// 		$status = $_REQUEST['status'];
-	// 		$where .= " AND UG.status = '$status'";
-	// 	}
-
-	// 	$result = $this->user_model->paymentallNotification_detail($where, array(), $start, $end);
-	// 	$userCount = $this->user_model->paymentallNotification_detail($where, array('count'));
-
-	// 	$countData = $end + 1;
-
-	// 	if (!empty($result)) {
-	// 		foreach ($result as $key => $value) {
-	// 			if (!empty($value['profile_image'])) {
-	// 				$result[$key]['profile_image'] = base_url($value['profile_image']);
-	// 				$result[$key]['profile_image_thumb'] = base_url($value['profile_image']);
-	// 			} else {
-	// 				$result[$key]['profile_image'] = "assets/img/default-user-icon.jpg";
-	// 				$result[$key]['profile_image_thumb'] = "assets/img/default-user-icon.jpg";
-	// 			}
-
-	// 			$result[$key]['sno'] = $countData++;
-	// 		}
-
-	// 		$this->response(true, "User fetch Successfully.", array("userList" => $result, "userCount" => $userCount));
-	// 	} else {
-	// 		$this->response(true, "User fetch Successfully.", array("userList" => array(), "userCount" => $userCount));
-	// 	}
-	// }
 
 	// created by @krishn on 20-05-25
 	public function paymentallNotification()
@@ -11448,9 +9779,9 @@ class Admin extends Base_Controller
 			'help_to_buy_house' => 'UL',
 			'miscellaneous' => 'UM',
 			'welfare_cycle' => 'UGL',
-			'jnr_saving' => 'UG',
+			'jnr_saving' => 'UGL',
 			'saving_pending' => 'UGL',
-			'saving' => 'UG',
+			'saving' => 'UGL',
 			'safekeeping_add' => 'SK',
 			'safekeeping_remove' => 'SK',
 		];
@@ -11589,26 +9920,67 @@ class Admin extends Base_Controller
 				$field = 'ULP.user_id, ULP.group_id, U.first_name, U.last_name, U.email, ULP.amount, ULP.created_at';
 				break;
 
+			// case 'active_loan':
+			// 	$table = 'user_loan UL 
+			// 	LEFT JOIN (
+			// 		SELECT user_id, group_id, SUM(amount) AS total_paid 
+			// 		FROM user_loan_payment 
+			// 		GROUP BY user_id, group_id
+			// 	) AS ULP ON UL.user_id = ULP.user_id AND UL.group_id = ULP.group_id,
+			// 	user U';
+
+			// 	$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND UL.loan_type = 1 $searchCond";
+
+			// 	$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, 
+			// 	SUM(UL.loan_amount) AS total_completed,
+			// 	IFNULL(ULP.total_paid, 0) AS total_paid,
+			// 	(SUM(UL.loan_amount) - IFNULL(ULP.total_paid, 0)) AS amount,
+			// 	MAX(UL.created_at) AS created_at';
+
+			// 	$groupBy = 'UL.user_id, UL.group_id';
+			// 	break;
+
 			case 'active_loan':
-				$table = 'user_loan UL 
+
+				$table = "
+				user_loan UL
 				LEFT JOIN (
-					SELECT user_id, group_id, SUM(amount) AS total_paid 
-					FROM user_loan_payment 
-					GROUP BY user_id, group_id
-				) AS ULP ON UL.user_id = ULP.user_id AND UL.group_id = ULP.group_id,
-				user U';
+					SELECT
+						loan_id,
+						SUM(amount) AS total_paid
+					FROM user_loan_payment
+					GROUP BY loan_id
+				) ULP ON ULP.loan_id = UL.id
+				INNER JOIN user U ON U.user_id = UL.user_id
+			";
 
-				$fullWhere = "UL.user_id = U.user_id AND U.status != '2' AND UL.group_id != 34 AND loan_type = 1 $searchCond";
+				$fullWhere = "
+				U.status != '2'
+				AND UL.group_id != 34
+				AND UL.loan_type = 1
+				AND UL.status = 4
+				$searchCond
+			";
 
-				$field = 'UL.user_id, UL.group_id, U.first_name, U.last_name, U.email, 
+				$field = "
+				UL.user_id,
+				UL.group_id,
+				U.first_name,
+				U.last_name,
+				U.email,
+
 				SUM(UL.loan_amount) AS total_completed,
-				IFNULL(ULP.total_paid, 0) AS total_paid,
-				(SUM(UL.loan_amount) - IFNULL(ULP.total_paid, 0)) AS amount,
-				MAX(UL.created_at) AS created_at';
 
-				$groupBy = 'UL.user_id, UL.group_id';
+				SUM(IFNULL(ULP.total_paid,0)) AS total_paid,
+
+				SUM(UL.loan_amount - IFNULL(ULP.total_paid,0)) AS amount,
+
+				MAX(UL.created_at) AS created_at
+			";
+
+				$groupBy = "UL.user_id, UL.group_id";
+
 				break;
-
 
 			case 'help_to_pay_car_insurance':
 				$table = 'user_loan UL, user U';
@@ -11647,14 +10019,20 @@ class Admin extends Base_Controller
 				break;
 
 			case 'jnr_saving':
-				$table = 'user_group UG, user U';
-				$fullWhere = "UG.user_id = U.user_id AND U.status != '2' and UG.group_id != 34 $searchCond";
-				$field = 'UG.user_id, U.first_name, U.last_name, U.email, UG.jnr_amount as amount, UG.created_at';
+				$table = 'user_group UG, user U, group_lifecycle GL, user_group_lifecycle UGL';
+				$fullWhere = "UG.user_id = U.user_id AND UG.group_id = GL.group_id AND GL.id = UGL.groupLifecycle_id AND UGL.user_id = U.user_id AND UGL.group_id != 0 AND U.status != '2' $searchCond";
+				$field = 'UG.user_id, U.first_name, U.last_name, U.email, UGL.amount, UGL.created_at';
 				break;
+
+			// case 'jnr_saving':
+			// 	$table = 'user_group UG, user U';
+			// 	$fullWhere = "UG.user_id = U.user_id AND U.status != '2' and UG.group_id != 34 $searchCond";
+			// 	$field = 'UG.user_id, U.first_name, U.last_name, U.email, UG.jnr_amount as amount, UG.created_at';
+			// 	break;
 
 			case 'saving_pending':
 				$table = 'user_group UG, user U, group_lifecycle GL, user_group_lifecycle UGL';
-				$fullWhere = "UG.user_id = U.user_id AND UG.group_id = GL.group_id AND GL.id =UGL.groupLifecycle_id AND UGL.user_id = U.user_id AND UGL.group_id != 0 AND U.status != '2' AND UGL.status = 1 $searchCond";
+				$fullWhere = "UG.user_id = U.user_id AND UG.group_id = GL.group_id AND GL.id = UGL.groupLifecycle_id AND UGL.user_id = U.user_id AND UGL.group_id != 0 AND U.status != '2' AND UGL.status = 1 $searchCond";
 				$field = "U.user_id, U.first_name, U.last_name, U.email, UGL.amount, UGL.created_at";
 				break;
 
@@ -11735,12 +10113,12 @@ class Admin extends Base_Controller
 		}
 
 		$where1 = "L.status = '1'";
-		$where2 = "status = '1'";
+		$where2 = "UGL.status = '1'";
 		$where3 = "UM.user_id = '1'";
 
 		// Fetch all data first (no limit)
 		$allLoan = $this->user_model->loan_detail($where1, array());
-		$allSaving = $this->common->getData('user_group_lifecycle', $where2);
+		$allSaving = $this->user_model->saving_detail($where2, array());
 		$allMiscellaneous = $this->user_model->miscellaneous_detail($where3, array());
 
 		// Add type
@@ -11997,83 +10375,6 @@ class Admin extends Base_Controller
 			"listCount" => $mergedCount
 		));
 	}
-
-	// public function getAllMissedPayments()
-	// {
-	// 	if (empty($_REQUEST['start'])) {
-	// 		$start = 10;
-	// 		$end = 0;
-	// 	} else {
-	// 		$start = 10;
-	// 		$end = $_REQUEST['start'];
-	// 	}
-
-	// 	$where1 = "L.status = '1'";
-	// 	$where2 = "status = 1";
-	// 	$where3 = "UM.user_id = '1'";
-
-	// 	// Fetch all data first (no limit)
-	// 	$allLoan = $this->user_model->loan_detail($where1, array());
-	// 	$allSaving = $this->common->getData('user_group_lifecycle', $where2);
-	// 	$allMiscellaneous = $this->user_model->miscellaneous_detail($where3, array(),);
-
-	// 	// Add type and sno (sno will be adjusted after filtering)
-	// 	foreach ($allLoan as &$item) {
-	// 		$item['type'] = 'loan';
-	// 	}
-	// 	foreach ($allSaving as &$item) {
-	// 		$item['type'] = 'saving';
-	// 	}
-	// 	foreach ($allMiscellaneous as &$item) {
-	// 		$item['type'] = 'miscellaneous';
-	// 	}
-
-	// 	// Merge all data
-	// 	$mergedData = array_merge($allLoan, $allSaving, $allMiscellaneous);
-
-	// 	// Type Filter
-	// 	if (!empty($_REQUEST['type'])) {
-	// 		$type = strtolower($_REQUEST['type']);
-	// 		$mergedData = array_filter($mergedData, function ($item) use ($type) {
-	// 			return strtolower($item['type']) === $type;
-	// 		});
-	// 	}
-
-	// 	// Search Filter
-	// 	if (!empty($_REQUEST['search_keyword'])) {
-	// 		$keyword = strtolower($_REQUEST['search_keyword']);
-	// 		$mergedData = array_filter($mergedData, function ($item) use ($keyword) {
-	// 			$user = get_user_details($item['user_id']);
-	// 			return (
-	// 				strpos(strtolower($user['first_name']), $keyword) !== false ||
-	// 				strpos(strtolower($user['last_name']), $keyword) !== false ||
-	// 				strpos(strtolower($user['email']), $keyword) !== false ||
-	// 				(isset($item['loan_total']) && strpos(strtolower($item['loan_total']), $keyword) !== false) ||
-	// 				(isset($item['amount']) && strpos(strtolower($item['amount']), $keyword) !== false) ||
-	// 				(isset($item['type']) && strpos(strtolower($item['type']), $keyword) !== false)
-	// 			);
-	// 		});
-	// 	}
-
-	// 	// Reset indexes after filtering
-	// 	$mergedData = array_values($mergedData);
-	// 	$mergedCount = count($mergedData);
-
-	// 	// Pagination: slice the merged array
-	// 	$paginatedData = array_slice($mergedData, $end, $start);
-
-	// 	// Append user_info and SNO
-	// 	$sno = $end + 1;
-	// 	foreach ($paginatedData as $key => &$value) {
-	// 		$value['sno'] = $sno++;
-	// 		$value['user_info'] = get_user_details($value['user_id']);
-	// 	}
-
-	// 	$this->response(true, "Missed Payment Data fetched successfully.", array(
-	// 		"lists" => $paginatedData,
-	// 		"listCount" => $mergedCount
-	// 	));
-	// }
 
 	// created by @krishn on 27-05-25
 	public function getAllOutstandingPayments()
@@ -12354,104 +10655,6 @@ class Admin extends Base_Controller
 			]
 		);
 	}
-
-	// API created by @krishn on 16/06/26
-	// public function updateInvestmentRequestStatus()
-	// {
-	// 	if (empty($_REQUEST['request_id'])) {
-	// 		$this->response(false, "Request ID is required.");
-	// 		return;
-	// 	}
-
-	// 	if (!isset($_REQUEST['status'])) {
-	// 		$this->response(false, "Status is required.");
-	// 		return;
-	// 	}
-
-	// 	$requestId = $_REQUEST['request_id'];
-	// 	$status = (int)$_REQUEST['status'];
-
-	// 	// Only Approve or Reject
-	// 	if (!in_array($status, [1, 2])) {
-	// 		$this->response(false, "Invalid status.");
-	// 		return;
-	// 	}
-
-	// 	// Check request exists
-	// 	$request = $this->common->getData(
-	// 		'investment_request',
-	// 		['id' => $requestId],
-	// 		['single']
-	// 	);
-
-	// 	if (empty($request)) {
-	// 		$this->response(false, "Investment request not found.");
-	// 		return;
-	// 	}
-
-	// 	// Update request status
-	// 	$updateData = array(
-	// 		'status' => $status
-	// 	);
-
-	// 	$result = $this->common->updateData(
-	// 		'investment_request',
-	// 		$updateData,
-	// 		['id' => $requestId]
-	// 	);
-
-	// 	if ($result) {
-
-	// 		// If Approved, insert into investment table
-	// 		if ($status == 1) {
-
-	// 			$investmentData = array(
-	// 				'user_id'          => $request['user_id'],
-	// 				'group_id'         => $request['group_id'],
-	// 				'property_id'      => $request['property_id'],
-	// 				'amount'           => $request['amount'],
-
-	// 				'investment_type' => 1, // Property
-	// 				'payment_status'  => 2, // Invest
-	// 				'status'          => 1, // Unblock
-	// 				'payment_method'  => 1, // Normal
-
-	// 				'description'      => $_REQUEST['description'] ?? 'Approved by Admin',
-	// 				'note_title'       => $_REQUEST['note_title'] ?? '',
-	// 				'note_description' => $_REQUEST['note_description'] ?? '',
-
-	// 				'created_at'       => date('Y-m-d H:i:s')
-	// 			);
-
-	// 			$this->common->insertData('investment', $investmentData);
-	// 		}
-
-	// 		// Notification message
-	// 		$message = ($status == 1)
-	// 			? "Your investment request has been approved."
-	// 			: "Your investment request has been rejected.";
-
-	// 		// Send notification to user
-	// 		$this->send_nofification(
-	// 			$request['user_id'],
-	// 			$_REQUEST['admin_id'],
-	// 			$request['group_id'],
-	// 			$message,
-	// 			$requestId,
-	// 			"11"
-	// 		);
-
-	// 		$this->response(
-	// 			true,
-	// 			($status == 1)
-	// 				? "Investment request approved successfully."
-	// 				: "Investment request rejected successfully."
-	// 		);
-	// 	} else {
-
-	// 		$this->response(false, "There is a problem, please try again.");
-	// 	}
-	// }
 
 	// updated by @krishn on 23/06/26
 	public function updateInvestmentRequestStatus()
