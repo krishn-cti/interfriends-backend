@@ -1198,11 +1198,9 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		$result = $this->common->getData(
-			'user',
-			array('user_id' => $_REQUEST['user_id']),
-			array('single')
-		);
+		$where = "U.user_id = '" . $_REQUEST['user_id'] . "'";
+		
+		$result = $this->user_model->user_detail($where, array('single'));
 
 		if (!empty($result)) {
 
