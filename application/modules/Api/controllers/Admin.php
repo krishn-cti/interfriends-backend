@@ -1199,7 +1199,7 @@ class Admin extends Base_Controller
 		}
 
 		$where = "U.user_id = '" . $_REQUEST['user_id'] . "'";
-		
+
 		$result = $this->user_model->user_detail($where, array('single'));
 
 		if (!empty($result)) {
@@ -1239,7 +1239,7 @@ class Admin extends Base_Controller
 			);
 		}
 	}
-	
+
 
 	public function category_detail()
 	{
@@ -9547,10 +9547,83 @@ class Admin extends Base_Controller
 	}
 
 	// created by @krishn on 06-06-25
+	// public function sendEmailtoUserGroupAll()
+	// {
+	// 	$created_at = date('Y-m-d');
+	// 	$month = date("m", strtotime($created_at));
+
+	// 	$group_id = $_REQUEST['group_id'] ?? null;
+
+	// 	if (!$group_id) {
+	// 		$this->response(false, "Group ID is required.");
+	// 		return;
+	// 	}
+
+	// 	// Check if mail already sent this month for this group
+	// 	$check = $this->common->getData('mail_records', [
+	// 		"Month(created_at)" => $month,
+	// 		"group_id" => $group_id
+	// 	], ['single']);
+
+	// 	if (!empty($check)) {
+	// 		$this->response(false, "Mail already sent to all users for this month.");
+	// 		return;
+	// 	}
+
+	// 	// Fetch users of the group
+	// 	$where = "UG.group_id = '" . $group_id . "' AND U.status != '2'";
+	// 	$this->db->select('U.*');
+	// 	$this->db->from('user_group as UG');
+	// 	$this->db->join('user as U', 'U.user_id = UG.user_id');
+	// 	$this->db->where($where);
+	// 	$this->db->order_by("UG.id", 'DESC');
+	// 	$users = $this->db->get()->result_array();
+
+	// 	if (empty($users)) {
+	// 		$this->response(false, "No users found in this group.");
+	// 		return;
+	// 	}
+
+	// 	$successCount = 0;
+
+	// 	foreach ($users as $user) {
+	// 		$userId = $user['user_id'];
+	// 		$encodedId = base64_encode($userId);
+
+	// 		$data['sendername'] = $user['first_name'] . " " . $user['last_name'];
+	// 		$data['useremail'] = "";
+	// 		$data["link"] = ADMIN_BASE_URL . 'user/UpdateUserPayment/' . $encodedId;
+	// 		$data['message'] = '
+	//         <p>As we prepare for the upcoming Interfriends cycle, we kindly request that you confirm your monthly savings and anticipated payout date.</p>
+	//         <p>To provide this important information, please click on the link provided below.</p>
+	//         <a href="' . $data["link"] . '">Click here</a>
+	//         <p>Thank you for your prompt attention to this matter.</p>';
+
+	// 		$emailBody = $this->load->view('template/common-mail', $data, true);
+
+	// 		if ($this->sendMail($user['email'], "New Savings Cycle Decision", $emailBody)) {
+	// 			$successCount++;
+	// 		}
+	// 	}
+
+	// 	// Insert mail record only if at least one mail was sent successfully
+	// 	if ($successCount > 0) {
+	// 		$this->common->insertData('mail_records', [
+	// 			'mail_sent' => 1,
+	// 			'created_at' => $created_at,
+	// 			'group_id' => $group_id
+	// 		]);
+	// 		$this->response(true, "Mail sent successfully to {$successCount} user(s).");
+	// 	} else {
+	// 		$this->response(false, "Unable to send emails. Please try again.");
+	// 	}
+	// }
+
+	// created by @krishn on 01-07-26
 	public function sendEmailtoUserGroupAll()
 	{
 		$created_at = date('Y-m-d');
-		$month = date("m", strtotime($created_at));
+		$month      = date("m", strtotime($created_at));
 
 		$group_id = $_REQUEST['group_id'] ?? null;
 
@@ -9559,24 +9632,30 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		// Check if mail already sent this month for this group
-		$check = $this->common->getData('mail_records', [
-			"Month(created_at)" => $month,
-			"group_id" => $group_id
-		], ['single']);
+		// Check if mail already queued/sent this month
+		$check = $this->common->getData(
+			'mail_records',
+			array(
+				"Month(created_at)" => $month,
+				"group_id" => $group_id
+			),
+			array('single')
+		);
 
 		if (!empty($check)) {
 			$this->response(false, "Mail already sent to all users for this month.");
 			return;
 		}
 
-		// Fetch users of the group
+		// Fetch users
 		$where = "UG.group_id = '" . $group_id . "' AND U.status != '2'";
+
 		$this->db->select('U.*');
-		$this->db->from('user_group as UG');
-		$this->db->join('user as U', 'U.user_id = UG.user_id');
+		$this->db->from('user_group UG');
+		$this->db->join('user U', 'U.user_id = UG.user_id');
 		$this->db->where($where);
-		$this->db->order_by("UG.id", 'DESC');
+		$this->db->order_by('UG.id', 'DESC');
+
 		$users = $this->db->get()->result_array();
 
 		if (empty($users)) {
@@ -9584,38 +9663,66 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		$successCount = 0;
+		$queueCount = 0;
 
 		foreach ($users as $user) {
-			$userId = $user['user_id'];
-			$encodedId = base64_encode($userId);
 
+			$encodedId = base64_encode($user['user_id']);
+
+			$data = array();
 			$data['sendername'] = $user['first_name'] . " " . $user['last_name'];
 			$data['useremail'] = "";
-			$data["link"] = ADMIN_BASE_URL . 'user/UpdateUserPayment/' . $encodedId;
+			$data['link'] = ADMIN_BASE_URL . 'user/UpdateUserPayment/' . $encodedId;
+
 			$data['message'] = '
-            <p>As we prepare for the upcoming Interfriends cycle, we kindly request that you confirm your monthly savings and anticipated payout date.</p>
-            <p>To provide this important information, please click on the link provided below.</p>
-            <a href="' . $data["link"] . '">Click here</a>
-            <p>Thank you for your prompt attention to this matter.</p>';
+			<p>As we prepare for the upcoming Interfriends cycle, we kindly request that you confirm your monthly savings and anticipated payout date.</p>
+
+			<p>To provide this important information, please click on the link provided below.</p>
+
+			<a href="' . $data['link'] . '">Click here</a>
+
+			<p>Thank you for your prompt attention to this matter.</p>';
 
 			$emailBody = $this->load->view('template/common-mail', $data, true);
 
-			if ($this->sendMail($user['email'], "New Savings Cycle Decision", $emailBody)) {
-				$successCount++;
+			$queueData = array(
+				'user_id'      => $user['user_id'],
+				'group_id'     => $group_id,
+				'email'        => $user['email'],
+				'subject'      => 'New Savings Cycle Decision',
+				'message'      => $emailBody,
+				'status'       => 0, // Pending
+				'attempts'     => 0,
+				'created_at'   => date('Y-m-d H:i:s'),
+				'updated_at'   => date('Y-m-d H:i:s')
+			);
+
+			if ($this->common->insertData('email_queue', $queueData)) {
+				$queueCount++;
 			}
 		}
 
-		// Insert mail record only if at least one mail was sent successfully
-		if ($successCount > 0) {
-			$this->common->insertData('mail_records', [
-				'mail_sent' => 1,
-				'created_at' => $created_at,
-				'group_id' => $group_id
-			]);
-			$this->response(true, "Mail sent successfully to {$successCount} user(s).");
+		if ($queueCount > 0) {
+
+			$this->common->insertData(
+				'mail_records',
+				array(
+					'mail_sent'  => 1,
+					'group_id'   => $group_id,
+					'created_at' => $created_at
+				)
+			);
+
+			$this->response(
+				true,
+				$queueCount . " email(s) added to queue successfully.",
+				array(
+					"queued_emails" => $queueCount
+				)
+			);
 		} else {
-			$this->response(false, "Unable to send emails. Please try again.");
+
+			$this->response(false, "Unable to add emails to queue.");
 		}
 	}
 
