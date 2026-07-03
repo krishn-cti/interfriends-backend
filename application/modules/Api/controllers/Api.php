@@ -1612,7 +1612,7 @@ class Api extends Base_Controller
 			);
 		}
 	}
-	
+
 	// // created by @krishn on 18-08-25
 	// public function safeKeepingList()
 	// {
@@ -3870,6 +3870,50 @@ class Api extends Base_Controller
 		$recommendData = $this->common->getData('recommend_user', array('id' => $recommendUserId), array('single'));
 
 		if ($recommendData) {
+
+			$registeredUser = $this->common->getData('user', array('email' => $recommendData['email']), array('single'));
+
+			if (!empty($registeredUser)) {
+
+				$preserveRecommendUserId = $recommendData['user_id'];
+				$preserveRecommendId = $recommendData['id'];
+
+				$hiddenUserFields = array('user_id', 'id', 'password', 'token', 'verify_token', 'web_token');
+
+				foreach ($registeredUser as $key => $value) {
+					if (in_array($key, $hiddenUserFields)) {
+						continue;
+					}
+
+					$recommendData[$key] = $value;
+				}
+
+				$recommendData['id'] = $preserveRecommendId;
+				$recommendData['user_id'] = $preserveRecommendUserId;
+				$recommendData['recommended_user_id'] = $registeredUser['user_id'];
+			}
+
+			// Profile Image
+			if (!empty($recommendData['profile_image'])) {
+				$recommendData['profile_image'] = base_url($recommendData['profile_image']);
+			} else {
+				$recommendData['profile_image'] = base_url('assets/img/default-user-icon.jpg');
+			}
+
+			// Profile Thumbnail
+			if (!empty($recommendData['profile_image_thumb'])) {
+				$recommendData['profile_image_thumb'] = base_url($recommendData['profile_image_thumb']);
+			} else {
+				$recommendData['profile_image_thumb'] = base_url('assets/img/default-user-icon.jpg');
+			}
+
+			// ID Proof Image
+			if (!empty($recommendData['id_proof_image'])) {
+				$recommendData['id_proof_image'] = base_url($recommendData['id_proof_image']);
+			} else {
+				$recommendData['id_proof_image'] = base_url('assets/img/blank.webp');
+			}
+
 			$this->response(true, "Data fetch Successfully.", array("users" => $recommendData));
 		} else {
 			$this->response(false, "Data not found.");

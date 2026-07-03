@@ -4521,12 +4521,6 @@ class Admin extends Base_Controller
 		// print_r($_REQUEST);
 		// echo "<br>";
 		// print_r($_FILES); die();
-		$email = $this->common->getData('user', array('email' => $_POST['email']), array('single', 'field' => 'email'));
-		if ($email) {
-			$this->response(false, 'Email already exists');
-			die;
-		}
-
 		$recommendResult = $this->common->getData('recommend_user', array("email" => $_REQUEST['email']), array('single'));
 
 		if (empty($recommendResult)) {
@@ -4534,12 +4528,19 @@ class Admin extends Base_Controller
 			die;
 		}
 
+		$existingUser = $this->common->getData('user', array('email' => $_POST['email']), array('single'));
+		$isResubmit = (!empty($existingUser) && isset($recommendResult['admin_status']) && $recommendResult['admin_status'] == '3');
+
+		if (!empty($existingUser) && !$isResubmit) {
+			$this->response(false, 'Email already exists');
+			die;
+		}
 
 		$iname = '';
 		$iname_thumb = '';
 		$iname_idProof = '';
 		if (isset($_FILES['profile_image'])) {
-			$image = $this->common->do_upload_thumb('profile_image', './assets/userfile/profile/');
+			$image = $this->common->do_upload_file('profile_image', './assets/userfile/profile/');
 			if (isset($image['upload_data'])) {
 				$iname = 'assets/userfile/profile/' . $image['upload_data']['file_name'];
 				$iname_thumb = 'assets/userfile/profile/thumb/' . $image['upload_data']['file_name'];
@@ -4552,6 +4553,11 @@ class Admin extends Base_Controller
 			}
 		}
 
+		if ($isResubmit) {
+			$iname = !empty($iname) ? $iname : $existingUser['profile_image'];
+			$iname_thumb = !empty($iname_thumb) ? $iname_thumb : $existingUser['profile_image_thumb'];
+			$iname_idProof = !empty($iname_idProof) ? $iname_idProof : $existingUser['id_proof_image'];
+		}
 
 		$_REQUEST['profile_image'] = $iname;
 		$_REQUEST['profile_image_thumb'] = $iname_thumb;
@@ -4559,12 +4565,48 @@ class Admin extends Base_Controller
 
 
 		$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-		$const_password = $_REQUEST['password'];
-
-		$_REQUEST['const_password'] = $const_password;
-		$_REQUEST['password'] = md5($const_password);
+		$plainPassword = !empty($_REQUEST['password']) ? $_REQUEST['password'] : '';
+		if (!empty($plainPassword)) {
+			$_REQUEST['password'] = md5($plainPassword);
+		} else {
+			unset($_REQUEST['password']);
+		}
 		// $_REQUEST['password'] = md5('123456');
 		$_REQUEST['status'] = 1;
+
+		if ($isResubmit) {
+			$_REQUEST['recommended'] = 1;
+			$user = $this->common->getField('user', $_REQUEST);
+			unset($user['email'], $user['created_at']);
+
+			$result = $this->common->updateData('user', $user, array('user_id' => $existingUser['user_id']));
+
+			if ($result) {
+				$this->common->updateData('recommend_user', array(
+					'admin_status' => '0',
+					'signup_form' => '1'
+				), array('id' => $recommendResult['id']));
+
+				$admins = $this->common->getData('superAdmin', ['admin_type' => '2'], []);
+				foreach ($admins as $admin) {
+					$data['sendername'] = $admin['name'];
+					$data['useremail'] = $admin['email'];
+					$adminSubject = "Recommendation | Registration Re-submitted";
+					$recommendedName = $_REQUEST['first_name'] . ' ' . $_REQUEST['last_name'];
+					$data['message'] = "
+						<p>The recommended user <strong>{$recommendedName}</strong> has re-submitted the registration form.</p>
+						<p>Please review the updated registration details in the admin panel.</p>
+					";
+					$adminMessage = $this->load->view('template/common-mail', $data, true);
+					$this->sendMail($admin['email'], $adminSubject, $adminMessage);
+				}
+
+				$this->response(true, "Registration re-submitted successfully. Please wait for admin approval before logging in.");
+			} else {
+				$this->response(false, 'There is a problem, please try again.');
+			}
+			return;
+		}
 
 
 		$recommendResult = $this->common->getData('recommend_user', array("email" => $_REQUEST['email'], 'admin_status' => '1'), array('single'));
@@ -5390,7 +5432,16 @@ class Admin extends Base_Controller
 
 		$id = $_REQUEST['id'];
 		$adminStatus = $_REQUEST['admin_status'];
-		$status = ($adminStatus == '1') ? '1' : (($adminStatus == '2') ? '2' : '0');
+		$status = ($adminStatus == '1') ? '1' : (($adminStatus == '2') ? '2' : (($adminStatus == '3') ? '3' : '0'));
+
+		if ($status === '3') {
+			if (empty($_REQUEST['resubmit_note'])) {
+				$this->response(false, "Resubmit note is required.");
+				return;
+			}
+
+			$_REQUEST['resubmit_at'] = date('Y-m-d H:i:s');
+		}
 
 		// Update status in recommend_user
 		$postData = $this->common->getField('recommend_user', $_REQUEST);
@@ -5578,6 +5629,31 @@ class Admin extends Base_Controller
 					$this->sendMail($recommendUser['email'], "Application Rejected", $messaged);
 				}
 				$this->response(true, "Rejected Successfully.", ["lists" => $updateResult]);
+			}
+			if ($status === '3') {
+				$link = USER_BASE_URL . "register?recommend_id=$id";
+				$resubmitNote = nl2br(htmlspecialchars($recommendUser['resubmit_note'], ENT_QUOTES, 'UTF-8'));
+
+				$data['sendername'] = $recommendUser['first_name'];
+				$data['useremail'] = $recommendUser['email'];
+				$data['message'] = "
+					<p>Your Interfriends registration form needs a few changes before it can be approved.</p>
+					<p><strong>Admin notes:</strong></p>
+					<p>{$resubmitNote}</p>
+					<p>Please click the button below to review your previously submitted details and re-submit the form.</p>
+					<p>
+						<a href='{$link}' style='display: inline-block; padding: 10px 20px; font-size: 16px; color: #ffffff; background-color: #007bff; text-decoration: none; border-radius: 5px;'>Re-submit Registration</a>
+					</p>
+				";
+
+				$messaged = $this->load->view('template/common-mail', $data, true);
+				$mail = $this->sendMail($recommendUser['email'], "Registration Re-submit Required", $messaged);
+
+				if ($mail) {
+					$this->response(true, "Re-submit request sent successfully.", ["lists" => $updateResult]);
+				} else {
+					$this->response(false, "Status updated, but mail not delivered.", ["lists" => $updateResult]);
+				}
 			}
 		} else {
 			$this->response(true, "No update performed.", ["lists" => [], "listCount" => 0]);

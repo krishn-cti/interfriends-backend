@@ -195,7 +195,7 @@ class Common extends CI_Model
 			foreach ($name as $key => $value) {
 				$name1[] = $value[$field];
 			}
-			return implode(',', $name1);			
+			return implode(',', $name);			
 		}else{
 			return false;
 		}		
