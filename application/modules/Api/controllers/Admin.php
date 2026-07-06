@@ -1356,7 +1356,7 @@ class Admin extends Base_Controller
 			// 	$propertyInfo = $this->common->getData('property', array('id' => $property_id), array('single'));
 			// 	print_r($propertyInfo); die();
 			// 	foreach ($investmentUsers as $user) {
-			// 		$subject = 'Investment Request Update';
+			// 		$subject = 'Investment Proposal Update';
 			// 		$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
 
 			// 		$data['message'] = '</p> <p>Thank you for showing interest in the project titled "<strong>' . $propertyInfo['title'] . '</strong>".</p>
@@ -10867,7 +10867,7 @@ class Admin extends Base_Controller
 		);
 
 		if (empty($request)) {
-			$this->response(false, "Investment request not found.");
+			$this->response(false, "Investment proposal not found.");
 			return;
 		}
 
@@ -10916,10 +10916,10 @@ class Admin extends Base_Controller
 			---------------------------------------*/
 			if ($status == 1) {
 
-				$message = "Your investment request has been approved.";
+				$message = "Your investment proposal has been approved.";
 
 				$emailMessage = "
-                <p>We are pleased to inform you that your investment request has been approved successfully.</p>
+                <p>We are pleased to inform you that your investment proposal has been approved successfully.</p>
 
                 <p><strong>Investment Amount:</strong> £{$request['amount']}</p>
 
@@ -10927,10 +10927,10 @@ class Admin extends Base_Controller
             ";
 			} else {
 
-				$message = "Your investment request has been rejected.";
+				$message = "Your investment proposal has been rejected.";
 
 				$emailMessage = "
-                <p>We regret to inform you that your investment request has been rejected.</p>
+                <p>We regret to inform you that your investment proposal has been rejected.</p>
 
                 <p><strong>Investment Amount:</strong> £{$request['amount']}</p>
 
@@ -10966,8 +10966,8 @@ class Admin extends Base_Controller
 			);
 
 			$subject = ($status == 1)
-				? 'Investment Request Approved'
-				: 'Investment Request Rejected';
+				? 'Investment Proposal Approved'
+				: 'Investment Proposal Rejected';
 
 			$this->sendMail(
 				$user['email'],
@@ -10979,8 +10979,8 @@ class Admin extends Base_Controller
 			$this->response(
 				true,
 				($status == 1)
-					? "Investment request approved successfully."
-					: "Investment request rejected successfully."
+					? "Investment proposal approved successfully."
+					: "Investment proposal rejected successfully."
 			);
 		} else {
 
