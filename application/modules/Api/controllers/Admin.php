@@ -3901,8 +3901,9 @@ class Admin extends Base_Controller
 			$this->response(true, 'User Unblocked successfully', array('status' => $_REQUEST['status']));
 		} else {
 
-			$array['message'] = 'You have been blocked by the admin! This may be due to a number of reasons including breaching our terms and conditions. If you were not expecting this, contact the group admin immediately.';
-			$array['status'] = 'Blocked Account';
+			$array['message'] = 'Your Interfriends account has been blocked or suspended by the administrator. This may be due to a breach of our terms and conditions or because you chose to leave Interfriends.
+			If this action was unexpected, please contact the group administrator as soon as possible.';
+			$array['status'] = 'Blocked/Suspended';
 			$message = $this->load->view('template/block-user', $array, true);
 			$mail = $this->sendMail($email, $array['status'], $message);
 
@@ -6242,57 +6243,159 @@ class Admin extends Base_Controller
 	}
 
 	// created by @krishn on 22-05-25
+	// public function updatePayoutRequestStatus()
+	// {
+	// 	$payout_id = $_POST['payout_id'];
+	// 	$request_status = $_POST['request_status']; // 1 = Accepted, 0 = Rejected
+	// 	$admin_id = $_POST['admin_id'] ?? null;
+
+	// 	if (!in_array($request_status, [0, 1])) {
+	// 		$this->response(false, "Invalid request status. Choose 1 (Accepted) or 0 (Rejected).");
+	// 		return;
+	// 	}
+
+	// 	$payoutRequest = $this->common->getData('payout_cycle', ['id' => $payout_id, 'request_status' => 2], ['single']);
+
+	// 	if (empty($payoutRequest)) {
+	// 		$this->response(false, "Payout request not found or already processed.");
+	// 		return;
+	// 	}
+
+	// 	$update = $this->common->updateData('payout_cycle', ['request_status' => $request_status], ['id' => $payout_id]);
+
+	// 	if ($update) {
+	// 		$userDetails = $this->common->getData('user', ['user_id' => $payoutRequest['user_id']], ['single']);
+	// 		$data['sendername'] = $userDetails['first_name'] . ' ' . $userDetails['last_name'];
+
+	// 		if ($request_status == 1) {
+	// 			$this->processPayout($payout_id);
+	// 			$subject = 'Payout Request Approved';
+	// 			$data['message'] = '<p>We are pleased to inform you that your payout request has been approved by the administrator.</p>
+	//             <p>The approved amount will be processed shortly. If you have any questions, feel free to contact our support team.</p>';
+
+	// 			$this->send_nofification($payoutRequest['user_id'], $admin_id, $payoutRequest['group_id'], "Your payout request was approved.", $payout_id, "13");
+	// 			$this->response(true, "Payout request accepted and processed.");
+	// 		} else {
+	// 			$where = " id ='" . $payout_id . "'";
+	// 			$this->common->deleteData('payout_cycle', $where);
+
+	// 			$subject = 'Payout Request Rejected';
+	// 			$data['message'] = '<p>We regret to inform you that your payout request has been rejected by the administrator.</p>
+	//             <p>If you believe this was done in error or have any questions, please contact our support team.</p>';
+
+	// 			$this->send_nofification($payoutRequest['user_id'], $admin_id, $payoutRequest['group_id'], "Your payout request was rejected.", $payout_id, "13");
+	// 			$this->response(true, "Payout request rejected.");
+	// 		}
+
+	// 		$messaged = $this->load->view('template/common-mail', $data, true);
+	// 		$this->sendMail($userDetails['email'], $subject, $messaged);
+	// 	} else {
+	// 		$this->response(false, "Failed to update payout request.");
+	// 	}
+	// }
+
+	// updated by @krishn on 06-07-26
 	public function updatePayoutRequestStatus()
 	{
 		$payout_id = $_POST['payout_id'];
 		$request_status = $_POST['request_status']; // 1 = Accepted, 0 = Rejected
 		$admin_id = $_POST['admin_id'] ?? null;
+		$reason = trim($_POST['reason'] ?? '');
 
 		if (!in_array($request_status, [0, 1])) {
 			$this->response(false, "Invalid request status. Choose 1 (Accepted) or 0 (Rejected).");
 			return;
 		}
 
-		$payoutRequest = $this->common->getData('payout_cycle', ['id' => $payout_id, 'request_status' => 2], ['single']);
+		// Reason is mandatory for rejection
+		if ($request_status == 0 && empty($reason)) {
+			$this->response(false, "Rejection reason is required.");
+			return;
+		}
+
+		$payoutRequest = $this->common->getData(
+			'payout_cycle',
+			['id' => $payout_id, 'request_status' => 2],
+			['single']
+		);
 
 		if (empty($payoutRequest)) {
 			$this->response(false, "Payout request not found or already processed.");
 			return;
 		}
 
-		$update = $this->common->updateData('payout_cycle', ['request_status' => $request_status], ['id' => $payout_id]);
+		$update = $this->common->updateData(
+			'payout_cycle',
+			['request_status' => $request_status],
+			['id' => $payout_id]
+		);
 
 		if ($update) {
-			$userDetails = $this->common->getData('user', ['user_id' => $payoutRequest['user_id']], ['single']);
+
+			$userDetails = $this->common->getData(
+				'user',
+				['user_id' => $payoutRequest['user_id']],
+				['single']
+			);
+
 			$data['sendername'] = $userDetails['first_name'] . ' ' . $userDetails['last_name'];
 
 			if ($request_status == 1) {
-				$this->processPayout($payout_id);
-				$subject = 'Payout Request Approved';
-				$data['message'] = '<p>We are pleased to inform you that your payout request has been approved by the administrator.</p>
-                <p>The approved amount will be processed shortly. If you have any questions, feel free to contact our support team.</p>';
 
-				$this->send_nofification($payoutRequest['user_id'], $admin_id, $payoutRequest['group_id'], "Your payout request was approved.", $payout_id, "13");
-				$this->response(true, "Payout request accepted and processed.");
+				$this->processPayout($payout_id);
+
+				$subject = 'Payout Request Approved';
+
+				$data['message'] = '
+				<p>We are pleased to inform you that your payout request has been approved by the administrator.</p>
+
+				<p>The approved amount will be processed shortly. If you have any questions, feel free to contact our support team.</p>
+			';
+
+				$this->send_nofification(
+					$payoutRequest['user_id'],
+					$admin_id,
+					$payoutRequest['group_id'],
+					"Your payout request was approved.",
+					$payout_id,
+					"13"
+				);
+
+				$responseMessage = "Payout request accepted and processed.";
 			} else {
-				$where = " id ='" . $payout_id . "'";
-				$this->common->deleteData('payout_cycle', $where);
+
+				$this->common->deleteData('payout_cycle', ['id' => $payout_id]);
 
 				$subject = 'Payout Request Rejected';
-				$data['message'] = '<p>We regret to inform you that your payout request has been rejected by the administrator.</p>
-                <p>If you believe this was done in error or have any questions, please contact our support team.</p>';
 
-				$this->send_nofification($payoutRequest['user_id'], $admin_id, $payoutRequest['group_id'], "Your payout request was rejected.", $payout_id, "13");
-				$this->response(true, "Payout request rejected.");
+				$data['message'] = '
+				<p>We regret to inform you that your payout request has been rejected by the administrator.</p>
+
+				<p><strong>Reason for rejection:</strong><br>' . nl2br(htmlspecialchars($reason)) . '</p>
+
+				<p>If you believe this was done in error or have any questions, please contact our support team.</p>
+			';
+
+				$this->send_nofification(
+					$payoutRequest['user_id'],
+					$admin_id,
+					$payoutRequest['group_id'],
+					"Your payout request was rejected.",
+					$payout_id,
+					"13"
+				);
+
+				$responseMessage = "Payout request rejected.";
 			}
 
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$this->sendMail($userDetails['email'], $subject, $messaged);
+
+			$this->response(true, $responseMessage);
 		} else {
 			$this->response(false, "Failed to update payout request.");
 		}
 	}
-
 
 	// created by @krishn on 22-05-25
 	private function processPayout($payout_id)
@@ -6461,10 +6564,106 @@ class Admin extends Base_Controller
 		$this->response(true, "Safekeeping entry added successfully.");
 	}
 
+	// public function acceptRejectSafekeepingRequest()
+	// {
+	// 	$id = $_REQUEST['safekeeping_id'] ?? null;
+	// 	$request_status = $_REQUEST['request_status'] ?? null; // 1 = accept, 0 = reject
+
+	// 	if ($id === null || ($request_status !== '1' && $request_status !== '0')) {
+	// 		$this->response(false, "Invalid request parameters.");
+	// 		return;
+	// 	}
+
+	// 	// Fetch the safekeeping entry
+	// 	$safekeeping = $this->common->getData('safe_keeping', ['id' => $id], ['single']);
+
+	// 	if (empty($safekeeping)) {
+	// 		$this->response(false, "Safekeeping request not found.");
+	// 		return;
+	// 	}
+
+	// 	// === If REJECTED ===
+	// 	if ($request_status == '0') {
+	// 		// Delete the safekeeping record
+	// 		$this->common->deleteData('safe_keeping', ['id' => $id]);
+	// 		$this->response(true, "Safekeeping request rejected and entry removed.");
+	// 		return;
+	// 	}
+
+	// 	// === If ACCEPTED ===
+	// 	// Update the request_status to 1
+	// 	$this->common->updateData('safe_keeping', ['request_status' => 1], ['id' => $id]);
+
+	// 	$user_id = $safekeeping['user_id'];
+	// 	$group_id = $safekeeping['group_id'];
+	// 	$group_cycle_id = $safekeeping['group_cycle_id'];
+
+	// 	// Prevent duplicate insertion
+	// 	$dataExist = $this->common->getData('cycle_status_management', [
+	// 		'user_id' => $user_id,
+	// 		'group_id' => $group_id,
+	// 		'group_cycle_id' => $group_cycle_id
+	// 	], ['single']);
+
+	// 	if (!empty($dataExist)) {
+	// 		$this->response(false, "Cycle already transferred.");
+	// 		return;
+	// 	}
+
+	// 	$created_at = $safekeeping['created_at'] ?? date('Y-m-d H:i:s');
+	// 	$pf_amount = $safekeeping['pf_amount'];
+	// 	$pf_percent = $safekeeping['pf_percent'];
+	// 	$pf_interest_amount = $safekeeping['pf_interest_amount'];
+	// 	$pf_interest_percent = $safekeeping['pf_interest_percent'];
+
+	// 	// Insert into cycle_status_management
+	// 	$this->common->insertData('cycle_status_management', [
+	// 		"group_id" => $group_id,
+	// 		"group_cycle_id" => $group_cycle_id,
+	// 		"user_id" => $user_id,
+	// 		"type" => '2',
+	// 		'created_at' => $created_at
+	// 	]);
+
+	// 	// Insert into pf_user
+	// 	$this->common->insertData('pf_user', [
+	// 		"group_id" => $group_id,
+	// 		"user_id" => $user_id,
+	// 		"pf_type" => '2',
+	// 		"payment_type" => '2',
+	// 		'created_at' => $created_at,
+	// 		'pf_amount' => $pf_amount,
+	// 		'pf_percent' => $pf_percent,
+	// 		'pf_interest_amount' => $pf_interest_amount,
+	// 		'pf_interest_percent' => $pf_interest_percent,
+	// 		'main_id' => $group_cycle_id,
+	// 		'other_main_id' => $id
+	// 	]);
+
+	// 	// Send notification
+	// 	$this->send_nofification($user_id, $_REQUEST['admin_id'], $group_id, "Your safekeeping request has been accepted", $id, "14");
+
+	// 	// Send email
+	// 	$userDetailFrom = $this->common->getData('user', ['user_id' => $user_id], ['single']);
+	// 	$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+	// 	$data['useremail'] = "";
+	// 	$data['message'] = '<p>This confirms that your request has been successfully processed and deposited into your account or securely placed in safekeeping where applicable.</p><p>If you have any questions or concerns about this payment, please do not hesitate to contact us.</p>';
+	// 	$messaged = $this->load->view('template/common-mail', $data, true);
+	// 	$this->sendMail($userDetailFrom['email'], 'Safekeeping Accepted', $messaged);
+
+	// 	// Update credit score
+	// 	$this->common->query_normal("UPDATE credit_score_user SET safekeeping_money = safekeeping_money + 0 WHERE user_id = '$user_id'");
+	// 	$this->updateCreditScore(0, 'plus');
+
+	// 	$this->response(true, "Safekeeping request accepted successfully.");
+	// }
+
+	// updated by @krishn on 06-07-26
 	public function acceptRejectSafekeepingRequest()
 	{
 		$id = $_REQUEST['safekeeping_id'] ?? null;
 		$request_status = $_REQUEST['request_status'] ?? null; // 1 = accept, 0 = reject
+		$reason = trim($_REQUEST['reason'] ?? '');
 
 		if ($id === null || ($request_status !== '1' && $request_status !== '0')) {
 			$this->response(false, "Invalid request parameters.");
@@ -6479,28 +6678,92 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		// === If REJECTED ===
-		if ($request_status == '0') {
-			// Delete the safekeeping record
-			$this->common->deleteData('safe_keeping', ['id' => $id]);
-			$this->response(true, "Safekeeping request rejected and entry removed.");
+		$user_id = $safekeeping['user_id'];
+		$group_id = $safekeeping['group_id'];
+
+		$userDetail = $this->common->getData(
+			'user',
+			['user_id' => $user_id],
+			['single']
+		);
+
+		if (empty($userDetail)) {
+			$this->response(false, "User not found.");
 			return;
 		}
 
-		// === If ACCEPTED ===
-		// Update the request_status to 1
-		$this->common->updateData('safe_keeping', ['request_status' => 1], ['id' => $id]);
+		// ===================================================
+		// REJECT REQUEST
+		// ===================================================
+		if ($request_status == '0') {
 
-		$user_id = $safekeeping['user_id'];
-		$group_id = $safekeeping['group_id'];
+			if (empty($reason)) {
+				$this->response(false, "Rejection reason is required.");
+				return;
+			}
+
+			// Send Notification
+			$this->send_nofification(
+				$user_id,
+				$_REQUEST['admin_id'],
+				$group_id,
+				"Your safekeeping request has been rejected.",
+				$id,
+				"14"
+			);
+
+			// Send Email
+			$data['sendername'] = $userDetail['first_name'] . " " . $userDetail['last_name'];
+			$data['useremail'] = "";
+
+			$data['message'] = '
+				<p>Your Safekeeping request has been reviewed.</p>
+
+				<p><strong>Status:</strong> Rejected</p>
+
+				<p><strong>Reason:</strong></p>
+
+				<p>' . nl2br(htmlspecialchars($reason)) . '</p>
+
+				<p>If you have any questions, please contact the Interfriends team.</p>
+			';
+
+			$message = $this->load->view('template/common-mail', $data, true);
+
+			$this->sendMail(
+				$userDetail['email'],
+				'Safekeeping Request Rejected',
+				$message
+			);
+
+			// Delete request
+			$this->common->deleteData('safe_keeping', ['id' => $id]);
+
+			$this->response(true, "Safekeeping request rejected successfully.");
+			return;
+		}
+
+		// ===================================================
+		// ACCEPT REQUEST
+		// ===================================================
+
+		$this->common->updateData(
+			'safe_keeping',
+			['request_status' => 1],
+			['id' => $id]
+		);
+
 		$group_cycle_id = $safekeeping['group_cycle_id'];
 
-		// Prevent duplicate insertion
-		$dataExist = $this->common->getData('cycle_status_management', [
-			'user_id' => $user_id,
-			'group_id' => $group_id,
-			'group_cycle_id' => $group_cycle_id
-		], ['single']);
+		$dataExist = $this->common->getData(
+			'cycle_status_management',
+			[
+				'user_id' => $user_id,
+				'group_id' => $group_id,
+				'group_cycle_id' => $group_cycle_id
+			],
+			['single']
+		);
 
 		if (!empty($dataExist)) {
 			$this->response(false, "Cycle already transferred.");
@@ -6508,12 +6771,7 @@ class Admin extends Base_Controller
 		}
 
 		$created_at = $safekeeping['created_at'] ?? date('Y-m-d H:i:s');
-		$pf_amount = $safekeeping['pf_amount'];
-		$pf_percent = $safekeeping['pf_percent'];
-		$pf_interest_amount = $safekeeping['pf_interest_amount'];
-		$pf_interest_percent = $safekeeping['pf_interest_percent'];
 
-		// Insert into cycle_status_management
 		$this->common->insertData('cycle_status_management', [
 			"group_id" => $group_id,
 			"group_cycle_id" => $group_cycle_id,
@@ -6522,40 +6780,58 @@ class Admin extends Base_Controller
 			'created_at' => $created_at
 		]);
 
-		// Insert into pf_user
 		$this->common->insertData('pf_user', [
 			"group_id" => $group_id,
 			"user_id" => $user_id,
 			"pf_type" => '2',
 			"payment_type" => '2',
 			'created_at' => $created_at,
-			'pf_amount' => $pf_amount,
-			'pf_percent' => $pf_percent,
-			'pf_interest_amount' => $pf_interest_amount,
-			'pf_interest_percent' => $pf_interest_percent,
+			'pf_amount' => $safekeeping['pf_amount'],
+			'pf_percent' => $safekeeping['pf_percent'],
+			'pf_interest_amount' => $safekeeping['pf_interest_amount'],
+			'pf_interest_percent' => $safekeeping['pf_interest_percent'],
 			'main_id' => $group_cycle_id,
 			'other_main_id' => $id
 		]);
 
-		// Send notification
-		$this->send_nofification($user_id, $_REQUEST['admin_id'], $group_id, "Your safekeeping request has been accepted", $id, "14");
+		// Notification
+		$this->send_nofification(
+			$user_id,
+			$_REQUEST['admin_id'],
+			$group_id,
+			"Your safekeeping request has been accepted",
+			$id,
+			"14"
+		);
 
-		// Send email
-		$userDetailFrom = $this->common->getData('user', ['user_id' => $user_id], ['single']);
-		$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+		// Email
+		$data['sendername'] = $userDetail['first_name'] . " " . $userDetail['last_name'];
 		$data['useremail'] = "";
-		$data['message'] = '<p>This confirms that your request has been successfully processed and deposited into your account or securely placed in safekeeping where applicable.</p><p>If you have any questions or concerns about this payment, please do not hesitate to contact us.</p>';
-		$messaged = $this->load->view('template/common-mail', $data, true);
-		$this->sendMail($userDetailFrom['email'], 'Safekeeping Accepted', $messaged);
+		$data['message'] = '
+			<p>This confirms that your request has been successfully processed and deposited into your account or securely placed in safekeeping where applicable.</p>
 
-		// Update credit score
-		$this->common->query_normal("UPDATE credit_score_user SET safekeeping_money = safekeeping_money + 0 WHERE user_id = '$user_id'");
+			<p>If you have any questions or concerns about this payment, please do not hesitate to contact us.</p>
+		';
+
+		$message = $this->load->view('template/common-mail', $data, true);
+
+		$this->sendMail(
+			$userDetail['email'],
+			'Safekeeping Accepted',
+			$message
+		);
+
+		// Credit Score
+		$this->common->query_normal("
+			UPDATE credit_score_user
+			SET safekeeping_money = safekeeping_money + 0
+			WHERE user_id = '$user_id'
+		");
+
 		$this->updateCreditScore(0, 'plus');
 
 		$this->response(true, "Safekeeping request accepted successfully.");
 	}
-
-
 
 	public function creditSafeKeeping()
 	{
