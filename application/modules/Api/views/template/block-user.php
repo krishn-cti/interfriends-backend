@@ -163,11 +163,12 @@
                                 <tr>
                                     <td class="bodycopy">
                                         <center>
-                                            <p> <strong> <?php echo $status ?> </strong></p>
-                                            <p> <strong>Hi <?php echo $name ?>,</strong> </p>
-                                            <p style="color:#333; line-height: 1.6;"><?= $message; ?></p> <br>
+                                            <p> <strong> <?= $status ?? '' ?> </strong></p>
+                                            <p> <strong>Dear <?= $name ?? '' ?>,</strong> </p>
+                                            <p style="color:#333; line-height: 1.6;"><?= $message ?? '' ?></p> <br>
                                             <p>Thanks & Regards</p>
-                                            <p> <strong>Interfriends </strong></p>
+                                            <p> <strong>Interfriends Membership Relations </strong></p>
+                                            <p>admin@interfriends.uk</p>
                                         </center>
                                     </td>
                                 </tr>
