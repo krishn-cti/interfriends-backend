@@ -10583,7 +10583,7 @@ class Admin extends Base_Controller
 			$item['type'] = 'loan';
 		}
 		foreach ($allSaving as &$item) {
-			$item['type'] = 'saving';
+			$item['type'] = 'savings';
 		}
 		foreach ($allMiscellaneous as &$item) {
 			$item['type'] = 'miscellaneous';
@@ -10655,7 +10655,7 @@ class Admin extends Base_Controller
 		if (isset($_REQUEST['type'])) {
 
 			$type = trim(strtolower($_REQUEST['type']));
-			$allowedTypes = ['loan', 'saving', 'miscellaneous'];
+			$allowedTypes = ['loan', 'savings', 'miscellaneous'];
 
 			// If type key comes but value is blank
 			if ($type == '') {
@@ -10701,7 +10701,7 @@ class Admin extends Base_Controller
 					// Saving records use 'date' column
 					if (
 						isset($item['type']) &&
-						strtolower($item['type']) == 'saving' &&
+						strtolower($item['type']) == 'savings' &&
 						!empty($item['date'])
 					) {
 
@@ -10755,7 +10755,7 @@ class Admin extends Base_Controller
 			// Saving records should use `date`
 			if (
 				isset($a['type']) &&
-				$a['type'] == 'saving' &&
+				$a['type'] == 'savings' &&
 				!empty($a['date'])
 			) {
 				$dateA = strtotime($a['date']);
@@ -10769,7 +10769,7 @@ class Admin extends Base_Controller
 			// Saving records should use `date`
 			if (
 				isset($b['type']) &&
-				$b['type'] == 'saving' &&
+				$b['type'] == 'savings' &&
 				!empty($b['date'])
 			) {
 				$dateB = strtotime($b['date']);
@@ -10813,7 +10813,7 @@ class Admin extends Base_Controller
 			// Saving records should expose date in created_at
 			if (
 				isset($value['type']) &&
-				$value['type'] == 'saving' &&
+				$value['type'] == 'savings' &&
 				!empty($value['date'])
 			) {
 

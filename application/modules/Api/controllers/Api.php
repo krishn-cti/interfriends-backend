@@ -321,7 +321,7 @@ class Api extends Base_Controller
 				} else {
 					$newmsg = $subject;
 				}
-				$data['message'] = $userDetailTo['first_name'] . " " . $userDetailTo['last_name'] . " has applied for " . $newmsg . " £" . $_REQUEST['loan_amount'] . " assistance and has named you as a guarantor.<p>Respond to this email and confirm if you are aware of this and are happy to act as a guarantor.</p>
+				$data['message'] = $userDetailTo['first_name'] . " " . $userDetailTo['last_name'] . " has applied for " . $newmsg . " of £" . $_REQUEST['loan_amount'] . " assistance and has named you as a guarantor.<p>Respond to this email and confirm if you are aware of this and are happy to act as a guarantor.</p>
 				<div>
 				<h4 style='margin-bottom:8px; font-size:15px; font-weight:600'>Responsibilities of a guarantor</h4>
 				<ul style='list-style:none;padding-left:0px'>
@@ -1114,7 +1114,7 @@ class Api extends Base_Controller
 				$data['useremail'] = "";
 				$subject = "Emergency Help";
 
-				$data['message'] = $userDetailTo['first_name'] . " " . $userDetailTo['last_name'] . " has applied for " . $subject . " £" . $_REQUEST['loan_amount'] . " assistance and has named you as a guarantor.<p>Respond to this email and confirm if you are aware of this and are happy to act as a guarantor.</p>
+				$data['message'] = $userDetailTo['first_name'] . " " . $userDetailTo['last_name'] . " has applied for " . $subject . " of £" . $_REQUEST['loan_amount'] . " assistance and has named you as a guarantor.<p>Respond to this email and confirm if you are aware of this and are happy to act as a guarantor.</p>
 				<div>
 				<h4 style='margin-bottom:8px; font-size:15px; font-weight:600'>Responsibilities of a guarantor</h4>
 				<ul style='list-style:none;padding-left:0px'>
@@ -2182,57 +2182,99 @@ class Api extends Base_Controller
 	// }
 
 	// changes by @krishn on 23-04-25
+	// public function avgSaving()
+	// {
+	// 	$grouplifecycle = $this->common->getData('group_lifecycle', array("group_id" => $_REQUEST['group_id'], "group_type_id" => '1'), array('sort_by' => 'id', 'sort_direction' => 'desc'));
+
+	// 	$avgAmount = 0;
+
+	// 	$_REQUEST['group_cycle_id'] = $grouplifecycle[0]['id'];
+
+	// 	$cycleTransfer = $this->common->getData('cycle_status_management', array(
+	// 		'user_id' => $_REQUEST['user_id'],
+	// 		'group_id' => $_REQUEST['group_id'],
+	// 		'group_cycle_id' => $_REQUEST['group_cycle_id']
+	// 	), array('single'));
+
+	// 	if (empty($cycleTransfer)) {
+	// 		$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
+	// 		$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
+
+	// 		$avgAmount = !empty($result['total_payment']) ? $result['total_payment'] : 0.00;
+	// 	} else {
+	// 		$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
+	// 		$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
+
+	// 		$paidAvgAmount = !empty($paidResult['total_payment']) ? $paidResult['total_payment'] : 0;
+
+	// 		$result = $this->common->getData('user_group_lifecycle', array(
+	// 			'groupLifecycle_id' => $_REQUEST['group_cycle_id'],
+	// 			'user_id' => $_REQUEST['user_id']
+	// 		), array('field' => 'SUM(amount) as total_amount', 'single'));
+
+	// 		$payout_amount_total = $result['total_amount'];
+	// 		$avgAmount = $paidAvgAmount - $payout_amount_total;
+	// 	}
+
+	// 	// Fetch last 6 transactions for the user in this group lifecycle
+	// 	$lastTransactionsDesc = $this->common->getData('user_group_lifecycle', array(
+	// 		'group_id' => $_REQUEST['group_id'],
+	// 		'groupLifecycle_id' => $_REQUEST['group_cycle_id'],
+	// 		'user_id' => $_REQUEST['user_id']
+	// 	), array(
+	// 		'sort_by' => 'updated_at',
+	// 		'sort_direction' => 'desc',
+	// 		'limit' => 6
+	// 	));
+
+	// 	// Optional: Reverse to maintain chronological order
+	// 	$lastTransactions = array_reverse($lastTransactionsDesc);
+
+	// 	$this->response(true, 'Amount fetched successfully', array(
+	// 		'avgAmountCycle' => $avgAmount,
+	// 		'lastSixTransactions' => $lastTransactions
+	// 	));
+	// }
+
+	// changes by @krishn on 10-07-26
 	public function avgSaving()
 	{
-		$grouplifecycle = $this->common->getData('group_lifecycle', array("group_id" => $_REQUEST['group_id'], "group_type_id" => '1'), array('sort_by' => 'id', 'sort_direction' => 'desc'));
-
-		$avgAmount = 0;
-
-		$_REQUEST['group_cycle_id'] = $grouplifecycle[0]['id'];
-
-		$cycleTransfer = $this->common->getData('cycle_status_management', array(
-			'user_id' => $_REQUEST['user_id'],
-			'group_id' => $_REQUEST['group_id'],
-			'group_cycle_id' => $_REQUEST['group_cycle_id']
-		), array('single'));
-
-		if (empty($cycleTransfer)) {
-			$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
-
-			$avgAmount = !empty($result['total_payment']) ? $result['total_payment'] : 0.00;
-		} else {
-			$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
-
-			$paidAvgAmount = !empty($paidResult['total_payment']) ? $paidResult['total_payment'] : 0;
-
-			$result = $this->common->getData('user_group_lifecycle', array(
-				'groupLifecycle_id' => $_REQUEST['group_cycle_id'],
-				'user_id' => $_REQUEST['user_id']
-			), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-			$payout_amount_total = $result['total_amount'];
-			$avgAmount = $paidAvgAmount - $payout_amount_total;
-		}
-
-		// Fetch last 6 transactions for the user in this group lifecycle
-		$lastTransactionsDesc = $this->common->getData('user_group_lifecycle', array(
-			'group_id' => $_REQUEST['group_id'],
-			'groupLifecycle_id' => $_REQUEST['group_cycle_id'],
-			'user_id' => $_REQUEST['user_id']
+		$result2 = $this->common->getData('group_lifecycle', array(
+			"group_id" => $_REQUEST['group_id'],
+			"group_type_id" => '1'
 		), array(
-			'sort_by' => 'updated_at',
-			'sort_direction' => 'desc',
-			'limit' => 6
+			'sort_by' => 'id',
+			'sort_direction' => 'desc'
 		));
 
-		// Optional: Reverse to maintain chronological order
-		$lastTransactions = array_reverse($lastTransactionsDesc);
+		$avgJnrAmount = 0;
+		$lastSixTransactions = [];
+
+		if (!empty($result2)) {
+			foreach ($result2 as $key => $value) {
+				$avgJnrAmount += $this->savingAvgCal($value['id']);
+			}
+
+			// Use the latest groupLifecycle ID to fetch recent transactions
+			$latestGroupLifecycleId = $result2[0]['id'];
+
+			$transactionsDesc = $this->common->getData('user_group_lifecycle', array(
+				'group_id' => $_REQUEST['group_id'],
+				'groupLifecycle_id' => $latestGroupLifecycleId,
+				'user_id' => $_REQUEST['user_id']
+			), array(
+				'sort_by' => 'updated_at',
+				'sort_direction' => 'desc',
+				'limit' => 6
+			));
+
+			// Reverse to show in chronological (ascending) order
+			$lastSixTransactions = array_reverse($transactionsDesc);
+		}
 
 		$this->response(true, 'Amount fetched successfully', array(
-			'avgAmountCycle' => $avgAmount,
-			'lastSixTransactions' => $lastTransactions
+			'avgAmountCycle' => $avgJnrAmount,
+			'lastSixTransactions' => $lastSixTransactions
 		));
 	}
 
