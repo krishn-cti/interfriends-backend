@@ -1208,21 +1208,21 @@ class Admin extends Base_Controller
 			if (!empty($result['profile_image'])) {
 				$result['profile_image'] = base_url($result['profile_image']);
 			} else {
-				$result['profile_image'] = base_url('assets/img/default-user-icon.jpg');
+				$result['profile_image'] = base_url('assets/images/default-user-icon.jpg');
 			}
 
 			// Profile Thumbnail
 			if (!empty($result['profile_image_thumb'])) {
 				$result['profile_image_thumb'] = base_url($result['profile_image_thumb']);
 			} else {
-				$result['profile_image_thumb'] = base_url('assets/img/default-user-icon.jpg');
+				$result['profile_image_thumb'] = base_url('assets/images/default-user-icon.jpg');
 			}
 
 			// ID Proof Image
 			if (!empty($result['id_proof_image'])) {
 				$result['id_proof_image'] = base_url($result['id_proof_image']);
 			} else {
-				$result['id_proof_image'] = base_url('assets/img/blank.webp');
+				$result['id_proof_image'] = base_url('assets/images/blank.webp');
 			}
 
 			$this->response(
