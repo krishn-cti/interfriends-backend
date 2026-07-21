@@ -4170,88 +4170,498 @@ class Api extends Base_Controller
 		]);
 	}
 
-	// public function getAllCircleUsers()
-	// {
-	// 	$userId = $_REQUEST['user_id'];
+	// created by @krishn on 15/07/26
+	public function getMyAllServices()
+	{
+		if (empty($_REQUEST['user_id'])) {
+			$this->response(false, "User ID is required.");
+			return;
+		}
 
-	// 	// Get existing user
-	// 	$existingUser = $this->common->getData('user', ['user_id' => $userId], ['single']);
-	// 	if (empty($existingUser)) {
-	// 		$this->response(false, "User not found");
-	// 	}
+		$where = " AND US.user_id = " . (int)$_REQUEST['user_id'] . " AND US.status = 1 ";
 
-	// 	// Get circle info
-	// 	$existingUserDetails = $this->common->getData('user_circle', ['user_id' => $userId], ['single']);
-	// 	if (empty($existingUserDetails)) {
-	// 		$this->response(false, "User circle details not found");
-	// 	}
+		$services = $this->user_model->user_assigned_services($where);
+		$services = $this->user_model->attachServiceImages($services);
 
-	// 	$groupId = $existingUserDetails['group_id'];
-	// 	$circleId = $existingUserDetails['circle_id'];
+		$this->response(true, "Services fetched successfully.", array(
+			"services"   => $services,
+			"totalCount" => count($services)
+		));
+	}
 
-	// 	// Pagination
-	// 	$start = !empty($_REQUEST['start']) ? (int)$_REQUEST['start'] : 0;
-	// 	$limit = 10;
+	// created by @krishn on 16/07/26
+	public function createService()
+	{
+		if (empty($_REQUEST['user_id'])) {
+			$this->response(false, "User is required.");
+			return;
+		}
 
-	// 	// Search filter
-	// 	$search = '';
-	// 	if (!empty($_REQUEST['search_keyword'])) {
-	// 		$keyword = $this->db->escape_like_str($_REQUEST['search_keyword']);
-	// 		$search = " AND (first_name LIKE '%$keyword%' OR last_name LIKE '%$keyword%' OR email LIKE '%$keyword%')";
-	// 	}
+		if (empty($_REQUEST['service_id'])) {
+			$this->response(false, "Service is required.");
+			return;
+		}
 
-	// 	// Build user_id list from user_circle excluding current user
-	// 	$circleUsers = $this->common->getData('user_circle', [
-	// 		'group_id' => $groupId,
-	// 		'circle_id' => $circleId,
-	// 	]);
+		// if (empty($_REQUEST['price']) || $_REQUEST['price'] <= 0) {
+		// 	$this->response(false, "Price is required.");
+		// 	return;
+		// }
 
-	// 	if (empty($circleUsers)) {
-	// 		$this->response(false, "No users found in the circle");
-	// 	}
+		// User Check
+		$user = $this->common->getData(
+			'user',
+			array('user_id' => $_REQUEST['user_id']),
+			array('single')
+		);
 
-	// 	$userIds = [];
-	// 	foreach ($circleUsers as $cu) {
-	// 		if ($cu['user_id'] != $userId) {
-	// 			$userIds[] = $cu['user_id'];
-	// 		}
-	// 	}
+		if (empty($user)) {
+			$this->response(false, "User not found.");
+			return;
+		}
 
-	// 	if (empty($userIds)) {
-	// 		$this->response(false, "No other users found in the circle");
-	// 	}
+		// Service Check
+		$service = $this->common->getData(
+			'services',
+			array(
+				'id' => $_REQUEST['service_id'],
+				'status' => 1
+			),
+			array('single')
+		);
 
-	// 	// Convert user IDs to comma-separated string for IN clause
-	// 	$userIdStr = implode(',', array_map('intval', $userIds));
+		if (empty($service)) {
+			$this->response(false, "Service not found.");
+			return;
+		}
 
-	// 	$where = "user_id IN ($userIdStr)" . $search;
+		// Already Exists?
+		$exist = $this->common->getData(
+			'user_services',
+			array(
+				'user_id' => $_REQUEST['user_id'],
+				'service_id' => $_REQUEST['service_id'],
+				'status' => 1
+			),
+			array('single')
+		);
 
-	// 	// Fetch users with pagination
-	// 	$circleUserData = $this->common->getData('user', $where, [], $limit, $start);
-	// 	$totalCount = $this->common->getData('user', $where, ['count']);
-	// 	$circleInfo = $this->common->getData('group_circle', ['id' => $circleId], ['single']);
+		if (!empty($exist)) {
+			$this->response(false, "You have already requested this service.");
+			return;
+		}
 
-	// 	$sno = $start + 1;
-	// 	if (!empty($circleUserData)) {
-	// 		foreach ($circleUserData as $key => $value) {
-	// 			$circleUserData[$key]['sno'] = $sno++;
+		if ($this->getServiceImageUploadCount() > 5) {
+			$this->response(false, "You can upload maximum 5 images for one service.");
+			return;
+		}
 
-	// 			if (!empty($value['profile_image'])) {
-	// 				$circleUserData[$key]['profile_image'] = base_url($value['profile_image']);
-	// 				$circleUserData[$key]['profile_image_thumb'] = base_url($value['profile_image_thumb']);
-	// 			} else {
-	// 				$circleUserData[$key]['profile_image'] = "assets/img/default-user-icon.jpg";
-	// 				$circleUserData[$key]['profile_image_thumb'] = "assets/img/default-user-icon.jpg";
-	// 			}
-	// 		}
+		$data = array(
+			'user_id'           => $_REQUEST['user_id'],
+			'service_id'        => $_REQUEST['service_id'],
+			'description'       => !empty($_REQUEST['description']) ? $_REQUEST['description'] : '',
+			'mobile'            => !empty($_REQUEST['mobile']) ? $_REQUEST['mobile'] : '',
+			'email'             => !empty($_REQUEST['email']) ? $_REQUEST['email'] : '',
+			'website'           => !empty($_REQUEST['website']) ? $_REQUEST['website'] : '',
+			'location'          => !empty($_REQUEST['location']) ? $_REQUEST['location'] : '',
+			'approval_status'   => 0,
+			'status'            => 1,
+			'created_by'        => $_REQUEST['user_id'],
+			'created_by_type'   => 'user',
+			'created_at'        => date('Y-m-d H:i:s')
+		);
 
-	// 		$this->response(true, "Circle users fetched successfully", array(
-	// 			"circleName" => $circleInfo['circle_name'],
-	// 			"users" => $circleUserData,
-	// 			"totalCount" => $totalCount
-	// 		));
-	// 	} else {
-	// 		$this->response(false, "No users found.");
-	// 	}
-	// }
+		$post = $this->common->getField('user_services', $data);
+
+		$result = $this->common->insertData('user_services', $post);
+
+		if (!$result) {
+			$this->response(false, "Unable to create service request.");
+			return;
+		}
+
+		$userServiceId = $this->db->insert_id();
+
+		if (!$this->saveServiceImages($userServiceId)) {
+			return;
+		}
+
+		/***********************
+		 * Notify Admin
+		 ************************/
+
+		$admins = $this->common->getData(
+			'superAdmin',
+			array('admin_type' => '2')
+		);
+
+		if (!empty($admins)) {
+
+			foreach ($admins as $admin) {
+
+				$mailData['sendername'] = $admin['name'];
+				$mailData['useremail'] = $admin['email'];
+
+				$mailData['message'] = "
+				<p>A new service request requires your approval.</p>
+
+				<p><strong>User :</strong> {$user['first_name']} {$user['last_name']}</p>
+
+				<p><strong>Email :</strong> {$user['email']}</p>
+
+				<p><strong>Service :</strong> {$service['service_name']}</p>
+				";
+
+				$mailMessage = $this->load->view('template/common-mail', $mailData, true);
+
+				$this->sendMail(
+					$admin['email'],
+					'New Service Request',
+					$mailMessage
+				);
+			}
+		}
+
+		$this->response(true, "Service request submitted successfully. Waiting for admin approval.");
+	}
+
+	// created by @krishn on 20/07/26
+	private function getServiceImageUploadCount($field = 'images')
+	{
+		if (empty($_FILES[$field]['name'])) {
+			return 0;
+		}
+
+		if (is_array($_FILES[$field]['name'])) {
+			return count(array_filter($_FILES[$field]['name']));
+		}
+
+		return 1;
+	}
+
+	// created by @krishn on 20/07/26
+	private function getDeleteServiceImageIds()
+	{
+		if (empty($_REQUEST['delete_image_ids'])) {
+			return array();
+		}
+
+		$imageIds = $_REQUEST['delete_image_ids'];
+
+		if (!is_array($imageIds)) {
+			$imageIds = explode(',', $imageIds);
+		}
+
+		return array_values(array_filter(array_map('intval', $imageIds)));
+	}
+
+	// created by @krishn on 20/07/26
+	private function serviceImageUploadError($error)
+	{
+		if (is_array($error)) {
+			$error = implode(' ', $error);
+		}
+
+		if (empty($error)) {
+			$error = "Unable to upload service image.";
+		}
+
+		return trim(strip_tags($error));
+	}
+
+	// created by @krishn on 20/07/26
+	private function saveServiceImages($userServiceId, $maxImages = 5)
+	{
+		$uploadCount = $this->getServiceImageUploadCount();
+
+		if ($uploadCount == 0) {
+			return true;
+		}
+
+		$existingCount = $this->common->getData(
+			'service_images',
+			array('user_service_id' => $userServiceId),
+			array('count')
+		);
+
+		if (($existingCount + $uploadCount) > $maxImages) {
+			$this->response(false, "You can upload maximum {$maxImages} images for one service.");
+			return false;
+		}
+
+		$uploadPath = './assets/user_services/';
+
+		if (!is_dir($uploadPath) && !mkdir($uploadPath, 0777, true)) {
+			$this->response(false, "Unable to create service image folder.");
+			return false;
+		}
+
+		if (is_array($_FILES['images']['name'])) {
+			$images = $this->common->multi_upload('images', $uploadPath);
+
+			if (empty($images) || !is_array($images)) {
+				$this->response(false, $this->serviceImageUploadError($images));
+				return false;
+			}
+		} else {
+			$image = $this->common->do_upload_file('images', $uploadPath);
+
+			if (empty($image['upload_data'])) {
+				$this->response(false, $this->serviceImageUploadError(isset($image['error']) ? $image['error'] : ''));
+				return false;
+			}
+
+			$images = array($image['upload_data']);
+		}
+
+		foreach ($images as $serviceImage) {
+			$imageData = array(
+				'user_service_id' => $userServiceId,
+				'image'           => 'assets/user_services/' . $serviceImage['file_name'],
+				'created_at'      => date('Y-m-d H:i:s'),
+				'updated_at'      => date('Y-m-d H:i:s')
+			);
+
+			$this->common->insertData('service_images', $this->common->getField('service_images', $imageData));
+		}
+
+		return true;
+	}
+
+	// created by @krishn on 20/07/26
+	private function deleteServiceImages($userServiceId, $imageIds)
+	{
+		if (empty($imageIds)) {
+			return true;
+		}
+
+		$this->db->where('user_service_id', $userServiceId);
+		$this->db->where_in('id', $imageIds);
+		$images = $this->db->get('service_images')->result_array();
+
+		if (count($images) != count($imageIds)) {
+			$this->response(false, "Invalid service image selected for delete.");
+			return false;
+		}
+
+		foreach ($images as $image) {
+			if (!empty($image['image']) && file_exists(FCPATH . $image['image'])) {
+				unlink(FCPATH . $image['image']);
+			}
+		}
+
+		$this->db->where('user_service_id', $userServiceId);
+		$this->db->where_in('id', $imageIds);
+		$this->db->delete('service_images');
+
+		return true;
+	}
+
+	// created by @krishn on 16/07/26
+	public function updateUserService()
+	{
+		if (empty($_REQUEST['user_service_id'])) {
+			$this->response(false, "User Service ID is required.");
+			return;
+		}
+
+		$service = $this->common->getData(
+			'user_services',
+			array(
+				'id' => $_REQUEST['user_service_id'],
+				'status' => 1
+			),
+			array('single')
+		);
+
+		if (empty($service)) {
+			$this->response(false, "Service not found.");
+			return;
+		}
+
+		$deleteImageIds = $this->getDeleteServiceImageIds();
+		$newImageCount = $this->getServiceImageUploadCount();
+
+		if (!empty($deleteImageIds)) {
+			$this->db->where('user_service_id', $_REQUEST['user_service_id']);
+			$this->db->where_in('id', $deleteImageIds);
+			$deleteImageCount = $this->db->count_all_results('service_images');
+
+			if ($deleteImageCount != count($deleteImageIds)) {
+				$this->response(false, "Invalid service image selected for delete.");
+				return;
+			}
+		} else {
+			$deleteImageCount = 0;
+		}
+
+		$existingImageCount = $this->common->getData(
+			'service_images',
+			array('user_service_id' => $_REQUEST['user_service_id']),
+			array('count')
+		);
+
+		if (($existingImageCount - $deleteImageCount + $newImageCount) > 5) {
+			$this->response(false, "You can upload maximum 5 images for one service.");
+			return;
+		}
+
+		// Only update allowed fields
+		$updateArr = array();
+
+		if (isset($_REQUEST['price'])) {
+			$updateArr['price'] = $_REQUEST['price'];
+		}
+
+		if (isset($_REQUEST['description'])) {
+			$updateArr['description'] = $_REQUEST['description'];
+		}
+
+		if (isset($_REQUEST['mobile'])) {
+			$updateArr['mobile'] = $_REQUEST['mobile'];
+		}
+
+		if (isset($_REQUEST['email'])) {
+			$updateArr['email'] = $_REQUEST['email'];
+		}
+
+		if (isset($_REQUEST['website'])) {
+			$updateArr['website'] = $_REQUEST['website'];
+		}
+
+		if (isset($_REQUEST['location'])) {
+			$updateArr['location'] = $_REQUEST['location'];
+		}
+
+		if (isset($_REQUEST['latitude'])) {
+			$updateArr['latitude'] = $_REQUEST['latitude'];
+		}
+
+		if (isset($_REQUEST['longitude'])) {
+			$updateArr['longitude'] = $_REQUEST['longitude'];
+		}
+
+		// Again send for approval
+		$updateArr['approval_status'] = 0;
+		$updateArr['approved_by'] = NULL;
+		$updateArr['approved_at'] = NULL;
+		$updateArr['updated_at'] = date('Y-m-d H:i:s');
+
+		$post = $this->common->getField('user_services', $updateArr);
+
+		$result = $this->common->updateData(
+			'user_services',
+			$post,
+			array('id' => $_REQUEST['user_service_id'])
+		);
+
+		if (!$result) {
+			$this->response(false, "Unable to update service.");
+			return;
+		}
+
+		if (!$this->deleteServiceImages($_REQUEST['user_service_id'], $deleteImageIds)) {
+			return;
+		}
+
+		if (!$this->saveServiceImages($_REQUEST['user_service_id'])) {
+			return;
+		}
+
+		// User Details
+		$user = $this->common->getData(
+			'user',
+			array('user_id' => $service['user_id']),
+			array('single')
+		);
+
+		// Service Details
+		$serviceDetail = $this->common->getData(
+			'services',
+			array('id' => $service['service_id']),
+			array('single')
+		);
+
+		// Mail to Admins
+		$admins = $this->common->getData(
+			'superAdmin',
+			array('admin_type' => '2')
+		);
+
+		if (!empty($admins)) {
+
+			foreach ($admins as $admin) {
+
+				$data['sendername'] = $admin['name'];
+				$data['useremail'] = $admin['email'];
+
+				$data['message'] = "
+					<p>A user has updated their service details.</p>
+
+					<p><strong>User:</strong> {$user['first_name']} {$user['last_name']}</p>
+
+					<p><strong>Service:</strong> {$serviceDetail['service_name']}</p>
+
+					<p>The service is waiting for your approval.</p>
+				";
+
+				$mailMessage = $this->load->view('template/common-mail', $data, true);
+
+				$this->sendMail(
+					$admin['email'],
+					'Service Update Approval Required',
+					$mailMessage
+				);
+			}
+		}
+
+		$this->response(true, "Service updated successfully and sent for approval.");
+	}
+
+	// created by @krishn on 16/07/26
+	public function getAllServices()
+	{
+		$limit = '';
+		$start = '';
+		$where = array(
+			'US.status' => 1
+		);
+
+		if (isset($_REQUEST['start']) && $_REQUEST['start'] !== '') {
+			$limit = 10;
+			$start = (int)$_REQUEST['start'];
+		}
+
+		if (!empty($_REQUEST['category_id'])) {
+			$where['S.category_id'] = $_REQUEST['category_id'];
+		}
+
+		if (!empty($_REQUEST['subcategory_id'])) {
+			$where['S.subcategory_id'] = $_REQUEST['subcategory_id'];
+		}
+
+		if (isset($_REQUEST['approval_status']) && $_REQUEST['approval_status'] !== '') {
+			$where['US.approval_status'] = $_REQUEST['approval_status'];
+		}
+
+		if (isset($_REQUEST['service_status']) && $_REQUEST['service_status'] !== '') {
+			$where['S.status'] = $_REQUEST['service_status'];
+		}
+
+		if (!empty($_REQUEST['service_id'])) {
+			$where['US.service_id'] = $_REQUEST['service_id'];
+		}
+
+		if (!empty($_REQUEST['search']) || !empty($_REQUEST['search_keyword'])) {
+			$where['search'] = !empty($_REQUEST['search']) ? trim($_REQUEST['search']) : trim($_REQUEST['search_keyword']);
+		}
+
+		$services = $this->user_model->user_assigned_services($where, array(), $limit, $start);
+		$services = $this->user_model->attachServiceImages($services);
+		$totalCount = $this->user_model->user_assigned_services($where, array('count'));
+
+		$this->response(true, "Services fetched successfully.", array(
+			"services"   => $services,
+			"totalCount" => $totalCount
+		));
+	}
 }

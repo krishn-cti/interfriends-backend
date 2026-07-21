@@ -1627,4 +1627,423 @@ class User_model extends CI_Model
 			return array();
 		}
 	}
+
+	// created by krishn 13-07-2026
+	public function serviceCategory_detail($where = array(), $options = array(), $limit = '', $start = '')
+	{
+		$this->db->select('SC.*');
+		$this->db->from('service_categories SC');
+
+		if (!empty($where['SC.created_by'])) {
+			$this->db->where('SC.created_by', $where['SC.created_by']);
+		}
+
+		if (!empty($where['SC.created_by_type'])) {
+			$this->db->where('SC.created_by_type', $where['SC.created_by_type']);
+		}
+
+		if (!empty($where['status'])) {
+			$this->db->where('SC.status', $where['status']);
+		}
+
+		if (!empty($where['category_name LIKE'])) {
+			$this->db->like('SC.category_name', str_replace('%', '', $where['category_name LIKE']));
+		}
+
+		$this->db->order_by('SC.id', 'DESC');
+
+		if ($limit != '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$res = $this->db->get()->result_array();
+
+		if (!empty($options) && in_array('count', $options)) {
+			return count($res);
+		}
+
+		if ($res) {
+			if (!empty($options) && in_array('single', $options)) {
+				return $res[0];
+			} else {
+				return $res;
+			}
+		} else {
+			return array();
+		}
+	}
+
+	// created by krishn 13-07-2026
+	public function serviceSubCategory_detail($where = array(), $options = array(), $limit = '', $start = '')
+	{
+		$this->db->select('
+			SSC.*,
+			SC.category_name
+		');
+
+		$this->db->from('service_subcategories SSC');
+
+		$this->db->join(
+			'service_categories SC',
+			'SC.id = SSC.category_id',
+			'left'
+		);
+
+		if (!empty($where['SSC.created_by'])) {
+			$this->db->where('SSC.created_by', $where['SSC.created_by']);
+		}
+
+		if (!empty($where['SSC.created_by_type'])) {
+			$this->db->where('SSC.created_by_type', $where['SSC.created_by_type']);
+		}
+
+		if (!empty($where['SSC.category_id'])) {
+			$this->db->where('SSC.category_id', $where['SSC.category_id']);
+		}
+
+		if (isset($where['SSC.status']) && $where['SSC.status'] !== '') {
+			$this->db->where('SSC.status', $where['SSC.status']);
+		}
+
+		if (!empty($where['search'])) {
+			$this->db->group_start();
+			$this->db->like('SSC.subcategory_name', $where['search']);
+			$this->db->or_like('SC.category_name', $where['search']);
+			$this->db->group_end();
+		}
+
+		$this->db->order_by('SSC.id', 'DESC');
+
+		if ($limit != '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$res = $this->db->get()->result_array();
+
+		if (!empty($options) && in_array('count', $options)) {
+			return count($res);
+		}
+
+		if ($res) {
+			if (!empty($options) && in_array('single', $options)) {
+				return $res[0];
+			} else {
+				return $res;
+			}
+		} else {
+			return array();
+		}
+	}
+
+	// created by krishn 14-07-2026
+	public function service_detail($where = array(), $options = array(), $limit = '', $start = '')
+	{
+		$this->db->select("
+			S.*,
+			SC.category_name,
+			SSC.subcategory_name
+		");
+
+		$this->db->from('services S');
+
+		$this->db->join(
+			'service_categories SC',
+			'SC.id = S.category_id',
+			'left'
+		);
+
+		$this->db->join(
+			'service_subcategories SSC',
+			'SSC.id = S.subcategory_id',
+			'left'
+		);
+
+		if (!empty($where['S.created_by'])) {
+			$this->db->where('S.created_by', $where['S.created_by']);
+		}
+
+		if (!empty($where['S.created_by_type'])) {
+			$this->db->where('S.created_by_type', $where['S.created_by_type']);
+		}
+
+		if (!empty($where['S.category_id'])) {
+			$this->db->where('S.category_id', $where['S.category_id']);
+		}
+
+		if (!empty($where['S.subcategory_id'])) {
+			$this->db->where('S.subcategory_id', $where['S.subcategory_id']);
+		}
+
+		if (isset($where['S.status'])) {
+			$this->db->where('S.status', $where['S.status']);
+		}
+
+		if (!empty($where['S.id'])) {
+			$this->db->where('S.id', $where['S.id']);
+		}
+
+		if (!empty($where['search'])) {
+			$this->db->group_start();
+			$this->db->like('S.service_name', $where['search']);
+			$this->db->or_like('SC.category_name', $where['search']);
+			$this->db->or_like('SSC.subcategory_name', $where['search']);
+			$this->db->group_end();
+		}
+
+		$this->db->order_by('S.id', 'DESC');
+
+		if ($limit != '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$res = $this->db->get()->result_array();
+
+		if (!empty($options) && in_array('count', $options)) {
+			return count($res);
+		}
+
+		if ($res) {
+
+			if (!empty($options) && in_array('single', $options)) {
+				return $res[0];
+			}
+
+			return $res;
+		}
+
+		return array();
+	}
+
+	// created by krishn 14-07-2026
+	public function serviceAssignedUsers($service_id)
+	{
+		$this->db->select("
+			US.id,
+			US.user_id,
+			U.first_name,
+			U.last_name,
+			U.email,
+			U.mobile_number,
+			US.price,
+			US.description,
+			US.location,
+			US.latitude,
+			US.longitude,
+			US.approval_status,
+			US.status
+		");
+
+		$this->db->from('user_services US');
+
+		$this->db->join('user U', 'U.user_id = US.user_id');
+
+		$this->db->where('US.service_id', $service_id);
+
+		$this->db->where('US.status', 1);
+
+		$this->db->order_by('U.first_name', 'ASC');
+
+		return $this->db->get()->result_array();
+	}
+
+	// created by krishn 14-07-2026
+	public function serviceAvailableUser_detail($search = "", $service_id = 0)
+	{
+		$this->db->select("
+			U.user_id,
+			U.first_name,
+			U.last_name,
+			U.email
+		");
+
+		$this->db->from('user U');
+
+		$this->db->where('U.status !=', 2);
+
+		if (!empty($search)) {
+
+			$this->db->group_start();
+			$this->db->like('U.first_name', $search);
+			$this->db->or_like('U.last_name', $search);
+			$this->db->or_like('U.email', $search);
+			$this->db->group_end();
+		}
+
+		// User can have maximum 5 active services
+		$this->db->where("
+			(
+				SELECT COUNT(*)
+				FROM user_services US
+				WHERE US.user_id = U.user_id
+				AND US.approval_status IN (0,1)
+			) < 5
+		", NULL, FALSE);
+
+		// Exclude users already assigned to this service
+		if (!empty($service_id)) {
+
+			$this->db->where("
+				NOT EXISTS (
+					SELECT 1
+					FROM user_services US2
+					WHERE US2.user_id = U.user_id
+					AND US2.status = 1
+					AND US2.service_id = " . $this->db->escape($service_id) . "
+				)
+			", NULL, FALSE);
+		}
+
+		$this->db->order_by('U.created_at', 'DESC');
+
+		return $this->db->get()->result_array();
+	}
+
+	// created by krishn 15-07-2026
+	public function user_assigned_services($where = "", $options = array(), $limit = '', $start = '')
+	{
+		$this->db->select("
+			US.id AS user_service_id,
+			US.service_id,
+			US.price,
+			US.description as provider_description,
+			US.mobile,
+			US.email,
+			US.website,
+			US.location,
+			US.latitude,
+			US.longitude,
+			US.status as user_service_status,
+			US.approval_status,
+			US.created_at,
+
+			S.service_name,
+			S.description as service_description,
+			S.status as service_status,
+
+			U.user_id,
+			U.first_name,
+			U.last_name,
+			U.email as user_email,
+			U.mobile_number,
+			U.profile_image,
+			U.profile_image_thumb,
+
+			SC.category_name,
+			SSC.subcategory_name
+		");
+
+		$this->db->from('user_services US');
+
+		$this->db->join('services S', 'S.id = US.service_id');
+		$this->db->join('service_categories SC', 'SC.id = S.category_id');
+		$this->db->join('service_subcategories SSC', 'SSC.id = S.subcategory_id');
+
+		$this->db->join('user U', 'U.user_id = US.user_id');
+		$this->db->join('user_circle UC', 'UC.user_id = U.user_id', 'left');
+
+		if (!empty($where) && is_array($where)) {
+			if (!empty($where['US.user_id'])) {
+				$this->db->where('US.user_id', $where['US.user_id']);
+			}
+
+			if (!empty($where['US.service_id'])) {
+				$this->db->where('US.service_id', $where['US.service_id']);
+			}
+
+			if (!empty($where['S.category_id'])) {
+				$this->db->where('S.category_id', $where['S.category_id']);
+			}
+
+			if (!empty($where['S.subcategory_id'])) {
+				$this->db->where('S.subcategory_id', $where['S.subcategory_id']);
+			}
+
+			if (isset($where['US.status'])) {
+				$this->db->where('US.status', $where['US.status']);
+			}
+
+			if (isset($where['US.approval_status'])) {
+				$this->db->where('US.approval_status', $where['US.approval_status']);
+			}
+
+			if (isset($where['S.status'])) {
+				$this->db->where('S.status', $where['S.status']);
+			}
+
+			if (!empty($where['group_ids'])) {
+				$this->db->where_in('UC.group_id', $where['group_ids']);
+			}
+
+			if (!empty($where['circle_ids'])) {
+				$this->db->where_in('UC.circle_id', $where['circle_ids']);
+			}
+
+			if (!empty($where['search'])) {
+				$this->db->group_start();
+				$this->db->like('S.service_name', $where['search']);
+				$this->db->or_like('S.description', $where['search']);
+				$this->db->or_like('US.description', $where['search']);
+				$this->db->or_like('US.email', $where['search']);
+				$this->db->or_like('US.mobile', $where['search']);
+				$this->db->or_like('US.location', $where['search']);
+				$this->db->or_like('U.first_name', $where['search']);
+				$this->db->or_like('U.last_name', $where['search']);
+				$this->db->or_like('U.email', $where['search']);
+				$this->db->or_like('U.mobile_number', $where['search']);
+				$this->db->or_like('SC.category_name', $where['search']);
+				$this->db->or_like('SSC.subcategory_name', $where['search']);
+				$this->db->group_end();
+			}
+		} elseif (!empty($where)) {
+			$this->db->where("1=1 {$where}", NULL, FALSE);
+		}
+
+		$this->db->order_by('US.id', 'DESC');
+
+		if ($limit != '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$res = $this->db->get()->result_array();
+
+		if (!empty($options) && in_array('count', $options)) {
+			return count($res);
+		}
+
+		return $res;
+	}
+
+	public function attachServiceImages($services)
+	{
+		if (empty($services)) {
+			return array();
+		}
+
+		$userServiceIds = array_column($services, 'user_service_id');
+
+		$this->db->where_in('user_service_id', $userServiceIds);
+		$this->db->order_by('id', 'ASC');
+		$serviceImages = $this->db->get('service_images')->result_array();
+
+		$imageMap = array();
+
+		foreach ($serviceImages as $serviceImage) {
+			$imageMap[$serviceImage['user_service_id']][] = array(
+				'id'              => $serviceImage['id'],
+				'user_service_id' => $serviceImage['user_service_id'],
+				'image'           => !empty($serviceImage['image']) ? base_url($serviceImage['image']) : '',
+				'created_at'      => $serviceImage['created_at'],
+				'updated_at'      => $serviceImage['updated_at']
+			);
+		}
+
+		foreach ($services as $key => $service) {
+			$userServiceId = $service['user_service_id'];
+			$services[$key]['profile_image'] = !empty($service['profile_image']) ? base_url($service['profile_image']) : '';
+			$services[$key]['profile_image_thumb'] = !empty($service['profile_image_thumb']) ? base_url($service['profile_image_thumb']) : '';
+			$services[$key]['service_images'] = isset($imageMap[$userServiceId]) ? $imageMap[$userServiceId] : array();
+		}
+
+		return $services;
+	}
 }
