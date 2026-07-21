@@ -5465,9 +5465,18 @@ class Admin extends Base_Controller
 				// check limit exceeded or not
 				$recommenderGroupDetails = $this->common->getData('user_circle', ['user_id' => $recommendUser['refer_user_id']], ['single']);
 
-				$groupCircleMemberCount = $this->common->getData('user_circle', array("group_id" => $recommenderGroupDetails['group_id'], "circle_id" => $recommenderGroupDetails['circle_id']), array('count'));
+				$whereForMember = "
+					UG.circle_id = '" . $recommenderGroupDetails['circle_id'] . "'
+					AND UG.group_id = '" . $recommenderGroupDetails['group_id'] . "'
+					AND U.status != '2'
+					AND U.recommended = '0'
+				";
 
-				if ($groupCircleMemberCount > 25) {
+				$usercircledata = $this->user_model->user_circle_detail($whereForMember, array());
+
+				$groupCircleMemberCount = !empty($usercircledata) ? count($usercircledata) : 0;
+
+				if ($groupCircleMemberCount >= 25) {
 					$this->common->updateData('user', array('exist_in_waiting' => 1), array('user_id' => $existingUser['user_id']));
 
 					$superAdmin = $this->common->getData('superAdmin', ['admin_type' => '2']);
@@ -9449,70 +9458,195 @@ class Admin extends Base_Controller
 
 
 	// recommendUser_status
+	// public function adduserGroupCircle()
+	// {
+	// 	$_REQUEST['created_at'] = date('Y-m-d H:i:s');
+	// 	if (empty($_REQUEST['users'])) {
+	// 		$this->response(false, "Please enter users");
+	// 		die();
+	// 	}
+
+	// 	$userArr = explode(",", $_REQUEST['users']);
+	// 	foreach ($userArr as $key => $userId) {
+	// 		$groupCircleMemberCount = $this->common->getData('user_circle', array("group_id" => $_REQUEST['group_id'], "circle_id" => $_REQUEST['circle_id']), array('count'));
+
+	// 		if ($groupCircleMemberCount > 25) {
+	// 			$this->common->updateData('user', array('exist_in_waiting' => 1), array('user_id' => $userId));
+	// 			$this->response(true, "Approved by admin but cicle limit exceeded. You can add only 25 members to this circle.");
+	// 			die();
+	// 		}
+
+	// 		$groupcircle = $this->common->getData('user_circle', array("user_id" => $userId), array('single'));
+	// 		$groupuser = $this->common->getData('user', array("user_id" => $userId), array('single'));
+	// 		if (!empty($groupcircle)) {
+	// 			$this->response(false, "This user " . $groupuser['first_name'] . " is already in another circle");
+	// 			die();
+	// 		} else {
+
+	// 			$this->common->updateData('user', array('exist_in_waiting' => 0), array('user_id' => $userId));
+
+	// 			$newArr = array(
+	// 				"group_id" => $_REQUEST['group_id'],
+	// 				"circle_id" => $_REQUEST['circle_id'],
+	// 				"user_id" => $userId,
+	// 				"created_at" => $_REQUEST['created_at']
+	// 			);
+	// 			$post = $this->common->getField('user_circle', $newArr);
+	// 			$result = $this->common->insertData('user_circle', $post);
+	// 		}
+	// 		// send mail to admin
+	// 		if ($_REQUEST['isWaiting'] === '1') {
+	// 			$subject = "Joining Instructions";
+	// 			$data['sendername'] = $groupuser['first_name'];
+	// 			$data['message'] = '<p style="margin-bottom:10px;">I am writing to provide you with the necessary account details for the upcoming Interfriends cycle.</p>
+	//             <h4><strong>UNITED KINGDOM USERS</strong></h4>
+	//             <p><strong>Account Name:</strong> Interfriends</p>
+	//             <p><strong>Bank Name:</strong> Lloyds Bank</p>
+	//             <p><strong>Account Number:</strong> 32774168</p>
+	//             <p><strong>Sort Code:</strong> 30-98-97</p>
+	//             <p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
+	//             <p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
+	//             <p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
+	//             <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="' . USER_BASE_URL . '">Click Here</a> for Login</p>
+	//             <p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
+	//             <p>Thank you for your attention to this matter.</p>';
+
+	// 			$messaged = $this->load->view('template/common-mail', $data, true);
+	// 			$mail = $this->sendMail($groupuser['email'], $subject, $messaged);
+	// 		}
+	// 	}
+	// 	if ($result) {
+	// 		$this->response(true, "User added successfully in circle");
+	// 	} else {
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
 	public function adduserGroupCircle()
 	{
 		$_REQUEST['created_at'] = date('Y-m-d H:i:s');
 		if (empty($_REQUEST['users'])) {
 			$this->response(false, "Please enter users");
-			die();
+			return;
 		}
 
 		$userArr = explode(",", $_REQUEST['users']);
-		foreach ($userArr as $key => $userId) {
-			$groupCircleMemberCount = $this->common->getData('user_circle', array("group_id" => $_REQUEST['group_id'], "circle_id" => $_REQUEST['circle_id']), array('count'));
 
-			if ($groupCircleMemberCount > 25) {
-				$this->common->updateData('user', array('exist_in_waiting' => 1), array('user_id' => $userId));
-				$this->response(true, "Approved by admin but cicle limit exceeded. You can add only 25 members to this circle.");
-				die();
+		// Get current ACTIVE members count (excluding recommended & inactive users)
+		$whereForMember = "UG.circle_id = '" . $_REQUEST['circle_id'] . "'
+		AND UG.group_id = '" . $_REQUEST['group_id'] . "'
+		AND U.status != '2'
+		AND U.recommended = '0'";
+
+		$usercircledata = $this->user_model->user_circle_detail($whereForMember, array());
+
+		$groupCircleMemberCount = count($usercircledata);
+
+		$result = false;
+
+		foreach ($userArr as $userId) {
+
+			// Maximum 25 members
+			if ($groupCircleMemberCount >= 25) {
+
+				$this->common->updateData(
+					'user',
+					array('exist_in_waiting' => 1),
+					array('user_id' => $userId)
+				);
+
+				$this->response(
+					true,
+					"Approved by admin but circle limit exceeded. You can add only 25 active members to this circle."
+				);
+				return;
 			}
 
-			$groupcircle = $this->common->getData('user_circle', array("user_id" => $userId), array('single'));
-			$groupuser = $this->common->getData('user', array("user_id" => $userId), array('single'));
+			// Check if user already exists in another circle
+			$groupcircle = $this->common->getData(
+				'user_circle',
+				array("user_id" => $userId),
+				array('single')
+			);
+
+			$groupuser = $this->common->getData(
+				'user',
+				array("user_id" => $userId),
+				array('single')
+			);
+
 			if (!empty($groupcircle)) {
 				$this->response(false, "This user " . $groupuser['first_name'] . " is already in another circle");
-				die();
-			} else {
-
-				$this->common->updateData('user', array('exist_in_waiting' => 0), array('user_id' => $userId));
-
-				$newArr = array(
-					"group_id" => $_REQUEST['group_id'],
-					"circle_id" => $_REQUEST['circle_id'],
-					"user_id" => $userId,
-					"created_at" => $_REQUEST['created_at']
-				);
-				$post = $this->common->getField('user_circle', $newArr);
-				$result = $this->common->insertData('user_circle', $post);
+				return;
 			}
-			// send mail to admin
-			if ($_REQUEST['isWaiting'] === '1') {
+
+			$this->common->updateData(
+				'user',
+				array('exist_in_waiting' => 0),
+				array('user_id' => $userId)
+			);
+
+			$newArr = array(
+				"group_id"   => $_REQUEST['group_id'],
+				"circle_id"  => $_REQUEST['circle_id'],
+				"user_id"    => $userId,
+				"created_at" => $_REQUEST['created_at']
+			);
+
+			$post = $this->common->getField('user_circle', $newArr);
+
+			$result = $this->common->insertData('user_circle', $post);
+
+			if ($result) {
+				// Increase current member count so multiple inserts don't exceed 25
+				$groupCircleMemberCount++;
+			}
+
+			// Send mail
+			if (!empty($_REQUEST['isWaiting']) && $_REQUEST['isWaiting'] === '1') {
+
 				$subject = "Joining Instructions";
+
 				$data['sendername'] = $groupuser['first_name'];
-				$data['message'] = '<p style="margin-bottom:10px;">I am writing to provide you with the necessary account details for the upcoming Interfriends cycle.</p>
-                <h4><strong>UNITED KINGDOM USERS</strong></h4>
-                <p><strong>Account Name:</strong> Interfriends</p>
-                <p><strong>Bank Name:</strong> Lloyds Bank</p>
-                <p><strong>Account Number:</strong> 32774168</p>
-                <p><strong>Sort Code:</strong> 30-98-97</p>
-                <p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
-                <p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
-                <p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
-                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="' . USER_BASE_URL . '">Click Here</a> for Login</p>
-                <p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
-                <p>Thank you for your attention to this matter.</p>';
+
+				$data['message'] = '
+				<p style="margin-bottom:10px;">I am writing to provide you with the necessary account details for the upcoming Interfriends cycle.</p>
+
+				<h4><strong>UNITED KINGDOM USERS</strong></h4>
+
+				<p><strong>Account Name:</strong> Interfriends</p>
+				<p><strong>Bank Name:</strong> Lloyds Bank</p>
+				<p><strong>Account Number:</strong> 32774168</p>
+				<p><strong>Sort Code:</strong> 30-98-97</p>
+				<p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
+
+				<p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
+
+				<p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
+
+				<p>To access your Interfriends dashboard, please follow this link and enter the email used for your application:
+				<a href="' . USER_BASE_URL . '">Click Here</a></p>
+
+				<p>If you have forgotten your password, you can click on "Forgotten Password" to create a new one.</p>
+
+				<p>Thank you for your attention to this matter.</p>';
 
 				$messaged = $this->load->view('template/common-mail', $data, true);
-				$mail = $this->sendMail($groupuser['email'], $subject, $messaged);
+
+				$this->sendMail(
+					$groupuser['email'],
+					$subject,
+					$messaged
+				);
 			}
 		}
+
 		if ($result) {
 			$this->response(true, "User added successfully in circle");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
-
 	public function assignLeadcircle()
 	{
 		$checklead = $this->common->getData('user_circle', array("circle_id" => $_REQUEST['circle_id'], "group_id" => $_REQUEST['group_id'], "circle_lead" => '1'), array('single'));
@@ -11501,6 +11635,1348 @@ class Admin extends Base_Controller
 		} else {
 
 			$this->response(false, "Unable to send reminder email.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function addServiceCategory()
+	{
+		$check = $this->common->getData('service_categories', array(
+			'category_name' => trim($_REQUEST['category_name'])
+		), array('single'));
+
+		if (!empty($check)) {
+			$this->response(false, "Category already exists.");
+			return;
+		}
+
+		$_REQUEST['status'] = !empty($_REQUEST['status']) ? $_REQUEST['status'] : 1;
+		$_REQUEST['created_at'] = date('Y-m-d H:i:s');
+
+		$post = $this->common->getField('service_categories', $_REQUEST);
+		$result = $this->common->insertData('service_categories', $post);
+
+		if ($result) {
+			$this->response(true, "Service category added successfully.");
+		} else {
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function serviceCategoryList()
+	{
+		if (empty($_REQUEST['start'])) {
+			$start = 10;
+			$end = 0;
+		} else {
+			$start = 10;
+			$end = $_REQUEST['start'];
+		}
+
+		$where = array();
+
+		if (!empty($_REQUEST['status'])) {
+			$where['status'] = $_REQUEST['status'];
+		}
+
+		if (!empty($_REQUEST['search'])) {
+			$where['category_name LIKE'] = '%' . trim($_REQUEST['search']) . '%';
+		}
+
+		if (
+			!empty($_REQUEST['created_by_type']) &&
+			$_REQUEST['created_by_type'] == 'subadmin'
+		) {
+			$where['SC.created_by'] = $_REQUEST['created_by'];
+			$where['SC.created_by_type'] = 'subadmin';
+		}
+
+		$result = $this->user_model->serviceCategory_detail($where, array(), $start, $end);
+		$listCount = $this->user_model->serviceCategory_detail($where, array('count'));
+
+		$countData = $end;
+		$countData++;
+
+		if (!empty($result)) {
+			foreach ($result as $key => $value) {
+				$result[$key]['sno'] = $countData++;
+			}
+
+			$this->response(true, "Category fetched successfully.", array(
+				'lists' => $result,
+				'listCount' => $listCount
+			));
+		} else {
+			$this->response(true, "Category fetched successfully.", array(
+				'lists' => array(),
+				'listCount' => 0
+			));
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function serviceCategoryDetail()
+	{
+		if (empty($_REQUEST['category_id'])) {
+			$this->response(false, "Category ID is required.");
+			return;
+		}
+
+		$result = $this->common->getData(
+			'service_categories',
+			array('id' => $_REQUEST['category_id']),
+			array('single')
+		);
+
+		if (!empty($result)) {
+			$this->response(true, "Category fetched successfully.", array(
+				'details' => $result
+			));
+		} else {
+			$this->response(false, "Category not found.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function updateServiceCategory()
+	{
+		if (empty($_REQUEST['category_id'])) {
+			$this->response(false, "Category ID is required.");
+			return;
+		}
+
+		$category = $this->common->getData(
+			'service_categories',
+			array('id' => $_REQUEST['category_id']),
+			array('single')
+		);
+
+		if (empty($category)) {
+			$this->response(false, "Category not found.");
+			return;
+		}
+
+		$_REQUEST['updated_at'] = date('Y-m-d H:i:s');
+
+		$post = $this->common->getField('service_categories', $_REQUEST);
+
+		unset($post['id']);
+		unset($post['created_at']);
+		unset($post['created_by']);
+		unset($post['created_by_type']);
+
+		$result = $this->common->updateData(
+			'service_categories',
+			$post,
+			array('id' => $_REQUEST['category_id'])
+		);
+
+		if ($result) {
+			$this->response(true, "Category updated successfully.");
+		} else {
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function deleteServiceCategory()
+	{
+		if (empty($_REQUEST['category_id'])) {
+			$this->response(false, "Category ID is required.");
+			return;
+		}
+
+		$category = $this->common->getData(
+			'service_categories',
+			array('id' => $_REQUEST['category_id']),
+			array('single')
+		);
+
+		if (empty($category)) {
+			$this->response(false, "Category not found.");
+			return;
+		}
+
+		$result = $this->common->deleteData(
+			'service_categories',
+			array('id' => $_REQUEST['category_id'])
+		);
+
+		if ($result) {
+			$this->response(true, "Category deleted successfully.");
+		} else {
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function addServiceSubCategory()
+	{
+		if (empty($_REQUEST['category_id'])) {
+			$this->response(false, "Category is required.");
+			return;
+		}
+
+		if (empty($_REQUEST['subcategory_name'])) {
+			$this->response(false, "Sub Category name is required.");
+			return;
+		}
+
+		$category = $this->common->getData(
+			'service_categories',
+			array(
+				'id' => $_REQUEST['category_id'],
+				'status' => 1
+			),
+			array('single')
+		);
+
+		if (empty($category)) {
+			$this->response(false, "Category not found.");
+			return;
+		}
+
+		$exist = $this->common->getData(
+			'service_subcategories',
+			array(
+				'category_id' => $_REQUEST['category_id'],
+				'subcategory_name' => trim($_REQUEST['subcategory_name'])
+			),
+			array('single')
+		);
+
+		if (!empty($exist)) {
+			$this->response(false, "Sub Category already exists.");
+			return;
+		}
+
+		$_REQUEST['created_at'] = date('Y-m-d H:i:s');
+
+		$post = $this->common->getField('service_subcategories', $_REQUEST);
+
+		$result = $this->common->insertData('service_subcategories', $post);
+
+		if ($result) {
+			$this->response(true, "Sub Category added successfully.");
+		} else {
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function serviceSubCategoryList()
+	{
+		if (empty($_REQUEST['start'])) {
+			$start = 10;
+			$end = 0;
+		} else {
+			$start = 10;
+			$end = (int)$_REQUEST['start'];
+		}
+
+		$where = array();
+
+		if (!empty($_REQUEST['category_id'])) {
+			$where['SSC.category_id'] = $_REQUEST['category_id'];
+		}
+
+		if (isset($_REQUEST['status']) && $_REQUEST['status'] !== '') {
+			$where['SSC.status'] = $_REQUEST['status'];
+		}
+
+		if (!empty($_REQUEST['search'])) {
+			$where['search'] = trim($_REQUEST['search']);
+		}
+
+		if (
+			!empty($_REQUEST['created_by_type']) &&
+			$_REQUEST['created_by_type'] == 'subadmin'
+		) {
+			$where['SSC.created_by'] = $_REQUEST['created_by'];
+			$where['SSC.created_by_type'] = 'subadmin';
+		}
+
+		$result = $this->user_model->serviceSubCategory_detail($where, array(), $start, $end);
+
+		$listCount = $this->user_model->serviceSubCategory_detail($where, array('count'));
+
+		$countData = $end + 1;
+
+		if (!empty($result)) {
+
+			foreach ($result as $key => $value) {
+				$result[$key]['sno'] = $countData++;
+			}
+
+			$this->response(true, "Sub Categories fetched successfully.", array(
+				'lists' => $result,
+				'listCount' => $listCount
+			));
+		} else {
+
+			$this->response(true, "Sub Categories fetched successfully.", array(
+				'lists' => array(),
+				'listCount' => 0
+			));
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function serviceSubCategoryDetail()
+	{
+		if (empty($_REQUEST['subcategory_id'])) {
+			$this->response(false, "Sub Category ID is required.");
+			return;
+		}
+
+		$result = $this->common->getData(
+			'service_subcategories',
+			array('id' => $_REQUEST['subcategory_id']),
+			array('single')
+		);
+
+		if (!empty($result)) {
+
+			$this->response(true, "Sub Category fetched successfully.", array(
+				"details" => $result
+			));
+		} else {
+
+			$this->response(false, "Sub Category not found.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function updateServiceSubCategory()
+	{
+		if (empty($_REQUEST['subcategory_id'])) {
+			$this->response(false, "Sub Category ID is required.");
+			return;
+		}
+
+		if (empty($_REQUEST['category_id'])) {
+			$this->response(false, "Category is required.");
+			return;
+		}
+
+		if (empty($_REQUEST['subcategory_name'])) {
+			$this->response(false, "Sub Category name is required.");
+			return;
+		}
+
+		$subCategory = $this->common->getData(
+			'service_subcategories',
+			array(
+				'id' => $_REQUEST['subcategory_id']
+			),
+			array('single')
+		);
+
+		if (empty($subCategory)) {
+			$this->response(false, "Sub Category not found.");
+			return;
+		}
+
+		$exist = $this->common->getData(
+			'service_subcategories',
+			array(
+				'category_id' => $_REQUEST['category_id'],
+				'subcategory_name' => trim($_REQUEST['subcategory_name'])
+			),
+			array('single')
+		);
+
+		if (!empty($exist) && $exist['id'] != $_REQUEST['subcategory_id']) {
+			$this->response(false, "Sub Category already exists.");
+			return;
+		}
+
+		$_REQUEST['updated_at'] = date('Y-m-d H:i:s');
+
+		$post = $this->common->getField('service_subcategories', $_REQUEST);
+
+		$result = $this->common->updateData(
+			'service_subcategories',
+			$post,
+			array('id' => $_REQUEST['subcategory_id'])
+		);
+
+		if ($result) {
+
+			$this->response(true, "Sub Category updated successfully.");
+		} else {
+
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 13/07/26
+	public function deleteServiceSubCategory()
+	{
+		if (empty($_REQUEST['subcategory_id'])) {
+			$this->response(false, "Sub Category ID is required.");
+			return;
+		}
+
+		$subCategory = $this->common->getData(
+			'service_subcategories',
+			array(
+				'id' => $_REQUEST['subcategory_id']
+			),
+			array('single')
+		);
+
+		if (empty($subCategory)) {
+			$this->response(false, "Sub Category not found.");
+			return;
+		}
+
+		$result = $this->common->deleteData(
+			'service_subcategories',
+			array(
+				'id' => $_REQUEST['subcategory_id']
+			)
+		);
+
+		if ($result) {
+
+			$this->response(true, "Sub Category deleted successfully.");
+		} else {
+
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 14/07/26
+	public function addService()
+	{
+		$_REQUEST['created_at'] = date('Y-m-d H:i:s');
+
+		// Check duplicate service
+		$check = $this->common->getData(
+			'services',
+			array(
+				'service_name' => trim($_REQUEST['service_name']),
+				'subcategory_id' => $_REQUEST['subcategory_id']
+			),
+			array('single')
+		);
+
+		if (!empty($check)) {
+			$this->response(false, "Service already exists.");
+			return;
+		}
+
+		$post = $this->common->getField('services', $_REQUEST);
+
+		$result = $this->common->insertData('services', $post);
+
+		if ($result) {
+			$this->response(true, "Service added successfully.");
+		} else {
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 14/07/26
+	public function serviceList()
+	{
+		if (empty($_REQUEST['start'])) {
+			$start = 10;
+			$end = 0;
+		} else {
+			$start = 10;
+			$end = $_REQUEST['start'];
+		}
+
+		$where = array();
+
+		if (!empty($_REQUEST['category_id'])) {
+			$where['S.category_id'] = $_REQUEST['category_id'];
+		}
+
+		if (!empty($_REQUEST['subcategory_id'])) {
+			$where['S.subcategory_id'] = $_REQUEST['subcategory_id'];
+		}
+
+		if (isset($_REQUEST['status']) && $_REQUEST['status'] !== '') {
+			$where['S.status'] = $_REQUEST['status'];
+		}
+
+		if (!empty($_REQUEST['search'])) {
+			$where['search'] = trim($_REQUEST['search']);
+		}
+
+		if (
+			!empty($_REQUEST['created_by_type']) &&
+			$_REQUEST['created_by_type'] == 'subadmin'
+		) {
+			$where['S.created_by'] = $_REQUEST['created_by'];
+			$where['S.created_by_type'] = 'subadmin';
+		}
+
+		$result = $this->user_model->service_detail($where, array(), $start, $end);
+
+		$listCount = $this->user_model->service_detail($where, array('count'));
+
+		$countData = $end + 1;
+
+		if (!empty($result)) {
+
+			foreach ($result as $key => $value) {
+				$result[$key]['sno'] = $countData++;
+			}
+
+			$this->response(true, "Service fetched successfully.", array(
+				'lists' => $result,
+				'listCount' => $listCount
+			));
+		} else {
+
+			$this->response(true, "Service fetched successfully.", array(
+				'lists' => array(),
+				'listCount' => 0
+			));
+		}
+	}
+
+	// API created by @krishn on 14/07/26
+	public function serviceDetail()
+	{
+		if (empty($_REQUEST['service_id'])) {
+			$this->response(false, "Service ID is required.");
+			return;
+		}
+
+		$where = array(
+			'S.id' => $_REQUEST['service_id']
+		);
+
+		$result = $this->user_model->service_detail($where, array('single'));
+
+		if (!empty($result)) {
+
+			$userList = $this->user_model->serviceAssignedUsers($_REQUEST['service_id']);
+
+			$result['assigned_users'] = $userList;
+
+			$this->response(true, "Service fetched successfully.", array(
+				'details' => $result
+			));
+		} else {
+
+			$this->response(false, "Service not found.");
+		}
+	}
+
+	// API created by @krishn on 14/07/26
+	public function updateService()
+	{
+		if (empty($_REQUEST['service_id'])) {
+			$this->response(false, "Service ID is required.");
+			return;
+		}
+
+		$service = $this->common->getData(
+			'services',
+			array('id' => $_REQUEST['service_id']),
+			array('single')
+		);
+
+		if (empty($service)) {
+			$this->response(false, "Service not found.");
+			return;
+		}
+
+		$_REQUEST['updated_at'] = date('Y-m-d H:i:s');
+
+		$post = $this->common->getField('services', $_REQUEST);
+
+		unset($post['id']);
+		unset($post['created_at']);
+		unset($post['created_by']);
+		unset($post['created_by_type']);
+
+		$result = $this->common->updateData(
+			'services',
+			$post,
+			array('id' => $_REQUEST['service_id'])
+		);
+
+		if ($result) {
+			$this->response(true, "Service updated successfully.");
+		} else {
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// API created by @krishn on 14/07/26
+	public function assignServiceToUser()
+	{
+		$input = json_decode(file_get_contents('php://input'), true);
+
+		if (json_last_error() === JSON_ERROR_NONE && is_array($input)) {
+			$_REQUEST = $input;
+		}
+
+		if (empty($_REQUEST['service_id'])) {
+			$this->response(false, "Service is required.");
+			return;
+		}
+
+		if (empty($_REQUEST['users'])) {
+			$this->response(false, "Users are required.");
+			return;
+		}
+
+		if (is_string($_REQUEST['users'])) {
+			$users = json_decode($_REQUEST['users'], true);
+		} else {
+			$users = $_REQUEST['users'];
+		}
+
+		if (empty($users) || !is_array($users)) {
+			$this->response(false, "Invalid users data.");
+			return;
+		}
+
+		// Check service
+		$service = $this->common->getData(
+			'services',
+			array(
+				'id' => $_REQUEST['service_id'],
+				'status' => 1
+			),
+			array('single')
+		);
+
+		if (empty($service)) {
+			$this->response(false, "Service not found.");
+			return;
+		}
+
+		$this->db->trans_start();
+
+		$totalAssigned = 0;
+		$createdBy = !empty($_REQUEST['created_by']) ? $_REQUEST['created_by'] : 0;
+		$createdByType = !empty($_REQUEST['created_by_type']) ? $_REQUEST['created_by_type'] : 'admin';
+		$providerDescription = !empty($_REQUEST['description']) ? $_REQUEST['description'] : '';
+
+		foreach ($users as $value) {
+
+			if (empty($value['user_id'])) {
+				continue;
+			}
+
+			// Validate User
+			$user = $this->common->getData(
+				'user',
+				array(
+					'user_id' => $value['user_id']
+				),
+				array('single')
+			);
+
+			if (empty($user)) {
+				continue;
+			}
+
+			// Maximum 5 Services
+			$totalServices = $this->common->getData(
+				'user_services',
+				"user_id='" . $value['user_id'] . "' AND status= 1 AND approval_status IN(0,1)",
+				array('count')
+			);
+
+			if ($totalServices >= 5) {
+				continue;
+			}
+
+			// Duplicate Check
+			$exist = $this->common->getData(
+				'user_services',
+				array(
+					'user_id'    => $value['user_id'],
+					'service_id' => $_REQUEST['service_id']
+				),
+				array('single')
+			);
+
+			$assignmentData = array(
+				'user_id'           => $value['user_id'],
+				'service_id'        => $_REQUEST['service_id'],
+				'description'       => $providerDescription,
+				'mobile'            => !empty($value['mobile']) ? $value['mobile'] : '',
+				'email'             => !empty($value['email']) ? $value['email'] : '',
+				'website'           => !empty($value['website']) ? $value['website'] : '',
+				'location'          => !empty($_REQUEST['location']) ? $_REQUEST['location'] : '',
+				'created_by'        => $createdBy,
+				'created_by_type'   => $createdByType,
+				'status'            => 1,
+				'removed_by'        => NULL,
+				'removed_by_type'   => NULL,
+				'removed_at'        => NULL,
+				'updated_at'        => date('Y-m-d H:i:s')
+			);
+
+			if ($createdByType == "admin") {
+
+				$assignmentData['approval_status'] = 1;
+				$assignmentData['approved_by'] = $createdBy;
+				$assignmentData['approved_at'] = date('Y-m-d H:i:s');
+			} else {
+
+				$assignmentData['approval_status'] = 0;
+				$assignmentData['approved_by'] = NULL;
+				$assignmentData['approved_at'] = NULL;
+			}
+
+			$userServiceId = 0;
+
+			if (!empty($exist)) {
+
+				// Already Active
+				if ($exist['status'] == 1) {
+					continue;
+				}
+				// Previously Removed -> Reactivate
+				if ($exist['status'] == 0) {
+
+					$update = $this->common->getField('user_services', $assignmentData);
+					unset($update['user_id'], $update['service_id'], $update['created_at']);
+
+					$this->common->updateData(
+						'user_services',
+						$update,
+						array('id' => $exist['id'])
+					);
+
+					$userServiceId = $exist['id'];
+				} else {
+					continue;
+				}
+			} else {
+				$assignmentData['created_at'] = date('Y-m-d H:i:s');
+				$insert = $this->common->insertData(
+					'user_services',
+					$this->common->getField('user_services', $assignmentData)
+				);
+
+				if (!$insert) {
+					continue;
+				}
+
+				$userServiceId = $this->db->insert_id();
+			}
+
+			if (empty($userServiceId)) {
+				continue;
+			}
+
+			$totalAssigned++;
+
+			if ($createdByType == "admin") {
+
+				// Notification
+				$this->send_nofification(
+					$user['user_id'],
+					$createdBy,
+					0,
+					"A new service has been assigned to your account.",
+					$userServiceId,
+					"20"
+				);
+
+				// Mail
+				$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+				$data['useremail'] = $user['email'];
+
+				$data['message'] = "
+						<p>Congratulations!</p>
+
+						<p>A new service has been assigned to your account by the administrator.</p>
+
+						<p><strong>Service :</strong> {$service['service_name']}</p>
+
+						<p>You can now view this service from your Service section.</p>
+						";
+
+				$mailMessage = $this->load->view('template/common-mail', $data, true);
+
+				$this->sendMail(
+					$user['email'],
+					'New Service Assigned',
+					$mailMessage
+				);
+			} else {
+
+				$message = $user['first_name'] . ' ' . $user['last_name'] . ' has been assigned a new service by Sub Admin. Approval pending.';
+
+				// Admin Notification
+				$this->send_nofification_admin(
+					0,                              // user_id (not required for admin notification)
+					$createdBy,                     // Sub Admin ID
+					0,                              // group_id
+					$message,
+					$userServiceId,
+					"20",                           // Notification Type
+					"1"                             // Send to Admin
+				);
+
+				// Mail to all Admins
+				$admins = $this->common->getData(
+					'superAdmin',
+					array('admin_type' => '2')
+				);
+
+				if (!empty($admins)) {
+					foreach ($admins as $admin) {
+
+						$data['sendername'] = $admin['name'];
+						$data['useremail'] = $admin['email'];
+
+						$data['message'] = "
+							<p>A new service assignment requires your approval.</p>
+
+							<p><strong>User:</strong> {$user['first_name']} {$user['last_name']}</p>
+
+							<p><strong>Service:</strong> {$service['service_name']}</p>
+
+							<p>Please log in to the Admin Panel to review and approve or reject this assignment.</p>
+							";
+
+						$mailMessage = $this->load->view('template/common-mail', $data, true);
+
+						$this->sendMail(
+							$admin['email'],
+							'Service Approval Required',
+							$mailMessage
+						);
+					}
+				}
+			}
+		}
+
+		$this->db->trans_complete();
+
+		if ($this->db->trans_status() === FALSE) {
+
+			$this->response(false, "Something went wrong.");
+
+			return;
+		}
+
+		if ($totalAssigned == 0) {
+
+			$this->response(false, "No service could be assigned.");
+
+			return;
+		}
+
+		$this->response(true, $totalAssigned . " service(s) assigned successfully.");
+	}
+
+	// API created by @krishn on 14/07/26
+	public function serviceAvailableUserList()
+	{
+		$search = !empty($_REQUEST['search_keyword']) ? trim($_REQUEST['search_keyword']) : "";
+		$service_id = !empty($_REQUEST['service_id']) ? $_REQUEST['service_id'] : 0;
+
+		$result = $this->user_model->serviceAvailableUser_detail($search, $service_id);
+
+		$this->response(true, "Users fetched successfully.", array(
+			"userList" => $result,
+			"userCount" => count($result)
+		));
+	}
+
+	// API created by @krishn on 14/07/26
+	public function removeAssignedUserFromService()
+	{
+		if (empty($_REQUEST['user_service_id'])) {
+			$this->response(false, "User Service ID is required.");
+			return;
+		}
+
+		$detail = $this->common->getData(
+			'user_services',
+			array(
+				'id' => $_REQUEST['user_service_id'],
+				'status' => 1
+			),
+			array('single')
+		);
+
+		if (empty($detail)) {
+			$this->response(false, "Assigned service not found.");
+			return;
+		}
+
+		$update = array(
+			'status'            => 0,
+			'removed_by'        => $_REQUEST['removed_by'],
+			'removed_by_type'   => $_REQUEST['removed_by_type'],
+			'removed_at'        => date('Y-m-d H:i:s'),
+			'updated_at'        => date('Y-m-d H:i:s')
+		);
+
+		$result = $this->common->updateData(
+			'user_services',
+			$update,
+			array(
+				'id' => $_REQUEST['user_service_id']
+			)
+		);
+
+		if ($result) {
+
+			// User Detail
+			$user = $this->common->getData(
+				'user',
+				array('user_id' => $detail['user_id']),
+				array('single')
+			);
+
+			// Service Detail
+			$service = $this->common->getData(
+				'services',
+				array('id' => $detail['service_id']),
+				array('single')
+			);
+
+			// Notification
+			$this->send_nofification(
+				$detail['user_id'],
+				$_REQUEST['removed_by'],
+				0,
+				"One of your assigned services has been removed.",
+				$detail['id'],
+				"21"
+			);
+
+			// Email
+			$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+			$data['useremail'] = $user['email'];
+
+			$data['message'] = "
+				<p>Your assigned service has been removed by the administrator.</p>
+
+				<p><strong>Service:</strong> {$service['service_name']}</p>
+
+				<p>If you believe this was done in error, please contact the administrator.</p>
+			";
+
+			$mailMessage = $this->load->view('template/common-mail', $data, true);
+
+			$this->sendMail(
+				$user['email'],
+				'Service Assignment Removed',
+				$mailMessage
+			);
+
+			$this->response(true, "User removed from service successfully.");
+		} else {
+
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	// created by @krishn on 16/07/26
+	public function getAllUserServices()
+	{
+		$limit = '';
+		$start = '';
+		$where = array();
+
+		// Only for Sub Admin
+		if (!empty($_REQUEST['created_by_type']) && $_REQUEST['created_by_type'] == "subadmin") {
+
+			if (!empty($_REQUEST['group_ids'])) {
+
+				$group_ids = explode(',', $_REQUEST['group_ids']);
+				$group_ids = array_map('trim', $group_ids);
+				$group_ids = array_map('intval', $group_ids);
+
+				$where['group_ids'] = $group_ids;
+			}
+
+			if (!empty($_REQUEST['circle_ids'])) {
+
+				$circle_ids = explode(',', $_REQUEST['circle_ids']);
+				$circle_ids = array_map('trim', $circle_ids);
+				$circle_ids = array_map('intval', $circle_ids);
+
+				$where['circle_ids'] = $circle_ids;
+			}
+		}
+
+		if (isset($_REQUEST['start']) && $_REQUEST['start'] !== '') {
+			$limit = 10;
+			$start = (int)$_REQUEST['start'];
+		}
+
+		if (!empty($_REQUEST['category_id'])) {
+			$where['S.category_id'] = $_REQUEST['category_id'];
+		}
+
+		if (!empty($_REQUEST['subcategory_id'])) {
+			$where['S.subcategory_id'] = $_REQUEST['subcategory_id'];
+		}
+
+		if (isset($_REQUEST['status']) && $_REQUEST['status'] !== '') {
+			$where['US.status'] = $_REQUEST['status'];
+		}
+
+		if (isset($_REQUEST['approval_status']) && $_REQUEST['approval_status'] !== '') {
+			$where['US.approval_status'] = $_REQUEST['approval_status'];
+		}
+
+		if (isset($_REQUEST['service_status']) && $_REQUEST['service_status'] !== '') {
+			$where['S.status'] = $_REQUEST['service_status'];
+		}
+
+		if (!empty($_REQUEST['service_id'])) {
+			$where['US.service_id'] = $_REQUEST['service_id'];
+		}
+
+		if (!empty($_REQUEST['search']) || !empty($_REQUEST['search_keyword'])) {
+			$where['search'] = !empty($_REQUEST['search']) ? trim($_REQUEST['search']) : trim($_REQUEST['search_keyword']);
+		}
+
+		$services = $this->user_model->user_assigned_services($where, array(), $limit, $start);
+		$services = $this->user_model->attachServiceImages($services);
+		$totalCount = $this->user_model->user_assigned_services($where, array('count'));
+
+		$this->response(true, "Services fetched successfully.", array(
+			"services"   => $services,
+			"totalCount" => $totalCount
+		));
+	}
+
+	// created by @krishn on 16/07/26
+	public function approveRejectUserService()
+	{
+		if (empty($_REQUEST['user_service_id'])) {
+			$this->response(false, "User Service ID is required.");
+			return;
+		}
+
+		if (!isset($_REQUEST['approval_status'])) {
+			$this->response(false, "Approval status is required.");
+			return;
+		}
+
+		if ($_REQUEST['approval_status'] == 2 && empty($_REQUEST['reject_reason'])) {
+			$this->response(false, "Reject reason is required.");
+			return;
+		}
+
+		$userService = $this->common->getData(
+			'user_services',
+			array(
+				'id' => $_REQUEST['user_service_id'],
+				'status' => 1
+			),
+			array('single')
+		);
+
+		if (empty($userService)) {
+			$this->response(false, "Service not found.");
+			return;
+		}
+
+		$update = array(
+			'approval_status' => $_REQUEST['approval_status'],
+			'approved_by'     => $_REQUEST['approved_by'],
+			'approved_at'     => date('Y-m-d H:i:s'),
+			'updated_at'      => date('Y-m-d H:i:s')
+		);
+
+		if ($_REQUEST['approval_status'] == 2) {
+			$update['reject_reason'] = $_REQUEST['reject_reason'];
+		} else {
+			$update['reject_reason'] = NULL;
+		}
+
+		$post = $this->common->getField('user_services', $update);
+
+		$result = $this->common->updateData(
+			'user_services',
+			$post,
+			array('id' => $_REQUEST['user_service_id'])
+		);
+
+		if (!$result) {
+			$this->response(false, "Unable to update service.");
+			return;
+		}
+
+		// User Details
+		$user = $this->common->getData(
+			'user',
+			array(
+				'user_id' => $userService['user_id']
+			),
+			array('single')
+		);
+
+		// Service Details
+		$service = $this->common->getData(
+			'services',
+			array(
+				'id' => $userService['service_id']
+			),
+			array('single')
+		);
+
+		if ($_REQUEST['approval_status'] == 1) {
+
+			// Notification
+			$this->send_nofification(
+				$user['user_id'],
+				$_REQUEST['approved_by'],
+				0,
+				"Your service has been approved by the administrator.",
+				$userService['id'],
+				"20"
+			);
+
+			$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+			$data['useremail'] = $user['email'];
+
+			$data['message'] = "
+			<p>Congratulations!</p>
+
+			<p>Your service has been approved by the administrator.</p>
+
+			<p><strong>Service:</strong> {$service['service_name']}</p>
+
+			<p>Your service is now active and visible in the application.</p>
+			";
+
+			$mailMessage = $this->load->view('template/common-mail', $data, true);
+
+			$this->sendMail(
+				$user['email'],
+				'Service Approved',
+				$mailMessage
+			);
+
+			$this->response(true, "Service approved successfully.");
+		} else {
+
+			// Notification
+			$this->send_nofification(
+				$user['user_id'],
+				$_REQUEST['approved_by'],
+				0,
+				"Your service has been rejected by the administrator.",
+				$userService['id'],
+				"20"
+			);
+
+			$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+			$data['useremail'] = $user['email'];
+
+			$data['message'] = "
+
+			<p>Unfortunately your service request has been rejected.</p>
+
+			<p><strong>Service:</strong> {$service['service_name']}</p>
+
+			<p><strong>Reason:</strong> {$_REQUEST['reject_reason']}</p>
+
+			<p>Please update your service and submit it again.</p>
+			";
+
+			$mailMessage = $this->load->view('template/common-mail', $data, true);
+
+			$this->sendMail(
+				$user['email'],
+				'Service Rejected',
+				$mailMessage
+			);
+
+			$this->response(true, "Service rejected successfully.");
+		}
+	}
+
+	// created by @krishn on 21/07/26
+	public function updateServiceStatus()
+	{
+		if (empty($_REQUEST['service_id']) || !isset($_REQUEST['status'])) {
+			$this->response(false, "Service ID and Status are required.");
+			return;
+		}
+
+		$service = $this->common->getData(
+			'services',
+			array('id' => $_REQUEST['service_id']),
+			array('single')
+		);
+
+		if (empty($service)) {
+			$this->response(false, "Service not found.");
+			return;
+		}
+
+		// If making inactive, check usage
+		if ($_REQUEST['status'] == 0) {
+
+			$used = $this->common->getData(
+				'user_services',
+				array(
+					'service_id' => $_REQUEST['service_id'],
+					'status' => 1
+				),
+				array('count')
+			);
+
+			if ($used > 0) {
+				$this->response(false, "This service is assigned to users. Remove all assignments before making it inactive.");
+				return;
+			}
+		}
+
+		$update = array(
+			'status' => $_REQUEST['status'],
+			'updated_at' => date('Y-m-d H:i:s')
+		);
+
+		$post = $this->common->getField('services', $update);
+
+		$result = $this->common->updateData(
+			'services',
+			$post,
+			array('id' => $_REQUEST['service_id'])
+		);
+
+		if ($result) {
+			$this->response(true, "Service status updated successfully.");
+		} else {
+			$this->response(false, "Unable to update service.");
+		}
+	}
+
+	// created by @krishn on 21/07/26
+	public function updateServiceCategoryStatus()
+	{
+		if (empty($_REQUEST['category_id']) || !isset($_REQUEST['status'])) {
+			$this->response(false, "Category ID and Status are required.");
+			return;
+		}
+
+		$category = $this->common->getData(
+			'service_categories',
+			array('id' => $_REQUEST['category_id']),
+			array('single')
+		);
+
+		if (empty($category)) {
+			$this->response(false, "Category not found.");
+			return;
+		}
+
+		// Making inactive
+		if ($_REQUEST['status'] == 0) {
+
+			$subCategory = $this->common->getData(
+				'service_subcategories',
+				array(
+					'category_id' => $_REQUEST['category_id'],
+					'status' => 1
+				),
+				array('count')
+			);
+
+			if ($subCategory > 0) {
+				$this->response(false, "Category contains active sub categories. Please inactive them first.");
+				return;
+			}
+
+			$services = $this->common->getData(
+				'services',
+				array(
+					'category_id' => $_REQUEST['category_id'],
+					'status' => 1
+				),
+				array('count')
+			);
+
+			if ($services > 0) {
+				$this->response(false, "Category contains active services. Please inactive them first.");
+				return;
+			}
+		}
+
+		$post = $this->common->getField('service_categories', array(
+			'status' => $_REQUEST['status']
+		));
+
+		$result = $this->common->updateData(
+			'service_categories',
+			$post,
+			array('id' => $_REQUEST['category_id'])
+		);
+
+		if ($result) {
+			$this->response(true, "Category status updated successfully.");
+		} else {
+			$this->response(false, "Unable to update category.");
+		}
+	}
+
+	// created by @krishn on 21/07/26
+	public function updateServiceSubCategoryStatus()
+	{
+		if (empty($_REQUEST['subcategory_id']) || !isset($_REQUEST['status'])) {
+			$this->response(false, "Sub Category ID and Status are required.");
+			return;
+		}
+
+		$subcategory = $this->common->getData(
+			'service_subcategories',
+			array('id' => $_REQUEST['subcategory_id']),
+			array('single')
+		);
+
+		if (empty($subcategory)) {
+			$this->response(false, "Sub Category not found.");
+			return;
+		}
+
+		if ($_REQUEST['status'] == 0) {
+
+			$services = $this->common->getData(
+				'services',
+				array(
+					'subcategory_id' => $_REQUEST['subcategory_id'],
+					'status' => 1
+				),
+				array('count')
+			);
+
+			if ($services > 0) {
+				$this->response(false, "Sub Category contains active services. Please inactive them first.");
+				return;
+			}
+		}
+
+		$post = $this->common->getField('service_subcategories', array(
+			'status' => $_REQUEST['status']
+		));
+
+		$result = $this->common->updateData(
+			'service_subcategories',
+			$post,
+			array('id' => $_REQUEST['subcategory_id'])
+		);
+
+		if ($result) {
+			$this->response(true, "Sub Category status updated successfully.");
+		} else {
+			$this->response(false, "Unable to update sub category.");
 		}
 	}
 }
