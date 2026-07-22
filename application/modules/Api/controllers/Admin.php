@@ -487,7 +487,7 @@ class Admin extends Base_Controller
 
 
 
-			if ($_REQUEST['status'] === '2') {
+			if ($_REQUEST['status'] == '2') {
 
 				if ($typename != '2') {
 
@@ -680,6 +680,104 @@ class Admin extends Base_Controller
 	}
 
 	// updated by @krishn on 17-06-26
+	// function updateCreditScore_old($points, $calculation_type)
+	// {
+	// 	$result = $this->common->getData(
+	// 		'credit_score_user',
+	// 		array('user_id' => $_REQUEST['user_id']),
+	// 		array('single')
+	// 	);
+
+	// 	if (empty($result)) {
+	// 		return;
+	// 	}
+
+	// 	$totalScore = (int)$result['total_credit_score'];
+	// 	$credit_score = array();
+
+	// 	// Calculate new score
+	// 	if ($calculation_type === 'plus') {
+	// 		$totalScore += (int)$points;
+	// 	} elseif ($calculation_type === 'minus') {
+	// 		$totalScore -= (int)$points;
+	// 	}
+
+	// 	// Maintain score between 0 and 900
+	// 	if ($totalScore < 0) {
+	// 		$newScore = 0;
+	// 	} elseif ($totalScore > 900) {
+	// 		$newScore = 900;
+	// 	} else {
+	// 		$newScore = $totalScore;
+	// 	}
+
+	// 	// Get score levels
+	// 	$result1 = $this->common->getData('credit_score_list', array(), array());
+
+	// 	$currentLevel = '';
+	// 	$newLevel = '';
+
+	// 	foreach ($result1 as $value) {
+
+	// 		$min = (int)$value['score1'];
+	// 		$max = (int)$value['score2'];
+
+	// 		if ($newScore >= $min && $newScore <= $max) {
+	// 			$newLevel = $value['credit_score_name'];
+	// 		}
+
+	// 		if ($result['total_credit_score'] >= $min && $result['total_credit_score'] <= $max) {
+	// 			$currentLevel = $value['credit_score_name'];
+	// 		}
+	// 	}
+
+	// 	// Send email only if level changed
+	// 	if (!empty($newLevel) && $newLevel != $currentLevel) {
+
+	// 		$userDetailFrom = $this->common->getData(
+	// 			'user',
+	// 			array('user_id' => $_REQUEST['user_id']),
+	// 			array('single')
+	// 		);
+
+	// 		if (!empty($userDetailFrom)) {
+
+	// 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+	// 			$data['useremail'] = "";
+
+	// 			if ($calculation_type === 'plus') {
+
+	// 				$data['message'] =
+	// 					'<p>Congratulations ' . $userDetailFrom["first_name"] . '. You have reached another milestone as a valued Interfriends member.</p>
+	// 				<p>Your Trust Score has moved up a level to ' . $newLevel . '.</p>
+	// 				<p>Well done on behalf of all of us at Interfriends.</p>
+	// 				<p>Keep it up.</p>';
+	// 			} else {
+
+	// 				$data['message'] =
+	// 					'<p>We regret to inform you that there has been a decrease in your Interfriends Trust Score.</p>
+	// 				<p>This change may have occurred as a result of various factors, such as a recent application or delayed or missed payments.</p>';
+	// 			}
+
+	// 			$messaged = $this->load->view('template/common-mail', $data, true);
+
+	// 			$this->sendMail(
+	// 				$userDetailFrom['email'],
+	// 				'Trust Score',
+	// 				$messaged
+	// 			);
+	// 		}
+	// 	}
+
+	// 	// Update score
+	// 	$this->common->updateData(
+	// 		'credit_score_user',
+	// 		array("total_credit_score" => $newScore),
+	// 		array('user_id' => $_REQUEST['user_id'])
+	// 	);
+	// }
+
+	// updated by @krishn on 22-07-26
 	function updateCreditScore($points, $calculation_type)
 	{
 		$result = $this->common->getData(
@@ -692,79 +790,70 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		$totalScore = (int)$result['total_credit_score'];
-		$credit_score = array();
+		$oldScore = (int)$result['total_credit_score'];
 
-		// Calculate new score
-		if ($calculation_type === 'plus') {
-			$totalScore += (int)$points;
-		} elseif ($calculation_type === 'minus') {
-			$totalScore -= (int)$points;
+		// Calculate score
+		if ($calculation_type == 'plus') {
+			$newScore = $oldScore + (int)$points;
+		} else {
+			$newScore = $oldScore - (int)$points;
 		}
 
-		// Maintain score between 0 and 900
-		if ($totalScore < 0) {
+		// Prevent negative score only
+		if ($newScore < 0) {
 			$newScore = 0;
-		} elseif ($totalScore > 900) {
-			$newScore = 900;
-		} else {
-			$newScore = $totalScore;
 		}
 
 		// Get score levels
-		$result1 = $this->common->getData('credit_score_list', array(), array());
+		$scoreLevels = $this->common->getData('credit_score_list', array());
 
 		$currentLevel = '';
 		$newLevel = '';
 
-		foreach ($result1 as $value) {
+		foreach ($scoreLevels as $value) {
 
-			$min = (int)$value['score1'];
-			$max = (int)$value['score2'];
-
-			if ($newScore >= $min && $newScore <= $max) {
-				$newLevel = $value['credit_score_name'];
+			if ($oldScore >= $value['score1'] && $oldScore <= $value['score2']) {
+				$currentLevel = $value['credit_score_name'];
 			}
 
-			if ($result['total_credit_score'] >= $min && $result['total_credit_score'] <= $max) {
-				$currentLevel = $value['credit_score_name'];
+			if ($newScore >= $value['score1'] && $newScore <= $value['score2']) {
+				$newLevel = $value['credit_score_name'];
 			}
 		}
 
-		// Send email only if level changed
+		// Send email only when level changes
 		if (!empty($newLevel) && $newLevel != $currentLevel) {
 
-			$userDetailFrom = $this->common->getData(
+			$userDetail = $this->common->getData(
 				'user',
 				array('user_id' => $_REQUEST['user_id']),
 				array('single')
 			);
 
-			if (!empty($userDetailFrom)) {
+			if (!empty($userDetail)) {
 
-				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-				$data['useremail'] = "";
+				$data['sendername'] = $userDetail['first_name'] . ' ' . $userDetail['last_name'];
 
-				if ($calculation_type === 'plus') {
+				if ($calculation_type == 'plus') {
 
-					$data['message'] =
-						'<p>Congratulations ' . $userDetailFrom["first_name"] . '. You have reached another milestone as a valued Interfriends member.</p>
+					$data['message'] = '
+					<p>Congratulations ' . $userDetail["first_name"] . '. You have reached another milestone as a valued Interfriends member.</p>
 					<p>Your Trust Score has moved up a level to ' . $newLevel . '.</p>
 					<p>Well done on behalf of all of us at Interfriends.</p>
 					<p>Keep it up.</p>';
 				} else {
 
-					$data['message'] =
-						'<p>We regret to inform you that there has been a decrease in your Interfriends Trust Score.</p>
+					$data['message'] = '
+					<p>We regret to inform you that there has been a decrease in your Interfriends Trust Score.</p>
 					<p>This change may have occurred as a result of various factors, such as a recent application or delayed or missed payments.</p>';
 				}
 
-				$messaged = $this->load->view('template/common-mail', $data, true);
+				$mailMessage = $this->load->view('template/common-mail', $data, true);
 
 				$this->sendMail(
-					$userDetailFrom['email'],
-					'Trust Score',
-					$messaged
+					$userDetail['email'],
+					'Trust Score Updated',
+					$mailMessage
 				);
 			}
 		}
@@ -772,7 +861,7 @@ class Admin extends Base_Controller
 		// Update score
 		$this->common->updateData(
 			'credit_score_user',
-			array("total_credit_score" => $newScore),
+			array('total_credit_score' => $newScore),
 			array('user_id' => $_REQUEST['user_id'])
 		);
 	}
@@ -8131,6 +8220,74 @@ class Admin extends Base_Controller
 		}
 	}
 
+	// public function savingAvgCal($group_cycle_id, $user_id, $group_id)
+	// {
+	// 	$cycleTransfer = $this->common->getData(
+	// 		'cycle_status_management',
+	// 		array(
+	// 			'user_id' => $user_id,
+	// 			'group_id' => $group_id,
+	// 			'group_cycle_id' => $group_cycle_id
+	// 		),
+	// 		array('single')
+	// 	);
+
+	// 	if (empty($cycleTransfer)) {
+
+	// 		$where = "group_id = '{$group_id}'
+	//               AND groupLifecycle_id = '{$group_cycle_id}'
+	//               AND user_id = '{$user_id}'
+	//               AND status != '1'";
+
+	// 		$result = $this->common->getData(
+	// 			'user_group_lifecycle',
+	// 			$where,
+	// 			array(
+	// 				"field" => "SUM(amount) AS total_payment",
+	// 				"single"
+	// 			)
+	// 		);
+
+	// 		return !empty($result['total_payment']) ? $result['total_payment'] : 0;
+	// 	} else {
+
+	// 		$where = "group_id = '{$group_id}'
+	//               AND groupLifecycle_id = '{$group_cycle_id}'
+	//               AND user_id = '{$user_id}'
+	//               AND status != '1'";
+
+	// 		$paidResult = $this->common->getData(
+	// 			'user_group_lifecycle',
+	// 			$where,
+	// 			array(
+	// 				"field" => "SUM(amount) AS total_payment",
+	// 				"single"
+	// 			)
+	// 		);
+
+	// 		$paidAmount = !empty($paidResult['total_payment'])
+	// 			? $paidResult['total_payment']
+	// 			: 0;
+
+	// 		$result = $this->common->getData(
+	// 			'user_group_lifecycle',
+	// 			array(
+	// 				'groupLifecycle_id' => $group_cycle_id,
+	// 				'user_id' => $user_id
+	// 			),
+	// 			array(
+	// 				'field' => 'SUM(amount) AS total_amount',
+	// 				'single'
+	// 			)
+	// 		);
+
+	// 		$payoutAmount = !empty($result['total_amount'])
+	// 			? $result['total_amount']
+	// 			: 0;
+
+	// 		return $paidAmount - $payoutAmount;
+	// 	}
+	// }
 
 	function cylcleAvgPayout($group_cycle_id)
 	{
@@ -8385,27 +8542,107 @@ class Admin extends Base_Controller
 		));
 	}
 
-	//created by @krishn on 03-06-25
+	// //created by @krishn on 03-06-25
+	// public function savingJnrTotal_old()
+	// {
+	// 	$where = "UG.group_id != 34 AND UG.group_id != 0 AND U.status != 2";
+	// 	$users = $this->user_model->user_group_detail($where, array());
+
+	// 	$totalJnr = 0;
+
+	// 	foreach ($users as $user) {
+	// 		$_REQUEST['user_id'] =  $user['user_id'];
+	// 		$_REQUEST['group_id'] = $user['group_id'];
+
+	// 		$lifecycleRecords = $this->common->getData('group_lifecycle', [
+	// 			"group_id" => $_REQUEST['group_id'],
+	// 			"group_type_id" => '2'
+	// 		]);
+
+	// 		if (!empty($lifecycleRecords)) {
+	// 			foreach ($lifecycleRecords as $lifecycle) {
+	// 				$totalJnr += $this->savingAvgCal($lifecycle['id']);
+	// 			}
+	// 		}
+	// 	}
+
+	// 	return $totalJnr;
+	// }
+
+	// // updated by @krishn on 22-07-26
+	// public function savingJnrTotal_nnnn()
+	// {
+	// 	$where = "UG.group_id != 34
+    //           AND UG.group_id != 0
+    //           AND U.status != 2";
+
+	// 	$users = $this->user_model->user_group_detail($where, array());
+
+	// 	if (empty($users)) {
+	// 		return 0;
+	// 	}
+
+	// 	$groupIds = array_unique(array_column($users, 'group_id'));
+
+	// 	$this->db->where_in('group_id', $groupIds);
+	// 	$this->db->where('group_type_id', 2);
+
+	// 	$lifecycles = $this->db
+	// 		->get('group_lifecycle')
+	// 		->result_array();
+
+	// 	$totalJnr = 0;
+
+	// 	foreach ($lifecycles as $life) {
+	// 		$totalJnr += $this->savingAvgCal($life['id']);
+	// 	}
+
+	// 	return $totalJnr;
+	// }
+
 	public function savingJnrTotal()
 	{
-		$where = "UG.group_id != 34 AND UG.group_id != 0 AND U.status != 2";
+		$where = "UG.group_id != 34
+              AND UG.group_id != 0
+              AND U.status != 2";
+
 		$users = $this->user_model->user_group_detail($where, array());
+
+		if (empty($users)) {
+			return 0;
+		}
+
+		$groupIds = array_unique(array_column($users, 'group_id'));
+
+		$this->db->where_in('group_id', $groupIds);
+		$this->db->where('group_type_id', 2);
+
+		$lifecycles = $this->db
+			->get('group_lifecycle')
+			->result_array();
+
+		// Group lifecycles by group_id
+		$lifecycleMap = [];
+
+		foreach ($lifecycles as $life) {
+			$lifecycleMap[$life['group_id']][] = $life;
+		}
 
 		$totalJnr = 0;
 
 		foreach ($users as $user) {
-			$_REQUEST['user_id'] =  $user['user_id'];
+
+			// No lifecycle for this group
+			if (empty($lifecycleMap[$user['group_id']])) {
+				continue;
+			}
+
+			$_REQUEST['user_id']  = $user['user_id'];
 			$_REQUEST['group_id'] = $user['group_id'];
 
-			$lifecycleRecords = $this->common->getData('group_lifecycle', [
-				"group_id" => $_REQUEST['group_id'],
-				"group_type_id" => '2'
-			]);
+			foreach ($lifecycleMap[$user['group_id']] as $life) {
 
-			if (!empty($lifecycleRecords)) {
-				foreach ($lifecycleRecords as $lifecycle) {
-					$totalJnr += $this->savingAvgCal($lifecycle['id']);
-				}
+				$totalJnr += $this->savingAvgCal($life['id']);
 			}
 		}
 
@@ -12977,6 +13214,60 @@ class Admin extends Base_Controller
 			$this->response(true, "Sub Category status updated successfully.");
 		} else {
 			$this->response(false, "Unable to update sub category.");
+		}
+	}
+
+	// created by @krishn on 22/07/26
+	public function updateBannerStatus()
+	{
+		if (empty($_REQUEST['banner_id'])) {
+			$this->response(false, "Banner ID is required.");
+			return;
+		}
+
+		if (!isset($_REQUEST['status'])) {
+			$this->response(false, "Status is required.");
+			return;
+		}
+
+		if ($_REQUEST['status'] != 0 && $_REQUEST['status'] != 1) {
+			$this->response(false, "Invalid status.");
+			return;
+		}
+
+		// Check Banner
+		$banner = $this->common->getData(
+			'tbl_banners',
+			array('id' => $_REQUEST['banner_id']),
+			array('single')
+		);
+
+		if (empty($banner)) {
+			$this->response(false, "Banner not found.");
+			return;
+		}
+
+		$update = array(
+			'status' => $_REQUEST['status']
+		);
+
+		$post = $this->common->getField('tbl_banners', $update);
+
+		$result = $this->common->updateData(
+			'tbl_banners',
+			$post,
+			array('id' => $_REQUEST['banner_id'])
+		);
+
+		if ($result) {
+			$this->response(
+				true,
+				$_REQUEST['status'] == 1
+					? "Banner activated successfully."
+					: "Banner deactivated successfully."
+			);
+		} else {
+			$this->response(false, "There is a problem, please try again.");
 		}
 	}
 }

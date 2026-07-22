@@ -3125,7 +3125,7 @@ class Api extends Base_Controller
 	// created by @krishn on 11-08-25
 	public function allBanners()
 	{
-		$result_banner = $this->common->getData('tbl_banners');
+		$result_banner = $this->common->getData('tbl_banners', array('status' => 1));
 		$data = [];
 
 		if (!empty($result_banner)) {
