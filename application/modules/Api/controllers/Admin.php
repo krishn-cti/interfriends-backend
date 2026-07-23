@@ -12627,7 +12627,7 @@ class Admin extends Base_Controller
 
 						<p><strong>Service :</strong> {$service['service_name']}</p>
 
-						<p>You can now view this service from your Service section.</p>
+						<p>You can now view this service from your Directory section on your dashboard.</p>
 						";
 
 				$mailMessage = $this->load->view('template/common-mail', $data, true);
