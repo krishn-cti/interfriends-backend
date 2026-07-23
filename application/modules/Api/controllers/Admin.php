@@ -8602,77 +8602,67 @@ class Admin extends Base_Controller
 
 	public function savingJnrTotal()
 	{
-		$where = "UG.group_id != 34
-              AND UG.group_id != 0
-              AND U.status != 2";
+		$this->db->select("
+			IFNULL(SUM(
+				CASE
+					WHEN CSM.group_cycle_id IS NULL THEN IFNULL(PAID.total_payment, 0)
+					ELSE IFNULL(PAID.total_payment, 0) - IFNULL(UGL_TOTAL.total_amount, 0)
+				END
+			), 0) AS total
+		", false);
+		$this->db->from('user_group UG');
+		$this->db->join('user U', 'U.user_id = UG.user_id');
+		$this->db->join('group_lifecycle GL', 'GL.group_id = UG.group_id AND GL.group_type_id = 2');
+		$this->db->join(
+			"(SELECT user_id, group_id, groupLifecycle_id, SUM(amount) AS total_payment
+				FROM user_group_lifecycle
+				WHERE status != '1'
+				GROUP BY user_id, group_id, groupLifecycle_id) PAID",
+			'PAID.user_id = UG.user_id AND PAID.group_id = UG.group_id AND PAID.groupLifecycle_id = GL.id',
+			'left',
+			false
+		);
+		$this->db->join(
+			"(SELECT user_id, groupLifecycle_id, SUM(amount) AS total_amount
+				FROM user_group_lifecycle
+				GROUP BY user_id, groupLifecycle_id) UGL_TOTAL",
+			'UGL_TOTAL.user_id = UG.user_id AND UGL_TOTAL.groupLifecycle_id = GL.id',
+			'left',
+			false
+		);
+		$this->db->join(
+			"(SELECT user_id, group_id, group_cycle_id
+				FROM cycle_status_management
+				GROUP BY user_id, group_id, group_cycle_id) CSM",
+			'CSM.user_id = UG.user_id AND CSM.group_id = UG.group_id AND CSM.group_cycle_id = GL.id',
+			'left',
+			false
+		);
+		$this->db->where('UG.group_id !=', 34);
+		$this->db->where('UG.group_id !=', 0);
+		$this->db->where('U.status !=', 2);
 
-		$users = $this->user_model->user_group_detail($where, array());
+		$result = $this->db->get()->row_array();
 
-		if (empty($users)) {
-			return 0;
-		}
-
-		$groupIds = array_unique(array_column($users, 'group_id'));
-
-		$this->db->where_in('group_id', $groupIds);
-		$this->db->where('group_type_id', 2);
-
-		$lifecycles = $this->db
-			->get('group_lifecycle')
-			->result_array();
-
-		// Group lifecycles by group_id
-		$lifecycleMap = [];
-
-		foreach ($lifecycles as $life) {
-			$lifecycleMap[$life['group_id']][] = $life;
-		}
-
-		$totalJnr = 0;
-
-		foreach ($users as $user) {
-
-			// No lifecycle for this group
-			if (empty($lifecycleMap[$user['group_id']])) {
-				continue;
-			}
-
-			$_REQUEST['user_id']  = $user['user_id'];
-			$_REQUEST['group_id'] = $user['group_id'];
-
-			foreach ($lifecycleMap[$user['group_id']] as $life) {
-
-				$totalJnr += $this->savingAvgCal($life['id']);
-			}
-		}
-
-		return $totalJnr;
+		return !empty($result['total']) ? $result['total'] : 0;
 	}
 
 	//created by @krishn on 03-06-25
 	public function savingTotalnew()
 	{
 		$this->db->select("
-			U.user_id,
-			SUM(UGL.amount) AS total_amount,
-			SUM(CASE WHEN UGL.status = 2 THEN UGL.amount ELSE 0 END) AS paid_amount
-		");
+			IFNULL(SUM(UGL.amount) - SUM(CASE WHEN UGL.status = 2 THEN UGL.amount ELSE 0 END), 0) AS total_completed
+		", false);
 		$this->db->from('user_group UGP');
 		$this->db->join('user U', 'U.user_id = UGP.user_id');
 		$this->db->join('group_lifecycle GL', 'GL.group_id = UGP.group_id AND GL.group_type_id = 1');
 		$this->db->join('user_group_lifecycle UGL', 'UGL.groupLifecycle_id = GL.id AND UGL.user_id = U.user_id');
 		$this->db->where('UGP.group_id !=', 0);
 		$this->db->where('U.status !=', 2);
-		$this->db->group_by('U.user_id');
 
-		$result = $this->db->get()->result_array();
+		$result = $this->db->get()->row_array();
 
-		$total_completed = 0;
-		foreach ($result as $row) {
-			$total_completed += $row['total_amount'] - $row['paid_amount'];
-		}
-
-		return $total_completed;
+		return !empty($result['total_completed']) ? $result['total_completed'] : 0;
 	}
 
 
@@ -8681,40 +8671,41 @@ class Admin extends Base_Controller
 	public function savingTotalnewPending()
 	{
 		$this->db->select("
-			U.user_id,
-			U.first_name,
-			SUM(UGL.amount) AS total_amount,
-			SUM(CASE WHEN UGL.status != 2 THEN UGL.amount ELSE 0 END) AS unpaid_amount
-		");
+			IFNULL(SUM(UGL.amount) - SUM(CASE WHEN UGL.status != 2 THEN UGL.amount ELSE 0 END), 0) AS total_pending
+		", false);
 		$this->db->from('user_group UGP');
 		$this->db->join('user U', 'U.user_id = UGP.user_id');
 		$this->db->join('group_lifecycle GL', 'GL.group_id = UGP.group_id AND GL.group_type_id = 1');
 		$this->db->join('user_group_lifecycle UGL', 'UGL.groupLifecycle_id = GL.id AND UGL.user_id = U.user_id');
 		$this->db->where('UGP.group_id !=', 0);
 		$this->db->where('U.status !=', 2);
-		$this->db->group_by('U.user_id');
 
-		$result = $this->db->get()->result_array();
+		$result = $this->db->get()->row_array();
 
-		$total_pending = 0;
-		foreach ($result as $row) {
-			$pending = $row['total_amount'] - $row['unpaid_amount'];
-			$total_pending += $pending;
-		}
-
-		return $total_pending;
+		return !empty($result['total_pending']) ? $result['total_pending'] : 0;
 	}
 
 
 	public function safekeepingTotalAmount()
 	{
-		$where = "UG.group_id != 0 and U.status != 2";
-		$users = $this->user_model->user_group_detail($where, array(''));
-		$usercyclejnr = 0;
-		foreach ($users as $key => $value) {
-			$usercyclejnr += safekeepingTotal($value['group_id'], $value['user_id']);
-		}
-		return  $usercyclejnr;
+		$this->db->select("
+			IFNULL(SUM(
+				CASE
+					WHEN SK.pyment_type = '2' THEN SK.amount
+					WHEN SK.pyment_type = '1' THEN -SK.amount
+					ELSE 0
+				END
+			), 0) AS total
+		", false);
+		$this->db->from('user_group UG');
+		$this->db->join('user U', 'U.user_id = UG.user_id');
+		$this->db->join('safe_keeping SK', 'SK.group_id = UG.group_id AND SK.user_id = UG.user_id', 'left');
+		$this->db->where('UG.group_id !=', 0);
+		$this->db->where('U.status !=', 2);
+
+		$result = $this->db->get()->row_array();
+
+		return !empty($result['total']) ? $result['total'] : 0;
 	}
 
 	public function savingTotal_all()
