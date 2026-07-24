@@ -2039,8 +2039,8 @@ class User_model extends CI_Model
 
 		foreach ($services as $key => $service) {
 			$userServiceId = $service['user_service_id'];
-			$services[$key]['profile_image'] = !empty($service['profile_image']) ? base_url($service['profile_image']) : '';
-			$services[$key]['profile_image_thumb'] = !empty($service['profile_image_thumb']) ? base_url($service['profile_image_thumb']) : '';
+			$services[$key]['profile_image'] = !empty($service['profile_image']) ? base_url($service['profile_image']) : 'assets/img/default-user-icon.jpg';
+			$services[$key]['profile_image_thumb'] = !empty($service['profile_image_thumb']) ? base_url($service['profile_image_thumb']) : 'assets/img/default-user-icon.jpg';
 			$services[$key]['service_images'] = isset($imageMap[$userServiceId]) ? $imageMap[$userServiceId] : array();
 		}
 
