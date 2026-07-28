@@ -2158,11 +2158,13 @@ class Admin extends Base_Controller
 			$message2 = "emergency loan approved";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "7");
 
-			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-			$data['useremail'] = "";
-			$data['message'] = '<p>This is a confirmation that your EMERGENCY help application has been approved and processed. Expect payment into your account within 24 hours</p><p>If you did not make this application, do let us know immediately</p>';
-			$messaged = $this->load->view('template/common-mail', $data, true);
-			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
+			if (!empty($userDetailFrom)) {
+				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+				$data['useremail'] = "";
+				$data['message'] = '<p>This is a confirmation that your EMERGENCY help application has been approved and processed. Expect payment into your account within 24 hours</p><p>If you did not make this application, do let us know immediately</p>';
+				$messaged = $this->load->view('template/common-mail', $data, true);
+				$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
+			}
 		}
 
 		if ($_REQUEST['status'] === '3') {
@@ -3125,11 +3127,11 @@ class Admin extends Base_Controller
 	// 			<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
 	// 				<tr>
 	// 					<td><strong>Assistance</strong></td>
-	// 					<td>£' . $_REQUEST["loan_amount"] . '</td>
+	// 					<td>£' . $loanAmount . '</td>
 	// 				</tr>
 	// 				<tr>
 	// 					<td><strong>Term</strong></td>
-	// 					<td>' . $_REQUEST["tenure"] . ' Months</td>
+	// 					<td>' . $tenure . ' Months</td>
 	// 				</tr>
 	// 				<tr>
 	// 					<td><strong>Type</strong></td>
@@ -3282,9 +3284,109 @@ class Admin extends Base_Controller
 			return "Help2 Pay(credit card)";
 		} elseif ($loanType == '5') {
 			return "Help2 Pay(other)";
+		} elseif ($loanType == '7') {
+			return "Welfare";
 		}
 
 		return "Help2 Buy(property)";
+	}
+
+	private function prepareWelfarePlan()
+	{
+		$this->mergeJsonRequestData();
+
+		$payoutAmount = 0;
+		if (isset($_REQUEST['payout_amount'])) {
+			$payoutAmount = (float) $_REQUEST['payout_amount'];
+		} elseif (isset($_REQUEST['welfare_payout_amount'])) {
+			$payoutAmount = (float) $_REQUEST['welfare_payout_amount'];
+		} elseif (isset($_REQUEST['loan_amount'])) {
+			$payoutAmount = (float) $_REQUEST['loan_amount'];
+		}
+
+		$monthlyMap = array(
+			1000 => 25,
+			2000 => 50,
+			3000 => 75
+		);
+
+		if (!isset($monthlyMap[(int) $payoutAmount])) {
+			$this->response(false, "Invalid welfare payout amount.");
+			return false;
+		}
+
+		$monthlyPayment = $monthlyMap[(int) $payoutAmount];
+		$term = (!empty($_REQUEST['tenure']) && (int) $_REQUEST['tenure'] > 0) ? (int) $_REQUEST['tenure'] : 24;
+
+		$_REQUEST['loan_amount'] = $payoutAmount;
+		$_REQUEST['welfare_payout_amount'] = $payoutAmount;
+		$_REQUEST['tenure'] = $term;
+		$_REQUEST['loan_type'] = '7';
+		$_REQUEST['interest_rate'] = 0;
+		$_REQUEST['interest_payable'] = 0;
+		$_REQUEST['loan_emi'] = $monthlyPayment;
+		$_REQUEST['welfare_admin_fee'] = $monthlyPayment;
+		$_REQUEST['admin_risk'] = $monthlyPayment;
+		$_REQUEST['total_payment'] = ($monthlyPayment * $term) + $monthlyPayment;
+		$_REQUEST['welfare_balance'] = $payoutAmount;
+		$_REQUEST['provident'] = $this->requestFloat(array('provident', 'provident_amount', 'providentAmount'), 0);
+
+		if (empty($_REQUEST['status'])) {
+			$_REQUEST['status'] = 1;
+		}
+
+		if (empty($_REQUEST['created_at'])) {
+			$_REQUEST['created_at'] = date('Y-m-d H:i:s');
+		}
+
+		if (empty($_REQUEST['start_date'])) {
+			$_REQUEST['start_date'] = date('Y-m-d');
+		}
+
+		if (empty($_REQUEST['end_date'])) {
+			$originalDay = (int) date('d', strtotime($_REQUEST['start_date']));
+			$endDate = new DateTime($_REQUEST['start_date']);
+			$endDate->modify('+' . ($term - 1) . ' month');
+
+			$year = (int) $endDate->format('Y');
+			$month = (int) $endDate->format('m');
+			$lastDay = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+			$day = min($originalDay, $lastDay);
+
+			$_REQUEST['end_date'] = sprintf('%04d-%02d-%02d', $year, $month, $day);
+		}
+
+		return true;
+	}
+
+	private function mergeJsonRequestData()
+	{
+		$rawInput = file_get_contents('php://input');
+		if (empty($rawInput)) {
+			return;
+		}
+
+		$jsonData = json_decode($rawInput, true);
+		if (!is_array($jsonData)) {
+			return;
+		}
+
+		foreach ($jsonData as $key => $value) {
+			if (!isset($_REQUEST[$key])) {
+				$_REQUEST[$key] = $value;
+			}
+		}
+	}
+
+	private function requestFloat($keys, $default = 0)
+	{
+		foreach ($keys as $key) {
+			if (isset($_REQUEST[$key]) && $_REQUEST[$key] !== '') {
+				return (float) $_REQUEST[$key];
+			}
+		}
+
+		return $default;
 	}
 
 	// private function addLoanEmiPayments($loan)
@@ -3341,20 +3443,24 @@ class Admin extends Base_Controller
 	// 	return true;
 	// }
 
+	private function normalizeValidDate($dateStr)
+	{
+		if (empty($dateStr) || $dateStr === '0000-00-00' || $dateStr === '0000-00-00 00:00:00') {
+			return null;
+		}
+		$clean = str_replace('/', '-', trim($dateStr));
+		$time = strtotime($clean);
+		if ($time === false || $time <= 0) {
+			return null;
+		}
+		return date('Y-m-d', $time);
+	}
+
 	// created by @krishn on 26-06-26
 	private function addLoanEmiPayments($loan)
 	{
 		if (empty($loan) || empty($loan['id'])) {
 			return false;
-		}
-
-		$existingPayments = $this->common->getData(
-			'user_loan_payment',
-			array('loan_id' => $loan['id'])
-		);
-
-		if (!empty($existingPayments)) {
-			return true;
 		}
 
 		$tenure = !empty($loan['tenure'])
@@ -3377,24 +3483,68 @@ class Admin extends Base_Controller
 			return false;
 		}
 
+		$existingPayments = $this->common->getData(
+			'user_loan_payment',
+			array('loan_id' => $loan['id'])
+		);
 
-		$paymentDate = !empty($loan['start_date'])
-			? $loan['start_date']
-			: date('Y-m-d');
+		if (!empty($existingPayments)) {
+			if (count($existingPayments) === $tenure) {
+				return true;
+			}
 
-		$day = date('d', strtotime($paymentDate));
+			$hasPaid = false;
+			foreach ($existingPayments as $p) {
+				if (!empty($p['status']) && $p['status'] != 0) {
+					$hasPaid = true;
+					break;
+				}
+			}
 
+			if (!$hasPaid) {
+				$this->db->delete('user_loan_payment', array('loan_id' => $loan['id']));
+			} else {
+				return true;
+			}
+		}
 
-		for ($month = 1; $month <= $tenure; $month++) {
+		$startDate = $this->normalizeValidDate(!empty($loan['start_date']) ? $loan['start_date'] : null);
+		if (!$startDate) {
+			$startDate = date('Y-m-d');
+		}
+
+		$startYear = (int)date('Y', strtotime($startDate));
+		$startMonth = (int)date('m', strtotime($startDate));
+		$originalDay = (int)date('d', strtotime($startDate));
+
+		for ($m = 0; $m < $tenure; $m++) {
+			$totalMonths = ($startMonth - 1) + $m;
+			$targetYear = $startYear + (int)floor($totalMonths / 12);
+			$targetMonth = ($totalMonths % 12) + 1;
+
+			$lastDay = cal_days_in_month(CAL_GREGORIAN, $targetMonth, $targetYear);
+			$day = min($originalDay, $lastDay);
+
+			$paymentDate = sprintf(
+				'%04d-%02d-%02d',
+				$targetYear,
+				$targetMonth,
+				$day
+			);
+
+			$currentAmount = $emiAmount;
+			if ($m === 0 && !empty($loan['loan_type']) && (string)$loan['loan_type'] === '7') {
+				$adminFee = !empty($loan['admin_risk']) ? (float)$loan['admin_risk'] : (!empty($loan['welfare_admin_fee']) ? (float)$loan['welfare_admin_fee'] : 0);
+				$currentAmount += $adminFee;
+			}
 
 			$payment = array(
 				'loan_id'         => $loan['id'],
 				'user_id'         => $loan['user_id'],
 				'group_id'        => $loan['group_id'],
-				'amount'          => $emiAmount,
+				'amount'          => $currentAmount,
 				'payment_method'  => 0,
 				'status'          => 0,
-				'month'           => $month,
 				'emi_date'        => $paymentDate
 			);
 
@@ -3411,27 +3561,6 @@ class Admin extends Base_Controller
 			if (!$result) {
 				return false;
 			}
-
-
-			/* Next EMI Date */
-
-			$nextMonth = strtotime("+1 month", strtotime($paymentDate));
-
-			$year = date('Y', $nextMonth);
-			$monthNo = date('m', $nextMonth);
-
-			$lastDay = cal_days_in_month(
-				CAL_GREGORIAN,
-				$monthNo,
-				$year
-			);
-
-			$emiDay = min($day, $lastDay);
-
-			$paymentDate = date(
-				'Y-m-d',
-				strtotime("$year-$monthNo-$emiDay")
-			);
 		}
 
 		return true;
@@ -3440,10 +3569,19 @@ class Admin extends Base_Controller
 	// updated by @krishn on 17-06-26
 	public function editLoan()
 	{
+		$this->mergeJsonRequestData();
+
+		if (empty($_REQUEST['id'])) {
+			$this->response(false, "Missing required parameters.");
+			return;
+		}
+
 		$id = $_REQUEST['id'];
 		unset($_REQUEST['id']);
+		$hasStatus = isset($_REQUEST['status']) && $_REQUEST['status'] !== '';
+		$status = $hasStatus ? (string) $_REQUEST['status'] : '';
 
-		if (isset($_REQUEST['status']) && $_REQUEST['status'] == '4') {
+		if ($status === '4') {
 
 			$loanInfo = $this->common->getData(
 				'user_loan',
@@ -3453,69 +3591,85 @@ class Admin extends Base_Controller
 
 			if (!empty($loanInfo)) {
 
-				$startDate = !empty($_REQUEST['start_date'])
-					? $_REQUEST['start_date']
-					: date('Y-m-d');
+				$rawReqStart = !empty($_REQUEST['start_date']) ? $_REQUEST['start_date'] : null;
+				$rawDbStart  = !empty($loanInfo['start_date']) ? $loanInfo['start_date'] : null;
 
-				$tenure = (int)$loanInfo['tenure'];
+				$startDate = $this->normalizeValidDate($rawReqStart);
+				if (!$startDate) {
+					$startDate = $this->normalizeValidDate($rawDbStart);
+				}
+				if (!$startDate) {
+					$startDate = date('Y-m-d');
+				}
+
+				$tenure = !empty($_REQUEST['tenure'])
+					? (int)$_REQUEST['tenure']
+					: (int)$loanInfo['tenure'];
 
 				// Start date always saved
 				$_REQUEST['start_date'] = $startDate;
 
 				// Calculate end date keeping same day as start date
-				$originalDay = (int)date('d', strtotime($startDate));
+				if ($tenure > 0) {
+					$startYear = (int)date('Y', strtotime($startDate));
+					$startMonth = (int)date('m', strtotime($startDate));
+					$originalDay = (int)date('d', strtotime($startDate));
 
-				$date = new DateTime($startDate);
+					$totalMonths = ($startMonth - 1) + ($tenure - 1);
+					$targetYear = $startYear + (int)floor($totalMonths / 12);
+					$targetMonth = ($totalMonths % 12) + 1;
 
-				// Last installment month
-				$date->modify('+' . ($tenure - 1) . ' month');
+					$lastDay = cal_days_in_month(CAL_GREGORIAN, $targetMonth, $targetYear);
+					$day = min($originalDay, $lastDay);
 
-				$year  = $date->format('Y');
-				$month = $date->format('m');
-
-				// Last day of that month
-				$lastDay = cal_days_in_month(
-					CAL_GREGORIAN,
-					$month,
-					$year
-				);
-
-				// Use original day if exists otherwise last day
-				$day = min($originalDay, $lastDay);
-
-				$_REQUEST['end_date'] = sprintf(
-					'%04d-%02d-%02d',
-					$year,
-					$month,
-					$day
-				);
+					$_REQUEST['end_date'] = sprintf(
+						'%04d-%02d-%02d',
+						$targetYear,
+						$targetMonth,
+						$day
+					);
+				}
 			}
 		}
 
 		$post = $this->common->getField('user_loan', $_REQUEST);
 
 		if (!empty($post)) {
-			$result = $this->common->updateData(
+			$this->common->updateData(
 				'user_loan',
 				$post,
 				['id' => $id]
 			);
-		} else {
-			$result = "";
-		}
-
-		if (!empty($post)) {
-			$result = $this->common->updateData('user_loan', $post, array('id' => $id));
-		} else {
-			$result = "";
 		}
 
 		$getloan = $this->common->getData('user_loan', array('id' => $id), array('single'));
 
+		if (empty($getloan)) {
+			$this->response(false, "Loan not found.");
+			return;
+		}
 
-		$this->common->insertData('user_loan_status_history', array("loan_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
+		$userId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : $getloan['user_id'];
+		$groupId = !empty($_REQUEST['group_id']) ? $_REQUEST['group_id'] : $getloan['group_id'];
+		$loanType = !empty($_REQUEST['loan_type']) ? $_REQUEST['loan_type'] : $getloan['loan_type'];
+		$loanAmount = !empty($_REQUEST['loan_amount']) ? $_REQUEST['loan_amount'] : $getloan['loan_amount'];
+		$tenure = !empty($_REQUEST['tenure']) ? $_REQUEST['tenure'] : $getloan['tenure'];
+		$noteTitle = !empty($_REQUEST['note_title']) ? $_REQUEST['note_title'] : '';
+		$noteDescription = !empty($_REQUEST['note_description']) ? $_REQUEST['note_description'] : '';
+		$adminId = !empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '';
 
-		if ($_REQUEST['status'] === '4') {
+		if ($hasStatus) {
+			$this->common->insertData('user_loan_status_history', array(
+				"loan_id" => $id,
+				"user_id" => $userId,
+				"note_title" => $noteTitle,
+				"note_description" => $noteDescription,
+				"status" => $status,
+				"created_at" => date('Y-m-d H:i:s')
+			));
+		}
+
+		if ($status === '4') {
 
 			$emiPaymentResult = $this->addLoanEmiPayments($getloan);
 			if (!$emiPaymentResult) {
@@ -3524,153 +3678,187 @@ class Admin extends Base_Controller
 			}
 
 			$message = "loan approved";
-			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "5", "2");
+			$this->send_nofification_admin($userId, $adminId, $groupId, $message, $id, "5", "2");
 
-			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $userId . "'");
 			$this->updateCreditScore(200, 'minus');
 
 
 			$message2 = "loan accepted by super admin";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "11");
+			$this->send_nofification($userId, $adminId, $groupId, $message2, $id, "11");
 
 			///sendmail
-			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			$userDetailFrom = $this->common->getData('user', array('user_id' => $userId), array('single'));
 
-			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-			$data['useremail'] = "";
+			if (!empty($userDetailFrom) && !empty($userDetailFrom['email'])) {
+				$applicantName = trim(($userDetailFrom['first_name'] ?? '') . " " . ($userDetailFrom['last_name'] ?? ''));
+				if (empty($applicantName)) {
+					$applicantName = 'Member';
+				}
+				$data['sendername'] = $applicantName;
+				$data['useremail'] = "";
 
-			if (!empty($getloan['loan_type'])) {
-				$subject = $this->getLoanTypeTitle($getloan['loan_type']);
+				if (!empty($getloan['loan_type'])) {
+					$subject = $this->getLoanTypeTitle($getloan['loan_type']);
 
-				$referenceNo = $getloan["reference_no"] ?? "#N/A";
-				$data['message'] = '<p>We are writing to inform you that your ' . $subject . '  application has been successfully processed and approved.</p><p>The payment will be deposited into your account within the next 24 hours.</p><p>If you did not initiate this loan application, please get in touch with us immediately to address the issue.</p>
-				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
-					<tr>
-						<td><strong>Assistance</strong></td>
-						<td>£' . $_REQUEST["loan_amount"] . '</td>
-					</tr>
-					<tr>
-						<td><strong>Term</strong></td>
-						<td>' . $_REQUEST["tenure"] . ' Months</td>
-					</tr>
-					<tr>
-						<td><strong>Type</strong></td>
-						<td>' . $subject . '</td>
-					</tr>
-					<tr>
-						<td><strong>Payment Start Date</strong></td>
-						<td>' . date("d M Y", strtotime($getloan['start_date'])) . '</td>
-					</tr>
-					<tr>
-						<td><strong>Monthly Payment</strong></td>
-						<td>£' . $getloan["loan_emi"] . '</td>
-					</tr>
-					<tr>
-						<td><strong>Reference No.</strong></td>
-						<td>' . $referenceNo . '</td>
-					</tr>
-				</table>';
-				$messaged = $this->load->view('template/common-mail', $data, true);
-				$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
+					if ((string)$getloan['loan_type'] === '7') {
+						$payoutAmt = !empty($getloan['welfare_payout_amount']) ? (float)$getloan['welfare_payout_amount'] : (float)$getloan['loan_amount'];
+						$emiAmt    = !empty($getloan['loan_emi']) ? (float)$getloan['loan_emi'] : 0;
+						$termMonths = !empty($getloan['tenure']) ? $getloan['tenure'] : 24;
+
+						$data['message'] = '
+						<p>We are pleased to confirm that your Welfare application has been reviewed and approved.</p>
+						<br>
+						<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px; margin-bottom: 10px;">
+							<tr>
+								<td colspan="2"><strong>Product Details</strong></td>
+							</tr>
+							<tr>
+								<td>Claim Payout Amount</td>
+								<td>£' . number_format($payoutAmt, 2) . '</td>
+							</tr>
+							<tr>
+								<td>Term</td>
+								<td>' . $termMonths . ' months</td>
+							</tr>
+							<tr>
+								<td>Monthly Payment</td>
+								<td>£' . number_format($emiAmt, 2) . ' (NB: Your monthly payment doubles as soon as a successful claim is made)</td>
+							</tr>
+						</table>
+						<br>
+						<p>Your monthly payment and admin fee will begin immediately. Please visit your dashboard (www.interfriends.uk) for more details.</p>';
+
+						$messaged = $this->load->view('template/common-mail', $data, true);
+						$this->sendMail($userDetailFrom['email'], 'Welfare Application Approved', $messaged);
+					} else {
+						$referenceNo = $getloan["reference_no"] ?? "#N/A";
+						$data['message'] = '<p>We are writing to inform you that your ' . $subject . '  application has been successfully processed and approved.</p><p>The payment will be deposited into your account within the next 24 hours.</p><p>If you did not initiate this loan application, please get in touch with us immediately to address the issue.</p>
+						<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+							<tr>
+								<td><strong>Assistance</strong></td>
+								<td>£' . $loanAmount . '</td>
+							</tr>
+							<tr>
+								<td><strong>Term</strong></td>
+								<td>' . $tenure . ' Months</td>
+							</tr>
+							<tr>
+								<td><strong>Type</strong></td>
+								<td>' . $subject . '</td>
+							</tr>
+							<tr>
+								<td><strong>Payment Start Date</strong></td>
+								<td>' . date("d M Y", strtotime($getloan['start_date'])) . '</td>
+							</tr>
+							<tr>
+								<td><strong>Monthly Payment</strong></td>
+								<td>£' . $getloan["loan_emi"] . '</td>
+							</tr>
+							<tr>
+								<td><strong>Reference No.</strong></td>
+								<td>' . $referenceNo . '</td>
+							</tr>
+						</table>';
+						$messaged = $this->load->view('template/common-mail', $data, true);
+						$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
+					}
+				}
 			}
 		}
 
-		if ($_REQUEST['status'] === '3') {
-			$message = "loan declined";
-			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "6", "2");
+		if ($status === '3' || $status === '6') {
+			$message = ($status === '3') ? "loan declined" : "loan has been cancel by sub admin";
+			$this->send_nofification_admin($userId, $adminId, $groupId, $message, $id, "6", "2");
 
-			$message2 = "loan has been cancel by super admin";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "12");
+			$message2 = ($status === '3') ? "loan has been cancel by super admin" : "loan has been cancel by sub admin";
+			$this->send_nofification($userId, $adminId, $groupId, $message2, $id, "12");
+
+			if (!empty($getloan['loan_type']) && (string)$getloan['loan_type'] === '7') {
+				$userDetailFrom = $this->common->getData('user', array('user_id' => $userId), array('single'));
+				if (!empty($userDetailFrom) && !empty($userDetailFrom['email'])) {
+					$applicantName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+					if (empty($applicantName)) {
+						$applicantName = 'Member';
+					}
+					$data['sendername'] = $applicantName;
+					$data['useremail']  = "";
+					$data['message']    = '
+					<p>We regret to inform you that your Welfare application has been declined. This may be because it did not meet the minimum acceptance criteria or for another eligibility-related reason. You may contact the Membership Team for further clarification before reapplying in the future.</p>';
+
+					$messaged = $this->load->view('template/common-mail', $data, true);
+					$this->sendMail($userDetailFrom['email'], 'Welfare Application Declined', $messaged);
+				}
+			}
 		}
 
-		if ($_REQUEST['status'] === '6') {
-			$message = "loan has been cancel by sub admin";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "10");
-		}
-
-		if ($_REQUEST['status'] === '5') {
+		if ($status === '5') {
 			$message = "loan application in process.";
-			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "4", "1");
+			$this->send_nofification_admin($userId, $adminId, $groupId, $message, $id, "4", "1");
 
 			$message2 = "Loan awaiting approval";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "9");
+			$this->send_nofification($userId, $adminId, $groupId, $message2, $id, "9");
 		}
+
 		//new-changes 28-08-2025
-		if ($_REQUEST['status']) {
-			$status     = $_REQUEST['status'];
-			$loan_type  = $_REQUEST['loan_type'];
-			$group_id   = $_REQUEST['group_id'];
+		if ($hasStatus) {
 			$created_at = date('Y-m-d H:i:s');
-			$loan_id    = $id;
-			$user_id    = $_REQUEST['user_id'];
-			$month      = $getloan['start_date'];
-			$amount     = $_REQUEST['loan_amount'];
+			$month      = !empty($getloan['start_date']) ? $getloan['start_date'] : date('Y-m-d');
 
 			// Check if record exists for this loan_id
 			$check = $this->common->getData(
 				"payment_notification",
-				array("loan_id" => $loan_id)
+				array("loan_id" => $id)
 			);
 
 			if (!empty($check)) {
 				// Update existing record
-				$result = $this->common->updateData(
+				$this->common->updateData(
 					"payment_notification",
 					array(
 						"status"     => $status,
-						"group_id"   => $group_id,
+						"group_id"   => $groupId,
 						"month"      => $month,
 						"created_at" => $created_at,
-						"user_id"    => $user_id,
-						"amount"     => $amount,
-						"loan_type"  => $loan_type
+						"user_id"    => $userId,
+						"amount"     => $loanAmount,
+						"loan_type"  => $loanType
 					),
-					array("loan_id" => $loan_id)
+					array("loan_id" => $id)
 				);
 			} else {
 				// Insert new record
-				$result = $this->common->insertData(
+				$this->common->insertData(
 					"payment_notification",
 					array(
 						"status"     => $status,
-						"group_id"   => $group_id,
+						"group_id"   => $groupId,
 						"month"      => $month,
 						"created_at" => $created_at,
-						"user_id"    => $user_id,
-						"amount"     => $amount,
-						"loan_type"  => $loan_type,
-						"loan_id"    => $loan_id
+						"user_id"    => $userId,
+						"amount"     => $loanAmount,
+						"loan_type"  => $loanType,
+						"loan_id"    => $id
 					)
 				);
 			}
 		}
 
-		if ($_REQUEST['status'] === '2') {
+		if ($status === '2') {
 
-			$amount = pfTotal($_REQUEST['group_id'], $_REQUEST['user_id']);
+			$amount = pfTotal($groupId, $userId);
 			// 		if($amount >= $_REQUEST['loan_amount']) {
-			$note_title = '';
-			$note_description = '';
-			if (!empty($_REQUEST['note_title'])) {
-				$note_title = $_REQUEST['note_title'];
-			}
-
-			$note_description = '';
-			if (!empty($_REQUEST['note_description'])) {
-				$note_description = $_REQUEST['note_description'];
-			}
-
-			$result = $this->common->insertData('pf_user', array(
-				"user_id" => $_REQUEST['user_id'],
+			$this->common->insertData('pf_user', array(
+				"user_id" => $userId,
 				'pf_interest_percent' => $getloan['interest_rate'],
 				"pf_interest_amount" => $getloan['interest_payable'],
-				"group_id" => $_REQUEST['group_id'],
+				"group_id" => $groupId,
 				"main_id" => $id,
 				"pf_amount" => $getloan['interest_payable'],
 				"payment_type" => '2',
 				"payment_by" => '3',
-				"note_title" => $note_title,
-				"note_description" => $note_description,
+				"note_title" => $noteTitle,
+				"note_description" => $noteDescription,
 				"created_at" => date('Y-m-d H:i:s'),
 				'provident' => $getloan['provident'],
 				'loan_type' => $getloan['loan_type']
@@ -3679,15 +3867,15 @@ class Admin extends Base_Controller
 
 
 			$message2 = "loan completed";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "15");
+			$this->send_nofification($userId, $adminId, $groupId, $message2, $id, "15");
 
-			$this->common->query_normal("UPDATE credit_score_user SET loan_payment_fully_paid = loan_payment_fully_paid+80 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->common->query_normal("UPDATE credit_score_user SET loan_payment_fully_paid = loan_payment_fully_paid+80 WHERE `user_id` = '" . $userId . "'");
 			$this->updateCreditScore(80, 'plus');
 
 			// Send Loan Completed Email
 			$userDetailFrom = $this->common->getData(
 				'user',
-				array('user_id' => $_REQUEST['user_id']),
+				array('user_id' => $userId),
 				array('single')
 			);
 
@@ -3696,15 +3884,15 @@ class Admin extends Base_Controller
 				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 				$data['useremail'] = "";
 
-				$loanType = $this->getLoanTypeTitle($getloan['loan_type']);
-				$subject = $loanType . " Loan Completed";
+				$loanTypeTitle = $this->getLoanTypeTitle($getloan['loan_type']);
+				$subject = $loanTypeTitle . " Loan Completed";
 
 				$referenceNo = $getloan["reference_no"] ?? "#N/A";
 
 				$data['message'] = '
 				<p>Congratulations! Your loan has been completed successfully.</p>
 
-				<p>This confirms that your ' . $loanType . ' has been paid in full and is now complete.</p>
+				<p>This confirms that your ' . $loanTypeTitle . ' has been paid in full and is now complete.</p>
 
 				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
 					<tr>
@@ -3713,7 +3901,7 @@ class Admin extends Base_Controller
 					</tr>
 					<tr>
 						<td><strong>Type</strong></td>
-						<td>' . $loanType . '</td>
+						<td>' . $loanTypeTitle . '</td>
 					</tr>
 					<tr>
 						<td><strong>Loan Amount</strong></td>
@@ -3737,11 +3925,7 @@ class Admin extends Base_Controller
 			}
 		}
 
-		if ($result) {
-			$this->response(true, "Loan Update Successfully");
-		} else {
-			$this->response(false, "There is a problem, please try again.");
-		}
+		$this->response(true, "Loan Update Successfully");
 	}
 
 	public function editLoanPayment()
@@ -8772,50 +8956,48 @@ class Admin extends Base_Controller
 
 	public function request_welfare()
 	{
-		$_REQUEST['created_at'] = date('Y-m-d H:i:s');
+		$this->mergeJsonRequestData();
 
-		$amount = $_REQUEST['loan_amount'];
-		$interRate = 10;
+		if (empty($_REQUEST['user_id']) || empty($_REQUEST['group_id'])) {
+			$this->response(false, "Missing required parameters.");
+			return;
+		}
 
-		$interest_payable = (($amount * $interRate) / 100);
-		$total_payment = $amount + $interest_payable;
-		$loan_emi = $total_payment / $_REQUEST['tenure'];
+		$existingWelfare = $this->common->getData('user_loan', "user_id = '" . (int)$_REQUEST['user_id'] . "' AND loan_type = '7' AND status IN (1, 4, 5)", array('single'));
+		if (!empty($existingWelfare)) {
+			$this->response(false, "This user already has an active or pending welfare account.");
+			return;
+		}
 
-
-		$_REQUEST['interest_payable'] = $_REQUEST['provident'];
-		$_REQUEST['interest_rate'] = $interRate;
-		$_REQUEST['loan_type'] = '7';
+		if (!$this->prepareWelfarePlan()) {
+			return;
+		}
 
 		$post = $this->common->getField('user_loan', $_REQUEST);
 		$result = $this->common->insertData('user_loan', $post);
 		$loan_id = $this->db->insert_id();
 		if ($result) {
-
-			$array = array(
-				'loan_id' => $loan_id,
-				'user_id' => $_REQUEST['user_id'],
-				'group_id' => $_REQUEST['group_id'],
-				'amount' => $_REQUEST['loan_amount'],
-				'payment_method' => '1',
-				'status' => 0,
-				'created_at' => $_REQUEST['created_at']
-			);
-
-
-			$post1 = $this->common->getField('user_loan_payment', $array);
-			$result1 = $this->common->insertData('user_loan_payment', $post1);
-
-
-			// 			$message = "request welfare";
-			// 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
-
-
 			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 
-			$this->updateCreditScore(100, 'minus', $_REQUEST['user_id']);
+			$this->updateCreditScoreUser(100, 'minus', $_REQUEST['user_id']);
 
+			// Send Email to User
+			$userDetail = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			if (!empty($userDetail)) {
+				$data['sendername'] = $userDetail['first_name'] . " " . $userDetail['last_name'];
+				$data['useremail'] = "";
+				$data['message'] = '<p>A new Welfare account has been created for you by the Admin.</p>
+				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+					<tr><td><strong>Payout Amount</strong></td><td>&pound;' . number_format($_REQUEST['welfare_payout_amount'], 2) . '</td></tr>
+					<tr><td><strong>Term</strong></td><td>' . $_REQUEST['tenure'] . ' Months</td></tr>
+					<tr><td><strong>Monthly Payment</strong></td><td>&pound;' . number_format($_REQUEST['loan_emi'], 2) . '</td></tr>
+					<tr><td><strong>Admin Fee</strong></td><td>&pound;' . number_format($_REQUEST['welfare_admin_fee'], 2) . '</td></tr>
+				</table>';
+				$mailMessage = $this->load->view('template/common-mail', $data, true);
+				$this->sendMail($userDetail['email'], 'New Welfare Account Created', $mailMessage);
+			}
 
-			$this->response(true, "Request for Welfare successfully");
+			$this->response(true, "Welfare account created successfully", array("welfare_id" => $loan_id));
 		} else {
 			$this->response(false, "There is a problem, please try again.");
 		}
@@ -8824,63 +9006,41 @@ class Admin extends Base_Controller
 	// created by @krishn on 18-07-25
 	public function welfareList()
 	{
-		$groupCycleList = $this->common->getData(
-			'user_group_lifecycle',
-			array(
-				'group_id' => $_REQUEST['group_id'],
-				'groupLifecycle_id' => $_REQUEST['groupLifecycle_id'],
-				'user_id' => $_REQUEST['user_id'],
-				'is_completed' => 0
-			)
-		);
+		$this->mergeJsonRequestData();
 
-		if (!empty($groupCycleList)) {
+		if (empty($_REQUEST['user_id']) || empty($_REQUEST['group_id'])) {
+			$this->response(false, "Missing required parameters.");
+			return;
+		}
 
-			// Find all records where welfare_uuid is NULL or empty
-			$emptyUuidItems = array_filter($groupCycleList, function ($row) {
-				return empty($row['welfare_uuid']);
-			});
+		if (empty($_REQUEST['start'])) {
+			$start = 10;
+			$end = 0;
+		} else {
+			$start = 10;
+			$end = $_REQUEST['start'];
+		}
 
-			if (!empty($emptyUuidItems)) {
-				// Sort items by ID (to keep consistent order)
-				usort($emptyUuidItems, function ($a, $b) {
-					return $a['id'] <=> $b['id'];
-				});
+		$where = "L.user_id = '" . $_REQUEST['user_id'] . "' AND L.group_id = '" . $_REQUEST['group_id'] . "' AND L.loan_type = '7'";
 
-				$count = 0;
-				$uuid = null;
+		if (!empty($_REQUEST['admin_type']) && $_REQUEST['admin_type'] === '2') {
+			$where .= " AND L.status != '6'";
+		}
 
-				foreach ($emptyUuidItems as $item) {
-					if ($count % 40 === 0 || !$uuid) {
-						// Generate a new UUID for each batch of 40
-						$uuid = strtoupper(substr(bin2hex(random_bytes(8)), 0, 10));
-					}
+		$result = $this->user_model->loan_detail($where, array(), $start, $end);
+		$resultCount = $this->user_model->loan_detail($where, array('count'));
 
-					// Update each row with the batch UUID
-					$this->common->updateData(
-						'user_group_lifecycle',
-						array('welfare_uuid' => $uuid),
-						array('id' => $item['id'])
-					);
+		$countData = $end;
+		$countData++;
 
-					$count++;
-				}
-
-				// Fetch the updated list (with UUIDs)
-				$groupCycleList = $this->common->getData(
-					'user_group_lifecycle',
-					array(
-						'group_id' => $_REQUEST['group_id'],
-						'groupLifecycle_id' => $_REQUEST['groupLifecycle_id'],
-						'user_id' => $_REQUEST['user_id'],
-						'is_completed' => 0
-					)
-				);
+		if (!empty($result)) {
+			foreach ($result as $key => $value) {
+				$result[$key]['sno'] = $countData++;
 			}
 
-			$this->response(true, 'group fetch successfully', array('lists' => $groupCycleList));
+			$this->response(true, "Welfare fetch Successfully.", array("lists" => $result, "listCount" => $resultCount));
 		} else {
-			$this->response(true, 'group not found', array('lists' => array()));
+			$this->response(true, "Welfare fetch Successfully.", array("lists" => array(), "listCount" => $resultCount));
 		}
 	}
 
@@ -8888,11 +9048,27 @@ class Admin extends Base_Controller
 
 	public function welfareStatusHistoryDetail()
 	{
-		$result = $this->common->getData('user_cycle_status_history', array('lifecycle_id' => $_REQUEST['lifecycle_id']));
+		$this->mergeJsonRequestData();
+
+		$loanId = !empty($_REQUEST['loan_id'])
+			? $_REQUEST['loan_id']
+			: (!empty($_REQUEST['welfare_id'])
+				? $_REQUEST['welfare_id']
+				: (!empty($_REQUEST['id'])
+					? $_REQUEST['id']
+					: (!empty($_REQUEST['lifecycle_id']) ? $_REQUEST['lifecycle_id'] : '')));
+
+		if (empty($loanId)) {
+			$this->response(false, "Welfare ID or Loan ID is required.");
+			return;
+		}
+
+		$result = $this->common->getData('user_loan_status_history', array('loan_id' => $loanId), array('sort_by' => 'id', 'sort_direction' => 'asc'));
+
 		if (!empty($result)) {
-			$this->response(true, 'cycle fetch successfully', array('loanDetail' => $result));
+			$this->response(true, 'Welfare status history fetched successfully.', array('loanDetail' => $result));
 		} else {
-			$this->response(true, 'cycle not found', array('loanDetail' => array()));
+			$this->response(true, 'Welfare status history not found.', array('loanDetail' => array()));
 		}
 	}
 
@@ -8905,10 +9081,21 @@ class Admin extends Base_Controller
 		if ($_REQUEST['status'] === '4') {
 			$loanInfo = $this->common->getData('user_loan', array('id' => $id), array('single'));
 			if (!empty($loanInfo)) {
-				$current_date = date('Y-m-d');
-				$end_date = strtotime("+" . $loanInfo['tenure'] . " month", strtotime($current_date));
-				$_REQUEST['end_date'] = date("Y-m-d", $end_date);
-				$_REQUEST['start_date'] = $current_date;
+				$startDate = !empty($_REQUEST['start_date'])
+					? $_REQUEST['start_date']
+					: (!empty($loanInfo['start_date']) ? $loanInfo['start_date'] : date('Y-m-d'));
+				$_REQUEST['start_date'] = $startDate;
+
+				$originalDay = (int) date('d', strtotime($startDate));
+				$endDate = new DateTime($startDate);
+				$endDate->modify('+' . ((int) $loanInfo['tenure'] - 1) . ' month');
+
+				$year = (int) $endDate->format('Y');
+				$month = (int) $endDate->format('m');
+				$lastDay = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+				$day = min($originalDay, $lastDay);
+
+				$_REQUEST['end_date'] = sprintf('%04d-%02d-%02d', $year, $month, $day);
 			}
 		}
 
@@ -8923,25 +9110,102 @@ class Admin extends Base_Controller
 
 		$this->common->insertData('user_loan_status_history', array("loan_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
 
+		$getloan = $this->common->getData('user_loan', array('id' => $id), array('single'));
+
+		$userId  = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+		$adminId = !empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '';
+		$groupId = !empty($_REQUEST['group_id']) ? $_REQUEST['group_id'] : '';
+
 		if ($_REQUEST['status'] === '4') {
+			$emiPaymentResult = $this->addLoanEmiPayments($getloan);
+			if (!$emiPaymentResult) {
+				$this->response(false, "There is a problem, please try again.");
+				return;
+			}
+
 			$message = "welfare approved";
-			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "5", "2");
+			$this->send_nofification_admin($userId, $adminId, $groupId, $message, $id, "5", "2");
 
 			$message2 = "welfare accepted by super admin";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "11");
+			$this->send_nofification($userId, $adminId, $groupId, $message2, $id, "11");
+
+			$userDetailFrom = $this->common->getData('user', array('user_id' => $userId), array('single'));
+			if (!empty($userDetailFrom) && !empty($userDetailFrom['email'])) {
+				$applicantName = trim(($userDetailFrom['first_name'] ?? '') . " " . ($userDetailFrom['last_name'] ?? ''));
+				if (empty($applicantName)) {
+					$applicantName = 'Member';
+				}
+				$data['sendername'] = $applicantName;
+				$data['useremail'] = "";
+
+				$payoutAmt = !empty($getloan['welfare_payout_amount']) ? (float)$getloan['welfare_payout_amount'] : (float)($getloan['loan_amount'] ?? 0);
+				$emiAmt    = !empty($getloan['loan_emi']) ? (float)$getloan['loan_emi'] : 0;
+				$termMonths = !empty($getloan['tenure']) ? $getloan['tenure'] : 24;
+
+				$data['message'] = '
+				<p>We are pleased to confirm that your Welfare application has been reviewed and approved.</p>
+				<br>
+				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px; margin-bottom: 10px;">
+					<tr>
+						<td colspan="2"><strong>Product Details</strong></td>
+					</tr>
+					<tr>
+						<td>Claim Payout Amount</td>
+						<td>£' . number_format($payoutAmt, 2) . '</td>
+					</tr>
+					<tr>
+						<td>Term</td>
+						<td>' . $termMonths . ' months</td>
+					</tr>
+					<tr>
+						<td>Monthly Payment</td>
+						<td>£' . number_format($emiAmt, 2) . ' (NB: Your monthly payment doubles as soon as a successful claim is made)</td>
+					</tr>
+				</table>
+				<br>
+				<p>Your monthly payment and admin fee will begin immediately. Please visit your dashboard (www.interfriends.uk) for more details.</p>';
+
+				$messaged = $this->load->view('template/common-mail', $data, true);
+				$this->sendMail($userDetailFrom['email'], 'Welfare Application Approved', $messaged);
+			}
 		}
 
-		if ($_REQUEST['status'] === '3') {
-			$message = "welfare declined";
+		if ($_REQUEST['status'] === '3' || $_REQUEST['status'] === '6') {
+			$message = ($_REQUEST['status'] === '3') ? "welfare declined" : "welfare has been cancel by sub admin";
 			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "6", "2");
 
-			$message2 = "welfare has been cancel by super admin";
+			$message2 = ($_REQUEST['status'] === '3') ? "welfare has been cancel by super admin" : "welfare has been cancel by sub admin";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "12");
+
+			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			if (!empty($userDetailFrom) && !empty($userDetailFrom['email'])) {
+				$applicantName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+				if (empty($applicantName)) {
+					$applicantName = 'Member';
+				}
+				$data['sendername'] = $applicantName;
+				$data['useremail'] = "";
+				$data['message'] = '
+				<p>We regret to inform you that your Welfare application has been declined. This may be because it did not meet the minimum acceptance criteria or for another eligibility-related reason. You may contact the Membership Team for further clarification before reapplying in the future.</p>
+				';
+
+				$messaged = $this->load->view('template/common-mail', $data, true);
+				$this->sendMail($userDetailFrom['email'], 'Welfare Application Declined', $messaged);
+			}
 		}
 
 		if ($_REQUEST['status'] === '6') {
 			$message = "welfare has been cancel by sub admin";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "10");
+
+			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			if (!empty($userDetailFrom)) {
+				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+				$data['useremail'] = "";
+				$data['message'] = '<p>Your Welfare application has been cancelled by sub admin.</p>' . (!empty($_REQUEST['note_description']) ? '<p><strong>Reason:</strong> ' . htmlspecialchars($_REQUEST['note_description']) . '</p>' : '');
+				$messaged = $this->load->view('template/common-mail', $data, true);
+				$this->sendMail($userDetailFrom['email'], 'Welfare Application Cancelled', $messaged);
+			}
 		}
 
 		if ($_REQUEST['status'] === '5') {
@@ -8961,6 +9225,30 @@ class Admin extends Base_Controller
 			$this->updateCreditScore(80, 'plus');
 		}
 
+		if (!empty($_REQUEST['status']) && !empty($getloan)) {
+			$check = $this->common->getData(
+				"payment_notification",
+				array("loan_id" => $id)
+			);
+
+			$paymentNotification = array(
+				"status"     => $_REQUEST['status'],
+				"group_id"   => $_REQUEST['group_id'],
+				"month"      => $getloan['start_date'],
+				"created_at" => date('Y-m-d H:i:s'),
+				"user_id"    => $_REQUEST['user_id'],
+				"amount"     => $getloan['loan_emi'],
+				"loan_type"  => 7,
+				"loan_id"    => $id
+			);
+
+			if (!empty($check)) {
+				$this->common->updateData("payment_notification", $paymentNotification, array("loan_id" => $id));
+			} else {
+				$this->common->insertData("payment_notification", $paymentNotification);
+			}
+		}
+
 		if ($result) {
 			$this->response(true, "welfare Update Successfully");
 		} else {
@@ -8976,6 +9264,252 @@ class Admin extends Base_Controller
 			$this->response(true, 'welfare fetch successfully', array('loanDetail' => $loanDetail));
 		} else {
 			$this->response(true, 'welfare not found', array('loanDetail' => array()));
+		}
+	}
+
+	public function adminWelfareClaimList()
+	{
+		$this->mergeJsonRequestData();
+
+		$limit = '';
+		$start = '';
+		if (isset($_REQUEST['start']) && $_REQUEST['start'] !== '') {
+			$limit = 10;
+			$start = (int)$_REQUEST['start'];
+		}
+
+		$whereArr = array();
+		if (isset($_REQUEST['status']) && $_REQUEST['status'] !== '') {
+			$whereArr[] = "WC.status = '" . (int)$_REQUEST['status'] . "'";
+		}
+		if (!empty($_REQUEST['user_id'])) {
+			$whereArr[] = "WC.user_id = '" . (int)$_REQUEST['user_id'] . "'";
+		}
+		if (!empty($_REQUEST['group_id'])) {
+			$whereArr[] = "WC.group_id = '" . (int)$_REQUEST['group_id'] . "'";
+		}
+		if (!empty($_REQUEST['welfare_loan_id'])) {
+			$whereArr[] = "WC.welfare_loan_id = '" . (int)$_REQUEST['welfare_loan_id'] . "'";
+		}
+		if (!empty($_REQUEST['search']) || !empty($_REQUEST['search_keyword'])) {
+			$keyword = $this->db->escape_like_str(!empty($_REQUEST['search']) ? trim($_REQUEST['search']) : trim($_REQUEST['search_keyword']));
+			$whereArr[] = "(WC.name LIKE '%{$keyword}%' OR WC.email LIKE '%{$keyword}%' OR U.first_name LIKE '%{$keyword}%' OR U.last_name LIKE '%{$keyword}%' OR WC.claim_reason LIKE '%{$keyword}%')";
+		}
+
+		$whereSql = !empty($whereArr) ? implode(' AND ', $whereArr) : '1=1';
+
+		$this->db->select("
+			WC.*,
+			U.first_name, U.last_name, U.email as user_email, U.mobile_number, U.profile_image,
+			CONCAT(IFNULL(S1.first_name,''), ' ', IFNULL(S1.last_name,'')) AS seconder1_name, S1.email AS seconder1_email,
+			CONCAT(IFNULL(S2.first_name,''), ' ', IFNULL(S2.last_name,'')) AS seconder2_name, S2.email AS seconder2_email,
+			UL.welfare_payout_amount, UL.welfare_balance, UL.loan_emi, UL.tenure
+		");
+		$this->db->from("welfare_claim WC");
+		$this->db->join("user U", "U.user_id = WC.user_id", "left");
+		$this->db->join("user S1", "S1.user_id = WC.seconder1_user_id", "left");
+		$this->db->join("user S2", "S2.user_id = WC.seconder2_user_id", "left");
+		$this->db->join("user_loan UL", "UL.id = WC.welfare_loan_id", "left");
+		$this->db->where($whereSql, NULL, FALSE);
+		$this->db->order_by("CASE WHEN WC.status = 0 THEN 0 ELSE 1 END", "ASC", FALSE);
+		$this->db->order_by("WC.id", "DESC");
+
+		if ($limit !== '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$claims = $this->db->get()->result_array();
+
+		// Count query
+		$this->db->from("welfare_claim WC");
+		$this->db->join("user U", "U.user_id = WC.user_id", "left");
+		$this->db->join("user_loan UL", "UL.id = WC.welfare_loan_id", "left");
+		$this->db->where($whereSql, NULL, FALSE);
+		$totalCount = $this->db->count_all_results();
+
+		$countData = (isset($_REQUEST['start']) && $_REQUEST['start'] !== '') ? (int)$_REQUEST['start'] : 0;
+		$countData++;
+
+		if (!empty($claims)) {
+			foreach ($claims as $key => $claim) {
+				$claims[$key]['sno'] = $countData++;
+				$claims[$key]['profile_image'] = !empty($claim['profile_image']) ? base_url($claim['profile_image']) : 'assets/img/default-user-icon.jpg';
+				$history = $this->common->getData('welfare_claim_status_history', array('claim_id' => $claim['id']), array('sort_by' => 'id', 'sort_direction' => 'asc'));
+				$claims[$key]['history'] = !empty($history) ? $history : array();
+			}
+		}
+
+		$this->response(true, "Welfare claims fetched successfully.", array("lists" => $claims, "listCount" => $totalCount));
+	}
+
+	public function getWelfareClaimDetail()
+	{
+		$this->mergeJsonRequestData();
+
+		if (empty($_REQUEST['claim_id'])) {
+			$this->response(false, "Claim ID is required.");
+			return;
+		}
+
+		$claimId = $_REQUEST['claim_id'];
+
+		$this->db->select("
+			WC.*,
+			U.first_name, U.last_name, U.email as user_email, U.mobile_number, U.profile_image,
+			CONCAT(IFNULL(S1.first_name,''), ' ', IFNULL(S1.last_name,'')) AS seconder1_name, S1.email AS seconder1_email,
+			CONCAT(IFNULL(S2.first_name,''), ' ', IFNULL(S2.last_name,'')) AS seconder2_name, S2.email AS seconder2_email,
+			UL.welfare_payout_amount, UL.welfare_balance, UL.loan_emi, UL.tenure, UL.start_date, UL.end_date
+		");
+		$this->db->from("welfare_claim WC");
+		$this->db->join("user U", "U.user_id = WC.user_id", "left");
+		$this->db->join("user S1", "S1.user_id = WC.seconder1_user_id", "left");
+		$this->db->join("user S2", "S2.user_id = WC.seconder2_user_id", "left");
+		$this->db->join("user_loan UL", "UL.id = WC.welfare_loan_id", "left");
+		$this->db->where("WC.id", $claimId);
+		$claimDetail = $this->db->get()->row_array();
+
+		if (empty($claimDetail)) {
+			$this->response(false, "Welfare claim not found.");
+			return;
+		}
+
+		$claimDetail['profile_image'] = !empty($claimDetail['profile_image']) ? base_url($claimDetail['profile_image']) : 'assets/img/default-user-icon.jpg';
+		$history = $this->common->getData('welfare_claim_status_history', array('claim_id' => $claimId), array('sort_by' => 'id', 'sort_direction' => 'asc'));
+		$claimDetail['history'] = !empty($history) ? $history : array();
+
+		$this->response(true, "Welfare claim detail fetched successfully.", array("claimDetail" => $claimDetail));
+	}
+
+	public function approveRejectWelfareClaim()
+	{
+		$this->mergeJsonRequestData();
+
+		if (empty($_REQUEST['claim_id']) || !isset($_REQUEST['status'])) {
+			$this->response(false, "Claim ID and status are required.");
+			return;
+		}
+
+		$claimId = $_REQUEST['claim_id'];
+		$status = (int)$_REQUEST['status']; // 1 = Approved, 2 = Rejected
+		$adminId = !empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : 0;
+		$rejectReason = !empty($_REQUEST['reject_reason']) ? trim($_REQUEST['reject_reason']) : '';
+
+		if ($status == 2 && empty($rejectReason)) {
+			$this->response(false, "Reject reason is required when declining a claim.");
+			return;
+		}
+
+		$claim = $this->common->getData('welfare_claim', array('id' => $claimId), array('single'));
+		if (empty($claim)) {
+			$this->response(false, "Welfare claim not found.");
+			return;
+		}
+
+		if ($claim['status'] == 1) {
+			$this->response(false, "This claim has already been approved.");
+			return;
+		}
+
+		// Fetch Associated Welfare Account
+		$welfareLoan = $this->common->getData('user_loan', array('id' => $claim['welfare_loan_id']), array('single'));
+		if (empty($welfareLoan)) {
+			$this->response(false, "Associated welfare account not found.");
+			return;
+		}
+
+		if ($status == 1) {
+			// Check Balance
+			$currentBalance = (float)($welfareLoan['welfare_balance'] ?? 0);
+			$payoutAmount = (float)$claim['payout_amount'];
+
+			if ($currentBalance < $payoutAmount) {
+				$this->response(false, "Insufficient welfare balance (&pound;" . number_format($currentBalance, 2) . ") for approved payout (&pound;" . number_format($payoutAmount, 2) . ").");
+				return;
+			}
+
+			// Deduct payout amount from welfare_balance
+			$newBalance = $currentBalance - $payoutAmount;
+			$this->common->updateData('user_loan', array('welfare_balance' => $newBalance), array('id' => $claim['welfare_loan_id']));
+
+			// Update claim record
+			$updateClaim = array(
+				'status'      => 1,
+				'reviewed_by' => $adminId,
+				'reviewed_at' => date('Y-m-d H:i:s')
+			);
+			$this->common->updateData('welfare_claim', $updateClaim, array('id' => $claimId));
+
+			// History record
+			$this->common->insertData('welfare_claim_status_history', array(
+				'claim_id'         => $claimId,
+				'user_id'          => $claim['user_id'],
+				'note_title'       => 'Welfare Claim Approved',
+				'note_description' => 'Welfare claim approved for &pound;' . number_format($payoutAmount, 2) . '. Updated balance: &pound;' . number_format($newBalance, 2),
+				'status'           => 1,
+				'created_at'       => date('Y-m-d H:i:s')
+			));
+
+			// In-app notifications
+			$message = "welfare claim approved";
+			$this->send_nofification($claim['user_id'], $adminId, $claim['group_id'], $message, $claimId, "11");
+
+			// Mail Notification
+			$user = $this->common->getData('user', array('user_id' => $claim['user_id']), array('single'));
+			if (!empty($user)) {
+				$mailData['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+				$mailData['useremail']  = "";
+				$mailData['message']    = '<p>Your Welfare Claim has been approved successfully.</p>
+				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+					<tr><td><strong>Claim Reason</strong></td><td>' . htmlspecialchars($claim['claim_reason']) . '</td></tr>
+					<tr><td><strong>Beneficiary</strong></td><td>' . htmlspecialchars($claim['beneficiary']) . '</td></tr>
+					<tr><td><strong>Approved Payout</strong></td><td>&pound;' . number_format($payoutAmount, 2) . '</td></tr>
+					<tr><td><strong>Remaining Welfare Balance</strong></td><td>&pound;' . number_format($newBalance, 2) . '</td></tr>
+				</table>';
+				$mailMessage = $this->load->view('template/common-mail', $mailData, true);
+				$this->sendMail($user['email'], 'Welfare Claim Approved', $mailMessage);
+			}
+
+			$this->response(true, "Welfare claim approved successfully.", array("new_balance" => $newBalance));
+
+		} elseif ($status == 2) {
+
+			// Update claim record
+			$updateClaim = array(
+				'status'        => 2,
+				'reject_reason' => $rejectReason,
+				'reviewed_by'   => $adminId,
+				'reviewed_at'   => date('Y-m-d H:i:s')
+			);
+			$this->common->updateData('welfare_claim', $updateClaim, array('id' => $claimId));
+
+			// History record
+			$this->common->insertData('welfare_claim_status_history', array(
+				'claim_id'         => $claimId,
+				'user_id'          => $claim['user_id'],
+				'note_title'       => 'Welfare Claim Declined',
+				'note_description' => $rejectReason,
+				'status'           => 2,
+				'created_at'       => date('Y-m-d H:i:s')
+			));
+
+			// In-app notifications
+			$message = "welfare claim declined";
+			$this->send_nofification($claim['user_id'], $adminId, $claim['group_id'], $message, $claimId, "12");
+
+			// Mail Notification
+			$user = $this->common->getData('user', array('user_id' => $claim['user_id']), array('single'));
+			if (!empty($user)) {
+				$mailData['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+				$mailData['useremail']  = "";
+				$mailData['message']    = '<p>Your Welfare Claim has been declined.</p>
+				<p><strong>Reason:</strong> ' . htmlspecialchars($rejectReason) . '</p>';
+				$mailMessage = $this->load->view('template/common-mail', $mailData, true);
+				$this->sendMail($user['email'], 'Welfare Claim Declined', $mailMessage);
+			}
+
+			$this->response(true, "Welfare claim declined successfully.");
+		} else {
+			$this->response(false, "Invalid status provided.");
 		}
 	}
 
@@ -12844,6 +13378,14 @@ class Admin extends Base_Controller
 			$start = (int)$_REQUEST['start'];
 		}
 
+		if (!empty($_REQUEST['user_service_id'])) {
+			$where['US.id'] = $_REQUEST['user_service_id'];
+		}
+
+		if (!empty($_REQUEST['user_id'])) {
+			$where['US.user_id'] = $_REQUEST['user_id'];
+		}
+
 		if (!empty($_REQUEST['category_id'])) {
 			$where['S.category_id'] = $_REQUEST['category_id'];
 		}
@@ -12872,7 +13414,7 @@ class Admin extends Base_Controller
 			$where['search'] = !empty($_REQUEST['search']) ? trim($_REQUEST['search']) : trim($_REQUEST['search_keyword']);
 		}
 
-		$services = $this->user_model->user_assigned_services($where, array(), $limit, $start);
+		$services = $this->user_model->user_assigned_services($where, array('order_by_pending'), $limit, $start);
 		$services = $this->user_model->attachServiceImages($services);
 		$totalCount = $this->user_model->user_assigned_services($where, array('count'));
 

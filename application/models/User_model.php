@@ -1118,6 +1118,7 @@ class User_model extends CI_Model
 					WHERE user_id = L.user_id
 					AND group_id = L.group_id
 					AND loan_id = L.id
+					AND status = 1
 				),
 				0
 			) AS paid_amount,
@@ -1904,6 +1905,8 @@ class User_model extends CI_Model
 		$this->db->select("
 			US.id AS user_service_id,
 			US.service_id,
+			US.company_name,
+			US.company_logo,
 			US.price,
 			US.description as provider_description,
 			US.mobile,
@@ -1942,6 +1945,10 @@ class User_model extends CI_Model
 		$this->db->join('user_circle UC', 'UC.user_id = U.user_id', 'left');
 
 		if (!empty($where) && is_array($where)) {
+			if (!empty($where['US.id'])) {
+				$this->db->where('US.id', $where['US.id']);
+			}
+
 			if (!empty($where['US.user_id'])) {
 				$this->db->where('US.user_id', $where['US.user_id']);
 			}
@@ -1982,6 +1989,7 @@ class User_model extends CI_Model
 				$this->db->group_start();
 				$this->db->like('S.service_name', $where['search']);
 				$this->db->or_like('S.description', $where['search']);
+				$this->db->or_like('US.company_name', $where['search']);
 				$this->db->or_like('US.description', $where['search']);
 				$this->db->or_like('US.email', $where['search']);
 				$this->db->or_like('US.mobile', $where['search']);
@@ -1998,7 +2006,12 @@ class User_model extends CI_Model
 			$this->db->where("1=1 {$where}", NULL, FALSE);
 		}
 
-		$this->db->order_by('US.id', 'DESC');
+		if (!empty($options) && in_array('order_by_pending', $options)) {
+			$this->db->order_by("CASE WHEN US.approval_status = 0 THEN 0 ELSE 1 END", "ASC", FALSE);
+			$this->db->order_by('US.id', 'DESC');
+		} else {
+			$this->db->order_by('US.id', 'DESC');
+		}
 
 		if ($limit != '') {
 			$this->db->limit($limit, $start);
@@ -2041,6 +2054,11 @@ class User_model extends CI_Model
 			$userServiceId = $service['user_service_id'];
 			$services[$key]['profile_image'] = !empty($service['profile_image']) ? base_url($service['profile_image']) : 'assets/img/default-user-icon.jpg';
 			$services[$key]['profile_image_thumb'] = !empty($service['profile_image_thumb']) ? base_url($service['profile_image_thumb']) : 'assets/img/default-user-icon.jpg';
+			if (!empty($service['company_logo'])) {
+				$services[$key]['company_logo'] = (filter_var($service['company_logo'], FILTER_VALIDATE_URL) !== false) ? $service['company_logo'] : base_url($service['company_logo']);
+			} else {
+				$services[$key]['company_logo'] = '';
+			}
 			$services[$key]['service_images'] = isset($imageMap[$userServiceId]) ? $imageMap[$userServiceId] : array();
 		}
 
