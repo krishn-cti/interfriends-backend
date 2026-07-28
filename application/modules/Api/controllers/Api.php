@@ -173,6 +173,104 @@ class Api extends Base_Controller
 		}
 	}
 
+	private function prepareWelfarePlan()
+	{
+		$this->mergeJsonRequestData();
+
+		$payoutAmount = 0;
+		if (isset($_REQUEST['payout_amount'])) {
+			$payoutAmount = (float) $_REQUEST['payout_amount'];
+		} elseif (isset($_REQUEST['welfare_payout_amount'])) {
+			$payoutAmount = (float) $_REQUEST['welfare_payout_amount'];
+		} elseif (isset($_REQUEST['loan_amount'])) {
+			$payoutAmount = (float) $_REQUEST['loan_amount'];
+		}
+
+		$monthlyMap = array(
+			1000 => 25,
+			2000 => 50,
+			3000 => 75
+		);
+
+		if (!isset($monthlyMap[(int) $payoutAmount])) {
+			$this->response(false, "Invalid welfare payout amount.");
+			return false;
+		}
+
+		$monthlyPayment = $monthlyMap[(int) $payoutAmount];
+		$term = (!empty($_REQUEST['tenure']) && (int) $_REQUEST['tenure'] > 0) ? (int) $_REQUEST['tenure'] : 24;
+
+		$_REQUEST['loan_amount'] = $payoutAmount;
+		$_REQUEST['welfare_payout_amount'] = $payoutAmount;
+		$_REQUEST['tenure'] = $term;
+		$_REQUEST['loan_type'] = '7';
+		$_REQUEST['interest_rate'] = 0;
+		$_REQUEST['interest_payable'] = 0;
+		$_REQUEST['loan_emi'] = $monthlyPayment;
+		$_REQUEST['welfare_admin_fee'] = $monthlyPayment;
+		$_REQUEST['admin_risk'] = $monthlyPayment;
+		$_REQUEST['total_payment'] = ($monthlyPayment * $term) + $monthlyPayment;
+		$_REQUEST['welfare_balance'] = $payoutAmount;
+		$_REQUEST['provident'] = $this->requestFloat(array('provident', 'provident_amount', 'providentAmount'), 0);
+
+		if (empty($_REQUEST['status'])) {
+			$_REQUEST['status'] = 1;
+		}
+
+		if (empty($_REQUEST['created_at'])) {
+			$_REQUEST['created_at'] = date('Y-m-d H:i:s');
+		}
+
+		if (empty($_REQUEST['start_date'])) {
+			$_REQUEST['start_date'] = date('Y-m-d');
+		}
+
+		if (empty($_REQUEST['end_date'])) {
+			$originalDay = (int) date('d', strtotime($_REQUEST['start_date']));
+			$endDate = new DateTime($_REQUEST['start_date']);
+			$endDate->modify('+' . ($term - 1) . ' month');
+
+			$year = (int) $endDate->format('Y');
+			$month = (int) $endDate->format('m');
+			$lastDay = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+			$day = min($originalDay, $lastDay);
+
+			$_REQUEST['end_date'] = sprintf('%04d-%02d-%02d', $year, $month, $day);
+		}
+
+		return true;
+	}
+
+	private function mergeJsonRequestData()
+	{
+		$rawInput = file_get_contents('php://input');
+		if (empty($rawInput)) {
+			return;
+		}
+
+		$jsonData = json_decode($rawInput, true);
+		if (!is_array($jsonData)) {
+			return;
+		}
+
+		foreach ($jsonData as $key => $value) {
+			if (!isset($_REQUEST[$key])) {
+				$_REQUEST[$key] = $value;
+			}
+		}
+	}
+
+	private function requestFloat($keys, $default = 0)
+	{
+		foreach ($keys as $key) {
+			if (isset($_REQUEST[$key]) && $_REQUEST[$key] !== '') {
+				return (float) $_REQUEST[$key];
+			}
+		}
+
+		return $default;
+	}
+
 
 	public function request_loan()
 	{
@@ -348,6 +446,363 @@ class Api extends Base_Controller
 		} else {
 			$this->response(false, "There is a problem, please try again.");
 		}
+	}
+
+	public function request_welfare()
+	{
+		$this->mergeJsonRequestData();
+
+		$existingWelfare = $this->common->getData('user_loan', "user_id = '" . (int)$_REQUEST['user_id'] . "' AND loan_type = '7' AND status IN (1, 4, 5)", array('single'));
+		if (!empty($existingWelfare)) {
+			$this->response(false, "You already have an active or pending welfare account.");
+			return;
+		}
+
+		if (!$this->prepareWelfarePlan()) {
+			return;
+		}
+
+		$post = $this->common->getField('user_loan', $_REQUEST);
+		$result = $this->common->insertData('user_loan', $post);
+		$loan_id = $this->db->insert_id();
+
+		if ($result) {
+			$message = "request welfare";
+			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
+			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
+
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(100, 'minus', $_REQUEST['user_id']);
+
+			// Send Email to Applicant & Super Admins
+			$user = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			if (!empty($user)) {
+				// 1. Confirmation email to the applying user
+				if (!empty($user['email'])) {
+					$applicantName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+					if (empty($applicantName)) {
+						$applicantName = 'Member';
+					}
+					$userMailData['sendername'] = $applicantName;
+					$userMailData['useremail']  = $user['email'];
+					$userMailData['message']    = "
+						<p>Thank you for applying to join the Interfriends Welfare Scheme.</p>
+						<p>We are reviewing your application against our eligibility criteria and will notify you once a decision has been made.</p>
+						<p>If you did not submit this application, please contact us immediately.</p>
+						<br>
+						<table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse: collapse; margin-top: 10px; margin-bottom: 10px;\">
+							<tr>
+								<td colspan=\"2\"><strong>Product Details</strong></td>
+							</tr>
+							<tr>
+								<td>Claim Payout Amount</td>
+								<td>&pound;" . number_format($_REQUEST['welfare_payout_amount'], 2) . "</td>
+							</tr>
+							<tr>
+								<td>Term</td>
+								<td>" . (!empty($_REQUEST['tenure']) ? $_REQUEST['tenure'] : 24) . " months</td>
+							</tr>
+							<tr>
+								<td>Monthly Payment</td>
+								<td>&pound;" . number_format($_REQUEST['loan_emi'], 2) . " (NB: Your monthly payment doubles as soon as a successful claim is made)</td>
+							</tr>
+						</table>
+						<br>
+						<p>If you do not make a claim, all your payments will be returned to you after " . (!empty($_REQUEST['tenure']) ? $_REQUEST['tenure'] : 24) . " months or when you leave the scheme.</p>
+						<p><strong>Next step:</strong> We have contacted your nominated witness for confirmation. Once we receive their response, we will process your application and make a final decision.</p>
+						<br>
+						<p><strong>Witness responsibilities:</strong></p>
+						<ul>
+							<li>Confirm that you are aware of this claim.</li>
+							<li>Confirm that the claim is accurate and honest.</li>
+							<li>Confirm that the claimant will use the funds only for the stated reason.</li>
+							<li>Acknowledge that, if the claim is dishonest, both you and the claimant may lose future Interfriends benefits.</li>
+							<li>Acknowledge that supporting a dishonest claim gives Interfriends the right to cancel any active benefits you hold.</li>
+							<li>Understand that making or supporting a dishonest claim may seriously affect your Trust Score.</li>
+						</ul>
+					";
+					$userMailMessage = $this->load->view('template/common-mail', $userMailData, true);
+					$this->sendMail($user['email'], 'Interfriends Welfare Scheme Application', $userMailMessage);
+				}
+
+				// 2. Email to Super Admins
+				$admins = $this->common->getData('superAdmin', array('admin_type' => '2'));
+				if (!empty($admins)) {
+					foreach ($admins as $admin) {
+						$mailData['sendername'] = $admin['name'];
+						$mailData['useremail'] = $admin['email'];
+						$mailData['message'] = "
+							<p>A new Welfare application requires your approval.</p>
+							<p><strong>User:</strong> {$user['first_name']} {$user['last_name']}</p>
+							<p><strong>Email:</strong> {$user['email']}</p>
+							<p><strong>Payout Amount:</strong> &pound;" . number_format($_REQUEST['welfare_payout_amount'], 2) . "</p>
+							<p><strong>Term:</strong> {$_REQUEST['tenure']} Months</p>
+							<p><strong>Monthly Contribution:</strong> &pound;" . number_format($_REQUEST['loan_emi'], 2) . "</p>
+						";
+						$adminMailMessage = $this->load->view('template/common-mail', $mailData, true);
+						$this->sendMail($admin['email'], 'New Welfare Application Submitted', $adminMailMessage);
+					}
+				}
+			}
+
+			$this->response(true, "Welfare account created successfully", array("welfare_id" => $loan_id));
+		} else {
+			$this->response(false, "There is a problem, please try again.");
+		}
+	}
+
+	public function submitWelfareClaim()
+	{
+		$this->mergeJsonRequestData();
+
+		if (empty($_REQUEST['user_id']) || empty($_REQUEST['welfare_loan_id']) || empty($_REQUEST['payout_amount'])) {
+			$this->response(false, "Missing required parameters.");
+			return;
+		}
+
+		$userId = $_REQUEST['user_id'];
+		$welfareLoanId = $_REQUEST['welfare_loan_id'];
+		$payoutAmount = (float) $_REQUEST['payout_amount'];
+		$claimReason = !empty($_REQUEST['claim_reason']) ? trim($_REQUEST['claim_reason']) : '';
+		$beneficiary = !empty($_REQUEST['beneficiary']) ? trim($_REQUEST['beneficiary']) : '';
+		$seconder1UserId = !empty($_REQUEST['seconder1_user_id']) ? $_REQUEST['seconder1_user_id'] : (!empty($_REQUEST['seconder1_id']) ? $_REQUEST['seconder1_id'] : '');
+		$seconder2UserId = !empty($_REQUEST['seconder2_user_id']) ? $_REQUEST['seconder2_user_id'] : (!empty($_REQUEST['seconder2_id']) ? $_REQUEST['seconder2_id'] : '');
+
+		// Validate Claim Reason
+		$validReasons = array('Bereavement', 'Medical Bills', 'Other');
+		if (!in_array($claimReason, $validReasons)) {
+			$this->response(false, "Invalid claim reason. Must be Bereavement or Medical Bills or Other.");
+			return;
+		}
+
+		// Validate Beneficiary
+		$validBeneficiaries = array('Mother', 'Father', 'Sibling', 'Child', 'Close Relation', 'Other');
+		if (!in_array($beneficiary, $validBeneficiaries)) {
+			$this->response(false, "Invalid beneficiary. Must be Mother, Father, Sibling, Child, Close Relation or Other.");
+			return;
+		}
+
+		// Validate Seconders
+		if (empty($seconder1UserId) || empty($seconder2UserId)) {
+			$this->response(false, "Two seconders (seconder1_user_id and seconder2_user_id) are required.");
+			return;
+		}
+
+		if ($seconder1UserId == $userId || $seconder2UserId == $userId || $seconder1UserId == $seconder2UserId) {
+			$this->response(false, "Seconders must be two distinct users and cannot be the applicant.");
+			return;
+		}
+
+		// Check Welfare Loan Account
+		$welfareAccount = $this->common->getData(
+			'user_loan',
+			array('id' => $welfareLoanId, 'user_id' => $userId, 'loan_type' => 7),
+			array('single')
+		);
+
+		if (empty($welfareAccount) || !is_array($welfareAccount)) {
+			$this->response(false, "Welfare account not found.");
+			return;
+		}
+
+		if (empty($welfareAccount['status']) || $welfareAccount['status'] != 4) {
+			$this->response(false, "Welfare account is not active or approved.");
+			return;
+		}
+
+		// Check for existing pending claim
+		$existingPendingClaim = $this->common->getData(
+			'welfare_claim',
+			array('user_id' => $userId, 'welfare_loan_id' => $welfareLoanId, 'status' => 0),
+			array('single')
+		);
+
+		if (!empty($existingPendingClaim) && is_array($existingPendingClaim)) {
+			$this->response(false, "You already have a pending welfare claim awaiting admin approval.");
+			return;
+		}
+
+		$currentBalance = (is_array($welfareAccount) && isset($welfareAccount['welfare_balance'])) ? (float) $welfareAccount['welfare_balance'] : 0;
+		if ($payoutAmount <= 0 || $payoutAmount > $currentBalance) {
+			$this->response(false, "Claim payout amount cannot exceed available welfare balance (&pound;" . number_format($currentBalance, 2) . ").");
+			return;
+		}
+
+		// Check Net Welfare Balance (avgComplete)
+		$paidAmountData = $this->common->getData('user_loan', "user_id = '" . (int)$userId . "' AND loan_type = '7' AND status IN (2, 4)", array('field' => 'IFNULL(SUM(total_payment), 0) as total_paid', 'single'));
+		$totalPaidAmount = (is_array($paidAmountData) && isset($paidAmountData['total_paid'])) ? (float) $paidAmountData['total_paid'] : 0;
+
+		$claimWhere = array('user_id' => (int)$userId, 'status' => 1);
+		if (!empty($welfareAccount['group_id'])) {
+			$claimWhere['group_id'] = (int)$welfareAccount['group_id'];
+		}
+		$approvedClaimsData = $this->common->getData('welfare_claim', $claimWhere, array('field' => 'IFNULL(SUM(payout_amount), 0) as total_claimed', 'single'));
+		$totalApprovedClaims = (is_array($approvedClaimsData) && isset($approvedClaimsData['total_claimed'])) ? (float) $approvedClaimsData['total_claimed'] : 0;
+
+		$netWelfareBalance = $totalPaidAmount - $totalApprovedClaims;
+		if ($totalApprovedClaims > 0 && $netWelfareBalance <= 0) {
+			$this->response(false, "You cannot submit a claim because your net welfare balance is not greater than 0.");
+			return;
+		}
+
+		// Prepopulate User Info
+		$userInfo = $this->common->getData('user', array('user_id' => $userId), array('single'));
+		$userName = !empty($_REQUEST['name']) ? $_REQUEST['name'] : ((is_array($userInfo) && !empty($userInfo['first_name'])) ? trim($userInfo['first_name'] . ' ' . ($userInfo['last_name'] ?? '')) : '');
+		$userEmail = !empty($_REQUEST['email']) ? $_REQUEST['email'] : ((is_array($userInfo) && !empty($userInfo['email'])) ? $userInfo['email'] : '');
+		$groupId = !empty($_REQUEST['group_id']) ? $_REQUEST['group_id'] : ((is_array($welfareAccount) && !empty($welfareAccount['group_id'])) ? $welfareAccount['group_id'] : 0);
+
+		$claimData = array(
+			'welfare_loan_id'   => $welfareLoanId,
+			'user_id'           => $userId,
+			'group_id'          => $groupId,
+			'name'              => $userName,
+			'email'             => $userEmail,
+			'claim_reason'      => $claimReason,
+			'beneficiary'       => $beneficiary,
+			'seconder1_user_id' => $seconder1UserId,
+			'seconder2_user_id' => $seconder2UserId,
+			'payout_amount'     => $payoutAmount,
+			'status'            => 0, // Pending
+			'created_at'        => date('Y-m-d H:i:s')
+		);
+
+		$claimPost = $this->common->getField('welfare_claim', $claimData);
+		$result = $this->common->insertData('welfare_claim', $claimPost);
+		if (!$result) {
+			$this->response(false, "Unable to submit welfare claim. Please try again.");
+			return;
+		}
+
+		$claimId = $this->db->insert_id();
+
+		// Insert Status History
+		$this->common->insertData('welfare_claim_status_history', array(
+			'claim_id'         => $claimId,
+			'user_id'          => $userId,
+			'note_title'       => 'Welfare Claim Submitted',
+			'note_description' => 'Claim submitted for ' . $claimReason . ' (&pound;' . number_format($payoutAmount, 2) . ')',
+			'status'           => 0,
+			'created_at'       => date('Y-m-d H:i:s')
+		));
+
+		// Notifications
+		$message = "welfare claim submitted";
+		$this->send_nofification($userId, $groupId, $message, $claimId, "4");
+		$this->send_nofificationAdmin($userId, $groupId, "new welfare claim submitted", $claimId, "4");
+
+		// Send Email to Super Admin
+		$admins = $this->common->getData('superAdmin', array('admin_type' => '2'));
+		if (!empty($admins) && is_array($admins)) {
+			foreach ($admins as $admin) {
+				if (!empty($admin['email'])) {
+					$mailData = array();
+					$mailData['sendername'] = $admin['name'] ?? 'Admin';
+					$mailData['useremail']  = $admin['email'];
+					$mailData['message']    = "
+						<p>A new Welfare Claim has been submitted and is pending review.</p>
+						<p><strong>User:</strong> {$userName} ({$userEmail})</p>
+						<p><strong>Reason:</strong> {$claimReason}</p>
+						<p><strong>Beneficiary:</strong> {$beneficiary}</p>
+						<p><strong>Payout Amount:</strong> &pound;" . number_format($payoutAmount, 2) . "</p>
+					";
+					$mailMessage = $this->load->view('template/common-mail', $mailData, true);
+					$this->sendMail($admin['email'], 'New Welfare Claim Submitted', $mailMessage);
+				}
+			}
+		}
+
+		// Send Email to Witness 1 and Witness 2 (Seconders) if available
+		$witnessUserIds = array_filter(array($seconder1UserId, $seconder2UserId));
+		if (!empty($witnessUserIds)) {
+			foreach ($witnessUserIds as $wUserId) {
+				$witness = $this->common->getData('user', array('user_id' => $wUserId), array('single'));
+				if (!empty($witness) && is_array($witness) && !empty($witness['email'])) {
+					$witnessName = trim(($witness['first_name'] ?? '') . ' ' . ($witness['last_name'] ?? ''));
+					if (empty($witnessName)) {
+						$witnessName = 'Member';
+					}
+					$witnessMailData = array();
+					$witnessMailData['sendername'] = $witnessName;
+					$witnessMailData['useremail']  = $witness['email'];
+					$witnessMailData['message']    = "
+						<p>Member <strong>{$userName}</strong> has submitted an Interfriends Welfare claim.</p>
+						<p>The claimant has nominated you to provide a witness statement confirming that the claim is accurate and honest.</p>
+						<br>
+						<p><strong>See the details</strong></p>
+						<table border=\"1\" cellpadding=\"8\" cellspacing=\"0\" style=\"border-collapse: collapse; margin-top: 10px; margin-bottom: 10px;\">
+							<tr>
+								<td><strong>Reason for claim</strong></td>
+								<td>" . htmlspecialchars($claimReason) . "</td>
+							</tr>
+							<tr>
+								<td><strong>Relationship to the claimant</strong></td>
+								<td>" . htmlspecialchars($beneficiary) . "</td>
+							</tr>
+						</table>
+						<br>
+						<p><strong>Witness responsibilities:</strong></p>
+						<ul>
+							<li>Confirm that you are aware of this claim.</li>
+							<li>Confirm that the claim is accurate and honest.</li>
+							<li>Confirm that the claimant will use the funds only for the stated reason.</li>
+							<li>Acknowledge that, if the claim is dishonest, both you and the claimant may lose future Interfriends benefits.</li>
+							<li>Acknowledge that supporting a dishonest claim gives Interfriends the right to cancel any active benefits you hold.</li>
+							<li>Understand that making or supporting a dishonest claim may seriously affect your Trust Score.</li>
+						</ul>
+					";
+					$witnessMailMessage = $this->load->view('template/common-mail', $witnessMailData, true);
+					$this->sendMail($witness['email'], 'Interfriends Welfare Claim Witness Request', $witnessMailMessage);
+				}
+			}
+		}
+
+		$this->response(true, "Welfare claim submitted successfully.", array("claim_id" => $claimId));
+	}
+
+	public function getUserWelfareClaims()
+	{
+		$this->mergeJsonRequestData();
+
+		if (empty($_REQUEST['user_id'])) {
+			$this->response(false, "User ID is required.");
+			return;
+		}
+
+		$userId = $_REQUEST['user_id'];
+		$where = "WC.user_id = '" . (int)$userId . "'";
+
+		if (isset($_REQUEST['status']) && $_REQUEST['status'] !== '') {
+			$where .= " AND WC.status = '" . (int)$_REQUEST['status'] . "'";
+		}
+
+		if (!empty($_REQUEST['welfare_loan_id'])) {
+			$where .= " AND WC.welfare_loan_id = '" . (int)$_REQUEST['welfare_loan_id'] . "'";
+		}
+
+		$this->db->select("
+			WC.*,
+			CONCAT(IFNULL(S1.first_name,''), ' ', IFNULL(S1.last_name,'')) AS seconder1_name, S1.email AS seconder1_email,
+			CONCAT(IFNULL(S2.first_name,''), ' ', IFNULL(S2.last_name,'')) AS seconder2_name, S2.email AS seconder2_email,
+			UL.welfare_payout_amount, UL.welfare_balance, UL.loan_emi
+		");
+		$this->db->from("welfare_claim WC");
+		$this->db->join("user S1", "S1.user_id = WC.seconder1_user_id", "left");
+		$this->db->join("user S2", "S2.user_id = WC.seconder2_user_id", "left");
+		$this->db->join("user_loan UL", "UL.id = WC.welfare_loan_id", "left");
+		$this->db->where($where, NULL, FALSE);
+		$this->db->order_by("WC.id", "DESC");
+		$claims = $this->db->get()->result_array();
+
+		$countData = 1;
+		if (!empty($claims)) {
+			foreach ($claims as $key => $claim) {
+				$claims[$key]['sno'] = $countData++;
+				$history = $this->common->getData('welfare_claim_status_history', array('claim_id' => $claim['id']), array('sort_by' => 'id', 'sort_direction' => 'asc'));
+				$claims[$key]['history'] = !empty($history) ? $history : array();
+			}
+		}
+
+		$this->response(true, "Welfare claims fetched successfully.", array("claims" => $claims, "totalCount" => count($claims)));
 	}
 
 
@@ -1343,17 +1798,60 @@ class Api extends Base_Controller
 
 	public function loanPaymentList()
 	{
+		$this->mergeJsonRequestData();
 
 		$where = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "' AND loan_id = '" . $_REQUEST['loan_id'] . "' ";
+		$where1 = "( user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "' AND loan_id = '" . $_REQUEST['loan_id'] . "') GROUP BY user_id ";
+
 		$PaymentList = $this->common->getData('user_loan_payment', $where, array(
-			'sort_by' => 'created_at',
-			'sort_direction' => 'DESC'
+			'sort_by' => 'id',
+			'sort_direction' => 'asc'
 		));
 
-		if (!empty($PaymentList)) {
-			$this->response(true, "Payment fetch Successfully.", array("paymentList" => $PaymentList));
+		$PaymentTotal = $this->common->getData('user_loan_payment', $where1, array("field" => 'user_id,sum(amount) as total_amount', "single"));
+
+		if ($PaymentTotal) {
+			$totalAmount = $PaymentTotal['total_amount'];
 		} else {
-			$this->response(true, "Payment fetch Successfully.", array("paymentList" => array()));
+			$totalAmount = 0.00;
+		}
+
+		$LoanDetail = $this->common->getData('user_loan', array("id" => $_REQUEST['loan_id']), array('single'));
+
+		if (!empty($LoanDetail)) {
+			$loanAmount_initital = $LoanDetail['loan_amount'];
+			$loanAmount = $LoanDetail['total_payment'];
+			$interest_rate = $LoanDetail['interest_rate'];
+			$interest_payable = $LoanDetail['interest_payable'];
+			$provident = $LoanDetail['provident'];
+		} else {
+			$loanAmount_initital = 0;
+			$loanAmount = 0;
+			$interest_rate = 0;
+			$interest_payable = 0;
+			$provident = 0;
+		}
+
+		if (!empty($PaymentList)) {
+			$this->response(true, "Payment fetch Successfully.", array(
+				"paymentList" => $PaymentList,
+				'totalPaidAmount' => (float)$totalAmount,
+				'loanAmount' => (float)$loanAmount,
+				'interest_rate' => (float)$interest_rate,
+				'interest_payable' => (float)$interest_payable,
+				'loanAmount_initital' => (float)$loanAmount_initital,
+				'provident' => (float)$provident
+			));
+		} else {
+			$this->response(true, "Payment fetch Successfully.", array(
+				"paymentList" => array(),
+				'totalPaidAmount' => (float)$totalAmount,
+				'loanAmount' => (float)$loanAmount,
+				'interest_rate' => (float)$interest_rate,
+				'interest_payable' => (float)$interest_payable,
+				'loanAmount_initital' => (float)$loanAmount_initital,
+				'provident' => (float)$provident
+			));
 		}
 	}
 
@@ -3206,172 +3704,88 @@ class Api extends Base_Controller
 
 	public function welfareList()
 	{
+		$this->mergeJsonRequestData();
 
-		// 		$wherePending = "user_id = '". $_REQUEST['user_id'] ."' AND group_id = '". $_REQUEST['group_id'] ."' AND status= '1' AND groupLifecycle_id = '147'";
-
-		//         $resultPending = $this->common->getData('user_group_lifecycle',$wherePending,array('sort_by' => 'month', 'sort_direction' => 'asc'));
-
-		$resultPending = array();
-		$wherePendingwel = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "'AND groupLifecycle_id = '147'
-		    GROUP BY user_id,grand_total_amount,group_id,groupLifecycle_id
-		";
-
-		$resultwelTotal = $this->common->getData('user_group_lifecycle', $wherePendingwel, array("field" => 'user_id,group_id,groupLifecycle_id,grand_total_amount', ""));
-
-
-
-		$wherewelamount = "group_id = '" . $_REQUEST['group_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND loan_amount_status = 1";
-
-		$resultAmount = $this->common->getData('user_group_lifecycle', $wherewelamount, array("field" => 'sum(amount) as amount', ""));
-
-
-
-		$totalPaidAmount = 0;
-		$totalActivePayment = 0;
-		$avgAmount = 0;
-
-		if (!empty($resultwelTotal)) {
-			foreach ($resultwelTotal as $key => $value) {
-
-				$resultwelTotal[$key]['payment_list'] = array();
-				$resultwelTotal[$key]['payment_list_status'] = true;
-
-				$resultwelTotal[$key]['grand_total_amount'] = (float) $value['grand_total_amount'];
-
-				$resultwelTotal[$key]['amount'] = (float) $resultAmount[$key]['amount'];
-
-				$totalPaidAmount += $resultwelTotal[$key]['grand_total_amount'];
-				$totalActivePayment += $resultwelTotal[$key]['amount'];
-			}
-			$avgAmount =   $totalPaidAmount - $totalActivePayment;
+		if (empty($_REQUEST['user_id'])) {
+			$this->response(false, "User ID is required.");
+			return;
 		}
 
+		$userId = $_REQUEST['user_id'];
+		$groupWhere = !empty($_REQUEST['group_id']) ? " AND L.group_id = '" . (int)$_REQUEST['group_id'] . "'" : "";
 
-		if (!empty($resultwelTotal)) {
-			foreach ($resultwelTotal as $key => $value) {
-
-				$wherePending = "user_id = '" . $value['user_id'] . "' AND group_id = '" . $value['group_id'] . "'  AND groupLifecycle_id = '" . $value['groupLifecycle_id'] . "'";
-
-				$resultPending = $this->common->getData('user_group_lifecycle', $wherePending, array(''));
-
-				$summonth = $this->common->getData('user_group_lifecycle', $wherePending, array("sort_by" => 'month', "sort_direction" => 'DESC', 'single'));
-
-
-
-				$resultwelTotal[$key]['payment_list'] = array();
-				$resultwelTotal[$key]['payment_list_status'] = true;
-				$resultwelTotal[$key]['paid_amount'] = (float) $value['amount'];
-				$resultwelTotal[$key]['total_payment'] = (float) $resultwelTotal[$key]['grand_total_amount'];
-
-				$resultwelTotal[$key]['id'] =     $resultPending[$key]['id'];
-				$resultwelTotal[$key]['amount'] = $resultPending[$key]['amount'];
-				$resultwelTotal[$key]['month'] = $summonth['month'];
-				$resultwelTotal[$key]['date'] = $resultPending[$key]['date'];
-
-				$resultwelTotal[$key]['payment_method'] = $resultPending[$key]['payment_method'];
-				$resultwelTotal[$key]['status'] = $resultPending[$key]['status'];
-				$resultwelTotal[$key]['created_at'] = $resultPending[$key]['created_at'];
-				$resultwelTotal[$key]['loan_emi'] = $resultPending[$key]['loan_emi'];
-
-				$resultwelTotal[$key]['admin_risk'] = $resultPending[$key]['admin_risk'];
-				$resultwelTotal[$key]['provident'] = $resultPending[$key]['provident'];
-
-				$resultwelTotal[$key]['payment_status'] = $resultPending[$key]['payment_status'];
-
-				$resultwelTotal[$key]['loan_amount_status'] = $resultPending[$key]['loan_amount_status'];
-			}
-		}
-
-
-
-
-		$whereComplete = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "'AND groupLifecycle_id = '147' AND status= '2'
-		    GROUP BY user_id,group_id,groupLifecycle_id
-		";
-
-		$resultComplete = $this->common->getData('user_group_lifecycle', $wherePendingwel, array("field" => 'user_id,group_id,groupLifecycle_id', ""));
-		// 	
-
-
-		// $whereComplete = "user_id = '". $_REQUEST['user_id'] ."' AND group_id = '". $_REQUEST['group_id'] ."' AND status= '2' AND groupLifecycle_id = '147'";
-
-		// $resultComplete = $this->common->getData('user_group_lifecycle',$whereComplete,array());
-
-
-
-		if (!empty($resultComplete)) {
-			foreach ($resultComplete as $key => $value) {
-
-				$wherePending = "user_id = '" . $value['user_id'] . "' AND group_id = '" . $value['group_id'] . "'   AND status= '2'AND groupLifecycle_id = '" . $value['groupLifecycle_id'] . "'";
-
-				$resultPending = $this->common->getData('user_group_lifecycle', $wherePending, array(''));
-
-
-				$resultAmount = $this->common->getData('user_group_lifecycle', $wherePending, array("field" => 'sum(amount) as amount', "single"));
-
-
-
-				$resultComplete[$key]['payment_list'] = array();
-				$resultComplete[$key]['payment_list_status'] = true;
-				$resultComplete[$key]['paid_amount'] = (float)  $resultPending[$key]['amount'];
-				$resultComplete[$key]['total_payment'] = (float) $resultPending[$key]['total_payment'];
-
-				$resultComplete[$key]['id'] =     $resultPending[$key]['id'];
-				$resultComplete[$key]['amount'] = $resultAmount['amount'];
-				$resultComplete[$key]['month'] = $resultPending[$key]['month'];
-				$resultComplete[$key]['date'] = $resultPending[$key]['date'];
-
-				$resultComplete[$key]['payment_method'] = $resultPending[$key]['payment_method'];
-				$resultComplete[$key]['status'] = $resultPending[$key]['status'];
-				$resultComplete[$key]['created_at'] = $resultPending[$key]['created_at'];
-				$resultComplete[$key]['loan_emi'] = $resultPending[$key]['loan_emi'];
-
-				$resultComplete[$key]['admin_risk'] = $resultPending[$key]['admin_risk'];
-				$resultComplete[$key]['provident'] = $resultPending[$key]['provident'];
-
-				$resultComplete[$key]['payment_status'] = $resultPending[$key]['payment_status'];
-
-				$resultComplete[$key]['loan_amount_status'] = $resultPending[$key]['loan_amount_status'];
-			}
-		}
-
-		// if( $resultComplete){
-
-		//      $avgComplete = $resultComplete[0]['amount'];
-		// }else{
-		//     $avgComplete = 0.00;
-		// }
-		// new-changes 04-06-2024
-		$grouplifecycle = $this->common->getData('group_lifecycle', array("group_id" => $_REQUEST['group_id'], "group_type_id" => '4'), array('sort_by' => 'id', 'sort_direction' => 'desc'));
-		$avgAmount = 0;
-		$avgwelfareAmount = 0;
-		$_REQUEST['group_cycle_id'] = $grouplifecycle[0]['id'];
-		$cycleTransfer = $this->common->getData('cycle_status_management', array('user_id' => $_REQUEST['user_id'], 'group_id' => $_REQUEST['group_id'], 'group_cycle_id' => $_REQUEST['group_cycle_id']), array('single'));
-		if (empty($cycleTransfer)) {
-			$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
-			if (!empty($result['total_payment'])) {
-				$avgAmount = $result['total_payment'];
-			} else {
-				$avgAmount = 0.00;
+		// 1. Pending Welfare Requests (Status 1, 5)
+		$wherePending = "L.user_id = '" . (int)$userId . "' {$groupWhere} AND L.loan_type = '7' AND L.status IN (1, 5)";
+		$resultPending = $this->user_model->loan_detail($wherePending, array());
+		if (!empty($resultPending)) {
+			foreach ($resultPending as $key => $value) {
+				$payments = $this->common->getData('user_loan_payment', array('loan_id' => $value['id']), array('sort_by' => 'id', 'sort_direction' => 'asc'));
+				$resultPending[$key]['payment_list'] = !empty($payments) ? $payments : array();
+				$resultPending[$key]['payment_list_status'] = !empty($payments);
+				$resultPending[$key]['paid_amount'] = (float) ($value['paid_amount'] ?? 0);
+				$resultPending[$key]['total_payment'] = (float) ($value['total_payment'] ?? 0);
 			}
 		} else {
-			$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
-
-			if (!empty($paidResult['total_payment'])) {
-				$paidAvgAmount = $paidResult['total_payment'];
-			} else {
-				$paidAvgAmount = 0;
-			}
-			$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $_REQUEST['group_cycle_id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-			$payout_amount_total = $result['total_amount'];
-			//print_r($payout_amount_total);
-			$avgwelfareAmount = $payout_amount_total - $paidAvgAmount;
+			$resultPending = array();
 		}
 
+		// 2. Completed Welfare Accounts (Status 2)
+		$whereComplete = "L.user_id = '" . (int)$userId . "' {$groupWhere} AND L.loan_type = '7' AND L.status = 2";
+		$resultComplete = $this->user_model->loan_detail($whereComplete, array());
+		$totalPaidAmount = 0;
+		if (!empty($resultComplete)) {
+			foreach ($resultComplete as $key => $value) {
+				$payments = $this->common->getData('user_loan_payment', array('loan_id' => $value['id']), array('sort_by' => 'id', 'sort_direction' => 'asc'));
+				$resultComplete[$key]['payment_list'] = !empty($payments) ? $payments : array();
+				$resultComplete[$key]['payment_list_status'] = !empty($payments);
+				$resultComplete[$key]['paid_amount'] = (float) ($value['paid_amount'] ?? 0);
+				$resultComplete[$key]['total_payment'] = (float) ($value['total_payment'] ?? 0);
+				$totalPaidAmount += $resultComplete[$key]['paid_amount'];
+			}
+		} else {
+			$resultComplete = array();
+		}
 
-		$this->response(true, "list fetch Successfully.", array("listPending" => $resultPending, "listComplete" => $resultComplete, "listActive" => $resultwelTotal, "avgAmount" => $avgAmount, "avgComplete" => $avgwelfareAmount));
+		// 3. Active Welfare Accounts (Status 4)
+		$whereActive = "L.user_id = '" . (int)$userId . "' {$groupWhere} AND L.loan_type = '7' AND L.status = 4";
+		$resultActive = $this->user_model->loan_detail($whereActive, array());
+		$totalActivePayment = 0;
+		$avgAmount = 0;
+		if (!empty($resultActive)) {
+			foreach ($resultActive as $key => $value) {
+				$payments = $this->common->getData('user_loan_payment', array('loan_id' => $value['id']), array('sort_by' => 'id', 'sort_direction' => 'asc'));
+				$resultActive[$key]['payment_list'] = !empty($payments) ? $payments : array();
+				$resultActive[$key]['payment_list_status'] = !empty($payments);
+				$resultActive[$key]['paid_amount'] = (float) ($value['paid_amount'] ?? 0);
+				$resultActive[$key]['total_payment'] = (float) ($value['total_payment'] ?? 0);
+				$totalPaidAmount += $resultActive[$key]['paid_amount'];
+				$totalActivePayment += $resultActive[$key]['total_payment'];
+			}
+			$avgAmount = $totalActivePayment - $totalPaidAmount;
+		} else {
+			$resultActive = array();
+		}
+
+		// Calculate total approved claims payout for the user
+		$claimWhere = array('user_id' => (int)$userId, 'status' => 1);
+		if (!empty($_REQUEST['group_id'])) {
+			$claimWhere['group_id'] = (int)$_REQUEST['group_id'];
+		}
+		$approvedClaimsData = $this->common->getData('welfare_claim', $claimWhere, array('field' => 'IFNULL(SUM(payout_amount), 0) as total_claimed', 'single'));
+		$totalApprovedClaims = (float) ($approvedClaimsData['total_claimed'] ?? 0);
+
+		$avgComplete = $totalPaidAmount - $totalApprovedClaims;
+
+		$this->response(true, "Welfare list fetched successfully.", array(
+			"listPending"     => $resultPending,
+			"listComplete"    => $resultComplete,
+			"listActive"      => $resultActive,
+			// "welfarePending"  => $resultPending,
+			// "welfareComplete" => $resultComplete,
+			// "welfareActive"   => $resultActive,
+			"avgAmount"       => $avgAmount,
+			"avgComplete"     => $avgComplete
+		));
 	}
 
 	public function help2buylist()
@@ -4250,14 +4664,46 @@ class Api extends Base_Controller
 			return;
 		}
 
+		// Maximum 5 Services Check
+		$totalServices = $this->common->getData(
+			'user_services',
+			"user_id='" . $_REQUEST['user_id'] . "' AND status = 1 AND approval_status IN(0,1)",
+			array('count')
+		);
+
+		if ($totalServices >= 5) {
+			$this->response(false, "You can create/request maximum 5 services.");
+			return;
+		}
+
 		if ($this->getServiceImageUploadCount() > 5) {
 			$this->response(false, "You can upload maximum 5 images for one service.");
 			return;
 		}
 
+		$companyLogo = '';
+		if (!empty($_FILES['company_logo']['name'])) {
+			$uploadPath = './assets/user_services/';
+			if (!is_dir($uploadPath) && !mkdir($uploadPath, 0777, true)) {
+				$this->response(false, "Unable to create service image folder.");
+				return;
+			}
+			$logoImage = $this->common->do_upload_file('company_logo', $uploadPath);
+			if (!empty($logoImage['upload_data'])) {
+				$companyLogo = 'assets/user_services/' . $logoImage['upload_data']['file_name'];
+			} else {
+				$this->response(false, $this->serviceImageUploadError(isset($logoImage['error']) ? $logoImage['error'] : ''));
+				return;
+			}
+		} elseif (!empty($_REQUEST['company_logo'])) {
+			$companyLogo = $_REQUEST['company_logo'];
+		}
+
 		$data = array(
 			'user_id'           => $_REQUEST['user_id'],
 			'service_id'        => $_REQUEST['service_id'],
+			'company_name'      => !empty($_REQUEST['company_name']) ? $_REQUEST['company_name'] : '',
+			'company_logo'      => $companyLogo,
 			'description'       => !empty($_REQUEST['description']) ? $_REQUEST['description'] : '',
 			'mobile'            => !empty($_REQUEST['mobile']) ? $_REQUEST['mobile'] : '',
 			'email'             => !empty($_REQUEST['email']) ? $_REQUEST['email'] : '',
@@ -4508,6 +4954,27 @@ class Api extends Base_Controller
 		// Only update allowed fields
 		$updateArr = array();
 
+		if (isset($_REQUEST['company_name'])) {
+			$updateArr['company_name'] = $_REQUEST['company_name'];
+		}
+
+		if (!empty($_FILES['company_logo']['name'])) {
+			$uploadPath = './assets/user_services/';
+			if (!is_dir($uploadPath) && !mkdir($uploadPath, 0777, true)) {
+				$this->response(false, "Unable to create service image folder.");
+				return;
+			}
+			$logoImage = $this->common->do_upload_file('company_logo', $uploadPath);
+			if (!empty($logoImage['upload_data'])) {
+				$updateArr['company_logo'] = 'assets/user_services/' . $logoImage['upload_data']['file_name'];
+			} else {
+				$this->response(false, $this->serviceImageUploadError(isset($logoImage['error']) ? $logoImage['error'] : ''));
+				return;
+			}
+		} elseif (isset($_REQUEST['company_logo'])) {
+			$updateArr['company_logo'] = $_REQUEST['company_logo'];
+		}
+
 		if (isset($_REQUEST['price'])) {
 			$updateArr['price'] = $_REQUEST['price'];
 		}
@@ -4629,6 +5096,10 @@ class Api extends Base_Controller
 		if (isset($_REQUEST['start']) && $_REQUEST['start'] !== '') {
 			$limit = 10;
 			$start = (int)$_REQUEST['start'];
+		}
+
+		if (!empty($_REQUEST['user_service_id'])) {
+			$where['US.id'] = $_REQUEST['user_service_id'];
 		}
 
 		if (!empty($_REQUEST['category_id'])) {
