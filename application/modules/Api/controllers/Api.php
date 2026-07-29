@@ -323,7 +323,7 @@ class Api extends Base_Controller
 		$result = $this->common->insertData('user_loan', $post);
 		$loan_id = $this->db->insert_id();
 		if ($result) {
-			$message = "request loan";
+			$message = "Loan request";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
 			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
 
@@ -467,7 +467,7 @@ class Api extends Base_Controller
 		$loan_id = $this->db->insert_id();
 
 		if ($result) {
-			$message = "request welfare";
+			$message = "Welfare request";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
 			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
 
@@ -1021,7 +1021,7 @@ class Api extends Base_Controller
 
 		if ($result) {
 			$id = $this->db->insert_id();
-			$message = "request safekeeping withdrawal";
+			$message = "Safekeeping withdrawal request";
 			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $id, "7");
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
@@ -1057,7 +1057,7 @@ class Api extends Base_Controller
 
 		if ($result) {
 			$id = $this->db->insert_id();
-			$message = "request for investment";
+			$message = "Investment request";
 			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $id, "9");
 			$this->response(true, "Request Submitted");
 		} else {
@@ -1570,7 +1570,7 @@ class Api extends Base_Controller
 		$loan_id = $this->db->insert_id();
 
 		if ($result) {
-			$message = "request emergency fund";
+			$message = "Emergency Fund Request";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "1");
 
 
@@ -3728,8 +3728,8 @@ class Api extends Base_Controller
 		$userId = $_REQUEST['user_id'];
 		$groupWhere = !empty($_REQUEST['group_id']) ? " AND L.group_id = '" . (int)$_REQUEST['group_id'] . "'" : "";
 
-		// 1. Pending Welfare Requests (Status 1, 5)
-		$wherePending = "L.user_id = '" . (int)$userId . "' {$groupWhere} AND L.loan_type = '7' AND L.status IN (1, 5)";
+		// 1. Pending Welfare Requests (Status 1, 3,5)
+		$wherePending = "L.user_id = '" . (int)$userId . "' {$groupWhere} AND L.loan_type = '7' AND L.status IN (1, 3, 5)";
 		$resultPending = $this->user_model->loan_detail($wherePending, array());
 		if (!empty($resultPending)) {
 			foreach ($resultPending as $key => $value) {
