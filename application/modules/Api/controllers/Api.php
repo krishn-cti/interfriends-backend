@@ -564,7 +564,9 @@ class Api extends Base_Controller
 		$welfareLoanId = $_REQUEST['welfare_loan_id'];
 		$payoutAmount = (float) $_REQUEST['payout_amount'];
 		$claimReason = !empty($_REQUEST['claim_reason']) ? trim($_REQUEST['claim_reason']) : '';
+		$claimReasonOther = !empty($_REQUEST['claim_reason_other']) ? trim($_REQUEST['claim_reason_other']) : '';
 		$beneficiary = !empty($_REQUEST['beneficiary']) ? trim($_REQUEST['beneficiary']) : '';
+		$beneficiaryOther = !empty($_REQUEST['beneficiary_other']) ? trim($_REQUEST['beneficiary_other']) : '';
 		$seconder1UserId = !empty($_REQUEST['seconder1_user_id']) ? $_REQUEST['seconder1_user_id'] : (!empty($_REQUEST['seconder1_id']) ? $_REQUEST['seconder1_id'] : '');
 		$seconder2UserId = !empty($_REQUEST['seconder2_user_id']) ? $_REQUEST['seconder2_user_id'] : (!empty($_REQUEST['seconder2_id']) ? $_REQUEST['seconder2_id'] : '');
 
@@ -575,10 +577,20 @@ class Api extends Base_Controller
 			return;
 		}
 
+		if ($claimReason === 'Other' && empty($claimReasonOther)) {
+			$this->response(false, "Please specify the custom claim reason.");
+			return;
+		}
+
 		// Validate Beneficiary
 		$validBeneficiaries = array('Mother', 'Father', 'Sibling', 'Child', 'Close Relation', 'Other');
 		if (!in_array($beneficiary, $validBeneficiaries)) {
 			$this->response(false, "Invalid beneficiary. Must be Mother, Father, Sibling, Child, Close Relation or Other.");
+			return;
+		}
+
+		if ($beneficiary === 'Other' && empty($beneficiaryOther)) {
+			$this->response(false, "Please specify the custom beneficiary.");
 			return;
 		}
 
@@ -652,18 +664,20 @@ class Api extends Base_Controller
 		$groupId = !empty($_REQUEST['group_id']) ? $_REQUEST['group_id'] : ((is_array($welfareAccount) && !empty($welfareAccount['group_id'])) ? $welfareAccount['group_id'] : 0);
 
 		$claimData = array(
-			'welfare_loan_id'   => $welfareLoanId,
-			'user_id'           => $userId,
-			'group_id'          => $groupId,
-			'name'              => $userName,
-			'email'             => $userEmail,
-			'claim_reason'      => $claimReason,
-			'beneficiary'       => $beneficiary,
-			'seconder1_user_id' => $seconder1UserId,
-			'seconder2_user_id' => $seconder2UserId,
-			'payout_amount'     => $payoutAmount,
-			'status'            => 0, // Pending
-			'created_at'        => date('Y-m-d H:i:s')
+			'welfare_loan_id'    => $welfareLoanId,
+			'user_id'            => $userId,
+			'group_id'           => $groupId,
+			'name'               => $userName,
+			'email'              => $userEmail,
+			'claim_reason'       => $claimReason,
+			'claim_reason_other' => ($claimReason === 'Other') ? $claimReasonOther : null,
+			'beneficiary'        => $beneficiary,
+			'beneficiary_other'  => ($beneficiary === 'Other') ? $beneficiaryOther : null,
+			'seconder1_user_id'  => $seconder1UserId,
+			'seconder2_user_id'  => $seconder2UserId,
+			'payout_amount'      => $payoutAmount,
+			'status'             => 0, // Pending
+			'created_at'         => date('Y-m-d H:i:s')
 		);
 
 		$claimPost = $this->common->getField('welfare_claim', $claimData);
