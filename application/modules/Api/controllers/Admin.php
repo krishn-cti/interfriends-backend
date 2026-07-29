@@ -3768,10 +3768,10 @@ class Admin extends Base_Controller
 		}
 
 		if ($status === '3' || $status === '6') {
-			$message = ($status === '3') ? "loan declined" : "loan has been cancel by sub admin";
+			$message = ($status === '3') ? "loan declined" : "loan has been cancelled by sub admin";
 			$this->send_nofification_admin($userId, $adminId, $groupId, $message, $id, "6", "2");
 
-			$message2 = ($status === '3') ? "loan has been cancel by super admin" : "loan has been cancel by sub admin";
+			$message2 = ($status === '3') ? "loan has been cancelled by super admin" : "loan has been cancelled by sub admin";
 			$this->send_nofification($userId, $adminId, $groupId, $message2, $id, "12");
 
 			if (!empty($getloan['loan_type']) && (string)$getloan['loan_type'] === '7') {
