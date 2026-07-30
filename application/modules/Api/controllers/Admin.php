@@ -1950,30 +1950,65 @@ class Admin extends Base_Controller
 
 
 
+	// function updateCreditScoreUser($points, $calculation_type, $user_id)
+	// {
+	// 	$result = $this->common->getData('credit_score_user', array('user_id' => $user_id), array('single'));
+
+	// 	if (!empty($result)) {
+	// 		$totalScore = 0;
+	// 		$newScore = 0;
+	// 		if ($calculation_type === 'plus') {
+	// 			$totalScore = $result['total_credit_score'] + $points;
+	// 		}
+
+	// 		if ($calculation_type === 'minus') {
+	// 			$totalScore = $result['total_credit_score'] - $points;
+	// 		}
+
+	// 		if ($totalScore > 900) {
+	// 			$newScore = 900;
+	// 		} else if ($totalScore < 0) {
+	// 			$newScore = 0;
+	// 		} else {
+	// 			$newScore = $totalScore;
+	// 		}
+
+	// 		$this->common->updateData('credit_score_user', array("total_credit_score" => $newScore), array('user_id' => $user_id));
+	// 	}
+	// }
+
 	function updateCreditScoreUser($points, $calculation_type, $user_id)
 	{
-		$result = $this->common->getData('credit_score_user', array('user_id' => $user_id), array('single'));
+		$result = $this->common->getData(
+			'credit_score_user',
+			array('user_id' => $user_id),
+			array('single')
+		);
 
 		if (!empty($result)) {
-			$totalScore = 0;
-			$newScore = 0;
+
+			$totalScore = (int)$result['total_credit_score'];
+
 			if ($calculation_type === 'plus') {
-				$totalScore = $result['total_credit_score'] + $points;
+				$totalScore += (int)$points;
 			}
 
 			if ($calculation_type === 'minus') {
-				$totalScore = $result['total_credit_score'] - $points;
+				$totalScore -= (int)$points;
 			}
 
-			if ($totalScore > 900) {
-				$newScore = 900;
-			} else if ($totalScore < 0) {
+			// Only prevent negative score
+			if ($totalScore < 0) {
 				$newScore = 0;
 			} else {
 				$newScore = $totalScore;
 			}
 
-			$this->common->updateData('credit_score_user', array("total_credit_score" => $newScore), array('user_id' => $user_id));
+			$this->common->updateData(
+				'credit_score_user',
+				array("total_credit_score" => $newScore),
+				array('user_id' => $user_id)
+			);
 		}
 	}
 
@@ -8988,10 +9023,10 @@ class Admin extends Base_Controller
 				$data['useremail'] = "";
 				$data['message'] = '<p>A new Welfare account has been created for you by the Admin.</p>
 				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
-					<tr><td><strong>Payout Amount</strong></td><td>&pound;' . number_format($_REQUEST['welfare_payout_amount'], 2) . '</td></tr>
+					<tr><td><strong>Payout Amount</strong></td><td>£' . number_format($_REQUEST['welfare_payout_amount'], 2) . '</td></tr>
 					<tr><td><strong>Term</strong></td><td>' . $_REQUEST['tenure'] . ' Months</td></tr>
-					<tr><td><strong>Monthly Payment</strong></td><td>&pound;' . number_format($_REQUEST['loan_emi'], 2) . '</td></tr>
-					<tr><td><strong>Admin Fee</strong></td><td>&pound;' . number_format($_REQUEST['welfare_admin_fee'], 2) . '</td></tr>
+					<tr><td><strong>Monthly Payment</strong></td><td>£' . number_format($_REQUEST['loan_emi'], 2) . '</td></tr>
+					<tr><td><strong>Admin Fee</strong></td><td>£' . number_format($_REQUEST['welfare_admin_fee'], 2) . '</td></tr>
 				</table>';
 				$mailMessage = $this->load->view('template/common-mail', $data, true);
 				$this->sendMail($userDetail['email'], 'New Welfare Account Created', $mailMessage);
@@ -9423,7 +9458,7 @@ class Admin extends Base_Controller
 			$payoutAmount = (float)$claim['payout_amount'];
 
 			if ($currentBalance < $payoutAmount) {
-				$this->response(false, "Insufficient welfare balance (&pound;" . number_format($currentBalance, 2) . ") for approved payout (&pound;" . number_format($payoutAmount, 2) . ").");
+				$this->response(false, "Insufficient welfare balance (£" . number_format($currentBalance, 2) . ") for approved payout (£" . number_format($payoutAmount, 2) . ").");
 				return;
 			}
 
@@ -9444,7 +9479,7 @@ class Admin extends Base_Controller
 				'claim_id'         => $claimId,
 				'user_id'          => $claim['user_id'],
 				'note_title'       => 'Welfare Claim Approved',
-				'note_description' => 'Welfare claim approved for &pound;' . number_format($payoutAmount, 2) . '. Updated balance: &pound;' . number_format($newBalance, 2),
+				'note_description' => 'Welfare claim approved for £' . number_format($payoutAmount, 2) . '. Updated balance: £' . number_format($newBalance, 2),
 				'status'           => 1,
 				'created_at'       => date('Y-m-d H:i:s')
 			));
@@ -9452,6 +9487,10 @@ class Admin extends Base_Controller
 			// In-app notifications
 			$message = "welfare claim approved";
 			$this->send_nofification($claim['user_id'], $adminId, $claim['group_id'], $message, $claimId, "11");
+
+			// update trust score
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $claim['user_id'] . "'");
+			$this->updateCreditScoreUser(100, 'minus', $claim['user_id']);
 
 			// Mail Notification
 			$user = $this->common->getData('user', array('user_id' => $claim['user_id']), array('single'));
@@ -9462,8 +9501,8 @@ class Admin extends Base_Controller
 				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
 					<tr><td><strong>Claim Reason</strong></td><td>' . htmlspecialchars($claim['claim_reason']) . '</td></tr>
 					<tr><td><strong>Beneficiary</strong></td><td>' . htmlspecialchars($claim['beneficiary']) . '</td></tr>
-					<tr><td><strong>Approved Payout</strong></td><td>&pound;' . number_format($payoutAmount, 2) . '</td></tr>
-					<tr><td><strong>Remaining Welfare Balance</strong></td><td>&pound;' . number_format($newBalance, 2) . '</td></tr>
+					<tr><td><strong>Approved Payout</strong></td><td>£' . number_format($payoutAmount, 2) . '</td></tr>
+					<tr><td><strong>Remaining Welfare Balance</strong></td><td>£' . number_format($newBalance, 2) . '</td></tr>
 				</table>';
 				$mailMessage = $this->load->view('template/common-mail', $mailData, true);
 				$this->sendMail($user['email'], 'Welfare Claim Approved', $mailMessage);
