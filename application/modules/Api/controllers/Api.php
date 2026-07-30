@@ -130,33 +130,63 @@ class Api extends Base_Controller
 	}
 
 
+	// function updateCreditScore($points, $calculation_type, $user_id)
+	// {
+	// 	$result = $this->common->getData('credit_score_user', array('user_id' => $user_id), array('single'));
+
+	// 	if (!empty($result)) {
+	// 		$totalScore = 0;
+	// 		$newScore = 0;
+	// 		if ($calculation_type === 'plus') {
+	// 			$totalScore = $result['total_credit_score'] + $points;
+	// 		}
+
+	// 		if ($calculation_type === 'minus') {
+	// 			$totalScore = $result['total_credit_score'] - $points;
+	// 		}
+
+	// 		if ($totalScore > 900) {
+	// 			// $newScore = 900; // comment code 02022024
+	// 			$newScore = $totalScore;
+	// 		} else if ($totalScore < 0) {
+	// 			$newScore = 0;
+	// 		} else {
+	// 			$newScore = $totalScore;
+	// 		}
+
+
+	// 		$this->common->updateData('credit_score_user', array("total_credit_score" => $newScore), array('user_id' => $user_id));
+	// 	}
+	// }
+
 	function updateCreditScore($points, $calculation_type, $user_id)
 	{
-		$result = $this->common->getData('credit_score_user', array('user_id' => $user_id), array('single'));
+		$result = $this->common->getData(
+			'credit_score_user',
+			array('user_id' => $user_id),
+			array('single')
+		);
 
-		if (!empty($result)) {
-			$totalScore = 0;
-			$newScore = 0;
-			if ($calculation_type === 'plus') {
-				$totalScore = $result['total_credit_score'] + $points;
-			}
-
-			if ($calculation_type === 'minus') {
-				$totalScore = $result['total_credit_score'] - $points;
-			}
-
-			if ($totalScore > 900) {
-				// $newScore = 900; // comment code 02022024
-				$newScore = $totalScore;
-			} else if ($totalScore < 0) {
-				$newScore = 0;
-			} else {
-				$newScore = $totalScore;
-			}
-
-
-			$this->common->updateData('credit_score_user', array("total_credit_score" => $newScore), array('user_id' => $user_id));
+		if (empty($result)) {
+			return;
 		}
+
+		$totalScore = (int)$result['total_credit_score'];
+
+		if ($calculation_type === 'plus') {
+			$totalScore += (int)$points;
+		} elseif ($calculation_type === 'minus') {
+			$totalScore -= (int)$points;
+		}
+
+		// Only prevent negative score
+		if ($totalScore < 0) {
+			$newScore = 0;
+		} else {
+			$newScore = $totalScore;
+		}
+
+		$this->common->updateData('credit_score_user', array('total_credit_score' => $newScore), array('user_id' => $user_id));
 	}
 
 
@@ -363,7 +393,7 @@ class Api extends Base_Controller
 							</tr>
 							<tr>
 								<td><strong>Amount</strong></td>
-								<td>&pound;' . $_REQUEST['loan_amount'] . '</td>
+								<td>£' . $_REQUEST['loan_amount'] . '</td>
 							</tr>
 							<tr>
 								<td><strong>Term</strong></td>
@@ -471,8 +501,8 @@ class Api extends Base_Controller
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
 			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
 
-			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(100, 'minus', $_REQUEST['user_id']);
+			// $this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			// $this->updateCreditScore(100, 'minus', $_REQUEST['user_id']);
 
 			// Send Email to Applicant & Super Admins
 			$user = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
@@ -496,7 +526,7 @@ class Api extends Base_Controller
 							</tr>
 							<tr>
 								<td>Claim Payout Amount</td>
-								<td>&pound;" . number_format($_REQUEST['welfare_payout_amount'], 2) . "</td>
+								<td>£" . number_format($_REQUEST['welfare_payout_amount'], 2) . "</td>
 							</tr>
 							<tr>
 								<td>Term</td>
@@ -504,7 +534,7 @@ class Api extends Base_Controller
 							</tr>
 							<tr>
 								<td>Monthly Payment</td>
-								<td>&pound;" . number_format($_REQUEST['loan_emi'], 2) . " (NB: Your monthly payment doubles as soon as a successful claim is made)</td>
+								<td>£" . number_format($_REQUEST['loan_emi'], 2) . " (NB: Your monthly payment doubles as soon as a successful claim is made)</td>
 							</tr>
 						</table>
 						<br>
@@ -535,9 +565,9 @@ class Api extends Base_Controller
 							<p>A new Welfare application requires your approval.</p>
 							<p><strong>User:</strong> {$user['first_name']} {$user['last_name']}</p>
 							<p><strong>Email:</strong> {$user['email']}</p>
-							<p><strong>Payout Amount:</strong> &pound;" . number_format($_REQUEST['welfare_payout_amount'], 2) . "</p>
+							<p><strong>Payout Amount:</strong> £" . number_format($_REQUEST['welfare_payout_amount'], 2) . "</p>
 							<p><strong>Term:</strong> {$_REQUEST['tenure']} Months</p>
-							<p><strong>Monthly Contribution:</strong> &pound;" . number_format($_REQUEST['loan_emi'], 2) . "</p>
+							<p><strong>Monthly Contribution:</strong> £" . number_format($_REQUEST['loan_emi'], 2) . "</p>
 						";
 						$adminMailMessage = $this->load->view('template/common-mail', $mailData, true);
 						$this->sendMail($admin['email'], 'New Welfare Application Submitted', $adminMailMessage);
@@ -636,7 +666,7 @@ class Api extends Base_Controller
 
 		$currentBalance = (is_array($welfareAccount) && isset($welfareAccount['welfare_balance'])) ? (float) $welfareAccount['welfare_balance'] : 0;
 		if ($payoutAmount <= 0 || $payoutAmount > $currentBalance) {
-			$this->response(false, "Claim payout amount cannot exceed available welfare balance (&pound;" . number_format($currentBalance, 2) . ").");
+			$this->response(false, "Claim payout amount cannot exceed available welfare balance (£" . number_format($currentBalance, 2) . ").");
 			return;
 		}
 
@@ -694,7 +724,7 @@ class Api extends Base_Controller
 			'claim_id'         => $claimId,
 			'user_id'          => $userId,
 			'note_title'       => 'Welfare Claim Submitted',
-			'note_description' => 'Claim submitted for ' . $claimReason . ' (&pound;' . number_format($payoutAmount, 2) . ')',
+			'note_description' => 'Claim submitted for ' . $claimReason . ' (£' . number_format($payoutAmount, 2) . ')',
 			'status'           => 0,
 			'created_at'       => date('Y-m-d H:i:s')
 		));
@@ -717,7 +747,7 @@ class Api extends Base_Controller
 						<p><strong>User:</strong> {$userName} ({$userEmail})</p>
 						<p><strong>Reason:</strong> {$claimReason}</p>
 						<p><strong>Beneficiary:</strong> {$beneficiary}</p>
-						<p><strong>Payout Amount:</strong> &pound;" . number_format($payoutAmount, 2) . "</p>
+						<p><strong>Payout Amount:</strong> £" . number_format($payoutAmount, 2) . "</p>
 					";
 					$mailMessage = $this->load->view('template/common-mail', $mailData, true);
 					$this->sendMail($admin['email'], 'New Welfare Claim Submitted', $mailMessage);
