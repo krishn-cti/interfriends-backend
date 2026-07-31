@@ -2064,4 +2064,44 @@ class User_model extends CI_Model
 
 		return $services;
 	}
+
+	// created by krishn on 31-07-26
+	public function getOutstandingLoanPayments($where = "")
+	{
+		$this->db->select("
+			ULP.id,
+			ULP.loan_id,
+			ULP.user_id,
+			ULP.amount,
+			ULP.emi_date,
+			ULP.status,
+
+			UL.loan_amount,
+			UL.loan_emi,
+			UL.reference_no,
+			UL.loan_type,
+
+			U.first_name,
+			U.last_name,
+			U.email
+		");
+
+		$this->db->from('user_loan_payment ULP');
+
+		$this->db->join(
+			'user_loan UL',
+			'UL.id = ULP.loan_id'
+		);
+
+		$this->db->join(
+			'user U',
+			'U.user_id = UL.user_id'
+		);
+
+		if (!empty($where)) {
+			$this->db->where($where, NULL, FALSE);
+		}
+
+		return $this->db->get()->result_array();
+	}
 }

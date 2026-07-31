@@ -364,4 +364,68 @@ class Cron extends Base_Controller
 
         echo "{$sent} reminder email(s) sent.";
     }
+
+    // Created by krishn on 31-07-26
+    public function sendOutstandingPaymentReminder()
+    {
+        $token = $this->input->get('token');
+
+        if ($token != 'INTERFRIENDS_SECRET_2026') {
+            echo "Unauthorized";
+            return;
+        }
+        
+        $where = "
+            UL.status = 4
+            AND ULP.status NOT IN (1,2)
+            AND ULP.emi_date < CURDATE()
+            AND U.status != 2
+        ";
+
+        $payments = $this->user_model->getOutstandingLoanPayments($where);
+
+        if (empty($payments)) {
+            echo "No outstanding payments found.";
+            return;
+        }
+
+        foreach ($payments as $row) {
+
+            $data['sendername'] = $row['first_name'] . ' ' . $row['last_name'];
+            $data['useremail']  = $row['email'];
+
+            $data['message'] = '
+
+            <p>This is a reminder that your loan repayment is still outstanding.</p>
+
+            <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
+                <tr>
+                    <td><strong>EMI Amount</strong></td>
+                    <td>£' . number_format($row['amount'], 2) . '</td>
+                </tr>
+                <tr>
+                    <td><strong>Due Date</strong></td>
+                    <td>' . date('d M Y', strtotime($row['emi_date'])) . '</td>
+                </tr>
+            </table>
+
+            <br>
+
+            <p>Your payment has not yet been received.</p>
+
+            <p>Please login to your Interfriends account and make the payment as soon as possible.</p>
+
+            <p>This reminder will continue to be sent daily until the outstanding payment is received.</p>';
+
+            $mailMessage = $this->load->view('template/common-mail', $data, true);
+
+            $this->sendMail(
+                $row['email'],
+                'Outstanding Payment Reminder',
+                $mailMessage
+            );
+        }
+
+        echo count($payments) . " reminder(s) sent successfully.";
+    }
 }
