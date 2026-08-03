@@ -13,6 +13,7 @@ class Api extends Base_Controller
 			array('common', 'user')
 		);
 		$this->load->library('email');
+		// $this->load->library('whatsapp');
 		$this->load->model("user_model");
 		header('Access-Control-Allow-Origin: *');
 		header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -498,8 +499,8 @@ class Api extends Base_Controller
 
 		if ($result) {
 			$message = "Welfare request";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
-			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "4");
+			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "11");
+			$this->send_nofificationAdmin($_REQUEST['user_id'], $_REQUEST['group_id'], $message, $loan_id, "11");
 
 			// $this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 			// $this->updateCreditScore(100, 'minus', $_REQUEST['user_id']);
@@ -730,9 +731,9 @@ class Api extends Base_Controller
 		));
 
 		// Notifications
-		$message = "welfare claim submitted";
-		$this->send_nofification($userId, $groupId, $message, $claimId, "4");
-		$this->send_nofificationAdmin($userId, $groupId, "new welfare claim submitted", $claimId, "4");
+		$message = "Welfare claim request";
+		$this->send_nofification($userId, $groupId, $message, $claimId, "12");
+		$this->send_nofificationAdmin($userId, $groupId, $message, $claimId, "12");
 
 		// Send Email to Super Admin
 		$admins = $this->common->getData('superAdmin', array('admin_type' => '2'));
@@ -5179,4 +5180,47 @@ class Api extends Base_Controller
 			"totalCount" => $totalCount
 		));
 	}
+	
+	/**
+	 * Test API for sending WhatsApp messages
+	 * Endpoint: Api/test_whatsapp
+	 * Method: GET / POST
+	 * Parameters:
+	 *   - recipient: (required) Phone number with country code (e.g. 919876543210) OR user email
+	 *   - message: Message text body (optional, for text messages)
+	 *   - template_name: Meta template name (optional, for template messages)
+	 *   - parameters: Parameters array or JSON for template placeholders (optional)
+	 *   - language_code: Language code e.g. 'en' (optional, default 'en')
+	 */
+	// public function test_whatsapp()
+	// {
+	// 	$recipient     = isset($_REQUEST['recipient']) ? trim($_REQUEST['recipient']) : '';
+	// 	$message       = isset($_REQUEST['message']) ? trim($_REQUEST['message']) : 'Test WhatsApp Message from Interfriends API';
+	// 	$template_name = isset($_REQUEST['template_name']) ? trim($_REQUEST['template_name']) : '';
+	// 	$params_raw    = isset($_REQUEST['parameters']) ? $_REQUEST['parameters'] : '';
+	// 	$language_code = isset($_REQUEST['language_code']) ? trim($_REQUEST['language_code']) : 'en';
+
+	// 	if (empty($recipient)) {
+	// 		$this->response(false, 'Recipient (phone number or email) is required.');
+	// 		return;
+	// 	}
+
+	// 	$parameters = array();
+	// 	if (!empty($params_raw)) {
+	// 		if (is_array($params_raw)) {
+	// 			$parameters = $params_raw;
+	// 		} else {
+	// 			$decoded = json_decode($params_raw, true);
+	// 			$parameters = is_array($decoded) ? $decoded : explode(',', $params_raw);
+	// 		}
+	// 	}
+
+	// 	$result = send_whatsapp_notification($recipient, $message, $template_name, $parameters, $language_code);
+
+	// 	if (!empty($result['success'])) {
+	// 		$this->response(true, 'WhatsApp message sent successfully', $result);
+	// 	} else {
+	// 		$this->response(false, isset($result['message']) ? $result['message'] : 'Failed to send WhatsApp message', isset($result['data']) ? $result['data'] : $result);
+	// 	}
+	// }
 }
