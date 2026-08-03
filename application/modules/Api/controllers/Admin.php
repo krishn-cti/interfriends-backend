@@ -2196,7 +2196,9 @@ class Admin extends Base_Controller
 			if (!empty($userDetailFrom)) {
 				$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 				$data['useremail'] = "";
-				$data['message'] = '<p>This is a confirmation that your EMERGENCY help application has been approved and processed. Expect payment into your account within 24 hours</p><p>If you did not make this application, do let us know immediately</p>';
+				$data['message'] = '<p>Your EMERGENCY help application has been approved and processed. Payment will be made to your account within 24 hours.</p>
+				<p>If you did not submit this application, please contact us immediately.</p>
+				<p><strong>Note:</strong> The full payment must be returned within 30 days.</p>';
 				$messaged = $this->load->view('template/common-mail', $data, true);
 				$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
 			}
@@ -6655,28 +6657,28 @@ class Admin extends Base_Controller
 				['single']
 			);
 
-			$data['sendername'] = $userDetails['first_name'] . ' ' . $userDetails['last_name'];
+			$data['sendername'] = !empty($userDetails) ? ($userDetails['first_name'] . ' ' . $userDetails['last_name']) : 'User';
 
 			if ($request_status == 1) {
 
-				$this->processPayout($payout_id);
+				$this->processPayout($payout_id, $admin_id);
 
 				$subject = 'Payout Request Approved';
 
 				$data['message'] = '
-				<p>We are pleased to inform you that your payout request has been approved by the administrator.</p>
+					<p>Your bulk payout for the cycle has been deposited into your designated account. Please check your app for details.</p>
+				';
 
-				<p>The approved amount will be processed shortly. If you have any questions, feel free to contact our support team.</p>
-			';
-
-				$this->send_nofification(
-					$payoutRequest['user_id'],
-					$admin_id,
-					$payoutRequest['group_id'],
-					"Your payout request was approved.",
-					$payout_id,
-					"13"
-				);
+				if (!empty($admin_id)) {
+					$this->send_nofification(
+						$payoutRequest['user_id'],
+						$admin_id,
+						$payoutRequest['group_id'],
+						"Your payout request was approved.",
+						$payout_id,
+						"13"
+					);
+				}
 
 				$responseMessage = "Payout request accepted and processed.";
 			} else {
@@ -6686,27 +6688,31 @@ class Admin extends Base_Controller
 				$subject = 'Payout Request Rejected';
 
 				$data['message'] = '
-				<p>We regret to inform you that your payout request has been rejected by the administrator.</p>
+					<p>We regret to inform you that your payout request has been rejected by the administrator.</p>
 
-				<p><strong>Reason for rejection:</strong><br>' . nl2br(htmlspecialchars($reason)) . '</p>
+					<p><strong>Reason for rejection:</strong><br>' . nl2br(htmlspecialchars($reason)) . '</p>
 
-				<p>If you believe this was done in error or have any questions, please contact our support team.</p>
-			';
+					<p>If you believe this was done in error or have any questions, please contact our support team.</p>
+				';
 
-				$this->send_nofification(
-					$payoutRequest['user_id'],
-					$admin_id,
-					$payoutRequest['group_id'],
-					"Your payout request was rejected.",
-					$payout_id,
-					"13"
-				);
+				if (!empty($admin_id)) {
+					$this->send_nofification(
+						$payoutRequest['user_id'],
+						$admin_id,
+						$payoutRequest['group_id'],
+						"Your payout request was rejected.",
+						$payout_id,
+						"13"
+					);
+				}
 
 				$responseMessage = "Payout request rejected.";
 			}
 
-			$messaged = $this->load->view('template/common-mail', $data, true);
-			$this->sendMail($userDetails['email'], $subject, $messaged);
+			if (!empty($userDetails['email'])) {
+				$messaged = $this->load->view('template/common-mail', $data, true);
+				$this->sendMail($userDetails['email'], $subject, $messaged);
+			}
 
 			$this->response(true, $responseMessage);
 		} else {
@@ -6715,40 +6721,39 @@ class Admin extends Base_Controller
 	}
 
 	// created by @krishn on 22-05-25
-	private function processPayout($payout_id)
+	private function processPayout($payout_id, $admin_id = null)
 	{
 		$payoutData = $this->common->getData('payout_cycle', array('id' => $payout_id), array('single'));
 
-		$_REQUEST = $payoutData; // Load saved request details
-		$_REQUEST['request_status'] = 1; // Mark as accepted
+		if (!empty($payoutData)) {
+			$payoutData['admin_id'] = $admin_id ?? (isset($_POST['admin_id']) ? $_POST['admin_id'] : null);
+			$_REQUEST = array_merge($_REQUEST, $payoutData); // Load saved request details safely
+			$_REQUEST['request_status'] = 1; // Mark as accepted
 
-		// Insert cycle status management
-		$this->common->insertData('cycle_status_management', array(
-			"group_id" => $_REQUEST['group_id'],
-			"group_cycle_id" => $_REQUEST['group_cycle_id'],
-			"user_id" => $_REQUEST['user_id'],
-			"type" => '1',
-			'created_at' => $_REQUEST['created_at']
-		));
+			// Insert cycle status management
+			$this->common->insertData('cycle_status_management', array(
+				"group_id" => $_REQUEST['group_id'],
+				"group_cycle_id" => $_REQUEST['group_cycle_id'],
+				"user_id" => $_REQUEST['user_id'],
+				"type" => '1',
+				'created_at' => $_REQUEST['created_at']
+			));
 
-		// Insert payout details in `pf_user`
-		$this->common->insertData('pf_user', array(
-			"group_id" => $_REQUEST['group_id'],
-			"user_id" => $_REQUEST['user_id'],
-			"pf_type" => '1',
-			"payment_type" => '2',
-			'created_at' => $_REQUEST['created_at'],
-			'pf_amount' => $_REQUEST['payout_pf_amount'],
-			'pf_percent' => $_REQUEST['payout_pf_percent'],
-			'pf_interest_amount' => $_REQUEST['pf_interest_amount'],
-			'pf_interest_percent' => $_REQUEST['pf_interest_percent'],
-			'main_id' => $_REQUEST['group_cycle_id'],
-			'other_main_id' => $payout_id
-		));
-
-		// Notify user about successful payout
-		$message = "Your bulk funds have been paid";
-		$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $payout_id, "13");
+			// Insert payout details in `pf_user`
+			$this->common->insertData('pf_user', array(
+				"group_id" => $_REQUEST['group_id'],
+				"user_id" => $_REQUEST['user_id'],
+				"pf_type" => '1',
+				"payment_type" => '2',
+				'created_at' => $_REQUEST['created_at'],
+				'pf_amount' => $_REQUEST['payout_pf_amount'],
+				'pf_percent' => $_REQUEST['payout_pf_percent'],
+				'pf_interest_amount' => $_REQUEST['pf_interest_amount'],
+				'pf_interest_percent' => $_REQUEST['pf_interest_percent'],
+				'main_id' => $_REQUEST['group_cycle_id'],
+				'other_main_id' => $payout_id
+			));
+		}
 
 		return true;
 	}
@@ -9207,10 +9212,10 @@ class Admin extends Base_Controller
 
 		if ($_REQUEST['status'] === '3' || $_REQUEST['status'] === '6') {
 			$message = ($_REQUEST['status'] === '3') ? "welfare declined" : "welfare has been cancel by sub admin";
-			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "6", "2");
+			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "6", "11");
 
 			$message2 = ($_REQUEST['status'] === '3') ? "welfare has been cancel by super admin" : "welfare has been cancel by sub admin";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "12");
+			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "11");
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 			if (!empty($userDetailFrom) && !empty($userDetailFrom['email'])) {
@@ -9231,7 +9236,7 @@ class Admin extends Base_Controller
 
 		if ($_REQUEST['status'] === '6') {
 			$message = "welfare has been cancel by sub admin";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "10");
+			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "11");
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 			if (!empty($userDetailFrom)) {
@@ -9248,13 +9253,13 @@ class Admin extends Base_Controller
 			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "4", "1");
 
 			$message2 = "welfare awaiting approval";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "9");
+			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "11");
 		}
 
 
 		if ($_REQUEST['status'] === '2') {
 			$message2 = "welfare approved";
-			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "15");
+			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "11");
 
 			$this->common->query_normal("UPDATE credit_score_user SET loan_payment_fully_paid = loan_payment_fully_paid+80 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 			$this->updateCreditScore(80, 'plus');
@@ -9533,7 +9538,7 @@ class Admin extends Base_Controller
 
 			// In-app notifications
 			$message = "welfare claim declined";
-			$this->send_nofification($claim['user_id'], $adminId, $claim['group_id'], $message, $claimId, "12");
+			$this->send_nofification($claim['user_id'], $adminId, $claim['group_id'], $message, $claimId, "11");
 
 			// Mail Notification
 			$user = $this->common->getData('user', array('user_id' => $claim['user_id']), array('single'));
@@ -10609,7 +10614,27 @@ class Admin extends Base_Controller
 		}
 	}
 
+	public function sendEmailtoAllMembers()
+	{
+		if (!empty($_REQUEST['subject']) && !empty($_REQUEST['message'])) {
+			$userDetailFrom = $this->common->getData('user', array('status!=' => '2', 'is_default' => '1', 'recommended' => '0'), array());
+			if (!empty($userDetailFrom)) {
 
+				foreach ($userDetailFrom as $value) {
+					$data['sendername'] = $value['first_name'] . " " . $value['last_name'];
+					$data['useremail'] = "";
+					$data['message'] = '<p>' . $_REQUEST['message'] . '</p>';
+					$messaged = $this->load->view('template/common-mail', $data, true);
+					$mail = $this->sendMail($value['email'], $_REQUEST['subject'], $messaged);
+				}
+				$this->response(true, "Mail sent successfully!");
+			} else {
+				$this->response(false, "User not found.Please add users and try again!");
+			}
+		} else {
+			$this->response(false, "Please add message and subject");
+		}
+	}
 
 	public function sendEmailtoAllCirclelead()
 	{
@@ -12430,7 +12455,7 @@ class Admin extends Base_Controller
 
 			$message = "Outstanding payment reminder sent.";
 
-			$this->send_nofification($user_id, 1, 0, $message, 0, "11");
+			$this->send_nofification($user_id, 1, 0, $message, 0, "16");
 
 			$this->response(true, "Reminder email sent successfully.");
 		} else {
