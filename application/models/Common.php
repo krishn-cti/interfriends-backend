@@ -800,5 +800,51 @@ public function room_detail($where="",$options=array())
 		}
    }
 
+	public function logSubadminActivity($subadmin_id, $action, $description, $module = 'User Management', $target_user_id = null, $target_user_name = null, $old_data = null, $new_data = null)
+	{
+		if (empty($subadmin_id)) {
+			return false;
+		}
+
+		$subadmin = $this->getData('superAdmin', array('id' => $subadmin_id), array('single'));
+		if (!$subadmin) {
+			return false;
+		}
+
+		if (!$this->db->table_exists('subadmin_activity_logs')) {
+			return false;
+		}
+
+		// Determine whether the action performer is Admin or Subadmin
+		// admin_type: 2 = Admin, 1 = Subadmin, or if ID == 1 it is Admin
+		$performed_by_type = 'Subadmin';
+		if (isset($subadmin['admin_type']) && ($subadmin['admin_type'] == 2 || $subadmin['admin_type'] == '2' || $subadmin_id == 1)) {
+			$performed_by_type = 'Admin';
+		}
+
+		$logData = array(
+			'subadmin_id'        => $subadmin_id,
+			'subadmin_name'      => isset($subadmin['name']) ? $subadmin['name'] : '',
+			'subadmin_email'     => isset($subadmin['email']) ? $subadmin['email'] : '',
+			'performed_by_type'  => $performed_by_type,
+			'module'             => $module,
+			'action'             => strtoupper($action),
+			'target_user_id'     => !empty($target_user_id) ? $target_user_id : null,
+			'target_user_name'   => !empty($target_user_name) ? $target_user_name : null,
+			'description'        => $description,
+			'old_data'           => (is_array($old_data) || is_object($old_data)) ? json_encode($old_data) : $old_data,
+			'new_data'           => (is_array($new_data) || is_object($new_data)) ? json_encode($new_data) : $new_data,
+			'ip_address'         => $this->input->ip_address(),
+			'created_at'         => date('Y-m-d H:i:s')
+		);
+
+		if (!$this->db->field_exists('performed_by_type', 'subadmin_activity_logs')) {
+			unset($logData['performed_by_type']);
+		}
+
+		return $this->insertData('subadmin_activity_logs', $logData);
+	}
+
 
 }
+
