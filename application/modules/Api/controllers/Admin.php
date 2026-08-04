@@ -421,8 +421,18 @@ class Admin extends Base_Controller
 
 
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$userDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
+				$amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added user group cycle payment of £" . $amt . " for user: " . $target_name, 'Group Cycle', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Add User Cycle Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -673,8 +683,22 @@ class Admin extends Base_Controller
 			//   }
 			//  }
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : (!empty($usergroupid['user_id']) ? $usergroupid['user_id'] : '');
+				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+				$status_text = isset($_REQUEST['status']) ? $_REQUEST['status'] : 'updated';
+				if ($status_text === '2') { $status_text = 'Paid On Time'; }
+				elseif ($status_text === '4') { $status_text = 'Paid Late'; }
+				elseif ($status_text === '3') { $status_text = 'Missed Payment Deadline'; }
+
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated user group cycle payment (status: " . $status_text . ") for user: " . $target_name, 'Group Cycle', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "User Cycle Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -1272,12 +1296,89 @@ class Admin extends Base_Controller
 		if (!empty($result)) {
 			foreach ($result as $key => $value) {
 				$result[$key]['sno'] = $countData++;
+				if ($this->db->table_exists('subadmin_activity_logs')) {
+					$result[$key]['total_activity_logs'] = $this->common->getData('subadmin_activity_logs', array('subadmin_id' => $value['id']), array('count'));
+				} else {
+					$result[$key]['total_activity_logs'] = 0;
+				}
 			}
 			$this->response(true, "User fetch Successfully.", array("userList" => $result, "userCount" => $userCount));
 		} else {
 			$this->response(true, "User fetch Successfully.", array("userList" => array(), "userCount" => $userCount));
 		}
 	}
+
+	public function getSubAdminLogs()
+	{
+		if (empty($_REQUEST['start'])) {
+			$start = 0;
+		} else {
+			$start = (int)$_REQUEST['start'];
+		}
+		$limit = !empty($_REQUEST['limit']) ? (int)$_REQUEST['limit'] : 10;
+
+		$where = "1=1";
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['id']) ? $_REQUEST['id'] : '');
+
+		if (!empty($subadmin_id)) {
+			$where .= " AND subadmin_id = '" . $this->db->escape_str($subadmin_id) . "'";
+		}
+
+		if (!empty($_REQUEST['search_keyword'])) {
+			$search = $this->db->escape_str($_REQUEST['search_keyword']);
+			$where .= " AND (subadmin_name LIKE '%" . $search . "%' OR subadmin_email LIKE '%" . $search . "%' OR target_user_name LIKE '%" . $search . "%' OR description LIKE '%" . $search . "%' OR module LIKE '%" . $search . "%' OR action LIKE '%" . $search . "%') ";
+		}
+
+		if (!empty($_REQUEST['module'])) {
+			$where .= " AND module = '" . $this->db->escape_str($_REQUEST['module']) . "'";
+		}
+
+		if (!empty($_REQUEST['performed_by_type'])) {
+			$where .= " AND performed_by_type = '" . $this->db->escape_str($_REQUEST['performed_by_type']) . "'";
+		}
+
+		if (!$this->db->table_exists('subadmin_activity_logs')) {
+			$this->response(true, "No activity logs found.", array("activityLogs" => array(), "totalCount" => 0));
+			return;
+		}
+
+		$options = array(
+			'sort_by' => 'created_at',
+			'sort_direction' => 'DESC',
+			'limit' => $limit,
+			'offset' => $start
+		);
+
+		$result = $this->common->getData('subadmin_activity_logs', $where, $options);
+		$totalCount = $this->common->getData('subadmin_activity_logs', $where, array('count'));
+
+		$subadminInfo = array();
+		if (!empty($subadmin_id)) {
+			$subadminInfo = $this->common->getData('superAdmin', array('id' => $subadmin_id), array('single'));
+			if (!empty($subadminInfo)) {
+				unset($subadminInfo['password'], $subadminInfo['token'], $subadminInfo['act_token'], $subadminInfo['web_token']);
+			}
+		}
+
+		$countData = $start + 1;
+		if (!empty($result)) {
+			foreach ($result as $key => $value) {
+				$result[$key]['sno'] = $countData++;
+			}
+			$this->response(true, "Subadmin activity logs fetched successfully.", array(
+				"activityLogs" => $result,
+				"totalCount" => $totalCount,
+				"subadminInfo" => $subadminInfo
+			));
+		} else {
+			$this->response(true, "No activity logs found.", array(
+				"activityLogs" => array(),
+				"totalCount" => 0,
+				"subadminInfo" => $subadminInfo
+			));
+		}
+	}
+
 
 	// created by @krishn on 29-06-25
 	public function userDetailInfo()
@@ -1418,6 +1519,12 @@ class Admin extends Base_Controller
 		if ($result) {
 			$property_id = $this->db->insert_id();
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$p_title = !empty($_REQUEST['title']) ? $_REQUEST['title'] : 'Property ID: ' . $property_id;
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new property investment: " . $p_title, 'Investment', null, null, null, $post);
+			}
+
 			$userData = $this->common->getData('user', array('status' => '1'));
 
 			// add notification for users
@@ -1438,26 +1545,6 @@ class Admin extends Base_Controller
 				}
 			}
 
-			// send email to all users who are registered in the investment @krishn on 20-05-25
-			// $investmentUsers = $this->user_model->investment_request_detail();
-
-			// if (!empty($investmentUsers)) {
-			// 	$propertyInfo = $this->common->getData('property', array('id' => $property_id), array('single'));
-			// 	print_r($propertyInfo); die();
-			// 	foreach ($investmentUsers as $user) {
-			// 		$subject = 'Investment Proposal Update';
-			// 		$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
-
-			// 		$data['message'] = '</p> <p>Thank you for showing interest in the project titled "<strong>' . $propertyInfo['title'] . '</strong>".</p>
-			// 		<p>We appreciate your investment of <strong>£' . $propertyInfo['main_amount'] . '</strong>.</p>
-			// 		<p><strong>Project Description:</strong> ' . $propertyInfo['short_description'] . '</p>
-			// 		<p>We will keep you updated with further developments.</p>';
-
-			// 		$messaged = $this->load->view('template/common-mail', $data, true);
-			// 		$this->sendMail($user['email'], $subject, $messaged);
-			// 	}
-			// }
-
 			$this->response(true, "add property successfully");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -1468,6 +1555,7 @@ class Admin extends Base_Controller
 	public function editProperty()
 	{
 		$property_id = $_REQUEST['property_id'];
+		$existingProp = $this->common->getData('property', array('id' => $property_id), array('single'));
 		unset($_REQUEST['property_id']);
 
 		if (isset($_FILES['image'])) {
@@ -1497,6 +1585,12 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$p_title = !empty($post['title']) ? $post['title'] : (!empty($existingProp['title']) ? $existingProp['title'] : 'Property ID: ' . $property_id);
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated property investment: " . $p_title, 'Investment', null, null, $existingProp, $post);
+			}
+
 			if (!empty($background_image)) {
 				foreach ($background_image as $keyimg) {
 					$data_img['background_image'] = 'assets/property/background/' . $keyimg['file_name'];
@@ -1570,7 +1664,16 @@ class Admin extends Base_Controller
 
 	public function blockUnblockProperty()
 	{
+		$existingProp = $this->common->getData('property', array('id' => $_REQUEST['id']), array('single'));
 		$this->common->updateData('property', array('status' => $_REQUEST['status']), array('id' => $_REQUEST['id']));
+
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		if (!empty($subadmin_id)) {
+			$p_title = !empty($existingProp['title']) ? $existingProp['title'] : 'Property ID: ' . $_REQUEST['id'];
+			$action_txt = $_REQUEST['status'] == 1 ? 'Unblocked' : 'Blocked';
+			$act = $_REQUEST['status'] == 1 ? 'UNBLOCK' : 'BLOCK';
+			$this->common->logSubadminActivity($subadmin_id, $act, $action_txt . " property investment: " . $p_title, 'Investment', null, null, $existingProp, array('status' => $_REQUEST['status']));
+		}
 
 		if ($_REQUEST['status'] == 1) {
 			$this->response(true, 'Property Unblocked Successfully', array('status' => $_REQUEST['status']));
@@ -1581,10 +1684,18 @@ class Admin extends Base_Controller
 
 	public function openCloseProperty()
 	{
+		$existingProp = $this->common->getData('property', array('id' => $_REQUEST['id']), array('single'));
 		$this->common->updateData('property', array('is_closed' => $_REQUEST['is_closed']), array('id' => $_REQUEST['id']));
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		if (!empty($subadmin_id)) {
+			$p_title = !empty($existingProp['title']) ? $existingProp['title'] : 'Property ID: ' . $_REQUEST['id'];
+			$action_txt = $_REQUEST['is_closed'] == 1 ? 'Closed' : 'Opened';
+			$this->common->logSubadminActivity($subadmin_id, 'UPDATE', $action_txt . " property investment for funding: " . $p_title, 'Investment', null, null, $existingProp, array('is_closed' => $_REQUEST['is_closed']));
+		}
+
 		if ($_REQUEST['is_closed'] == 1) {
-			$this->response(true, 'Property Closed Successfully', array('is_closed' => $_REQUEST['is_closed]']));
+			$this->response(true, 'Property Closed Successfully', array('is_closed' => $_REQUEST['is_closed']));
 		} else {
 			$this->response(true, 'Property Opened Successfully', array('is_closed' => $_REQUEST['is_closed']));
 		}
@@ -1729,8 +1840,14 @@ class Admin extends Base_Controller
 		$group_id = $this->db->insert_id();
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$grp_name = !empty($_REQUEST['group_name']) ? $_REQUEST['group_name'] : (!empty($_REQUEST['name']) ? $_REQUEST['name'] : '');
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new group: " . $grp_name, 'Group Management', null, null, null, $post);
+			}
 			$this->response(true, "Add Group Successfully", array("group_id" => $group_id));
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -1757,8 +1874,19 @@ class Admin extends Base_Controller
 		if ($result) {
 
 			$this->common->insertData('user_miscellaneous_status_history', array("miscellaneous_id" => $miscellaneous_id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
+
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+				$amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added Miscellaneous record of £" . $amt . " for user: " . $target_name, 'Miscellaneous', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Miscellaneous add submitted successfully", array("miscellaneous_id" => $miscellaneous_id));
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -1870,8 +1998,17 @@ class Admin extends Base_Controller
 					}
 				}
 			}
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Miscellaneous details for user: " . $target_name, 'Miscellaneous', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Miscellaneous Loan Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -1922,10 +2059,17 @@ class Admin extends Base_Controller
 		$_REQUEST['total_payment'] = $total_payment;
 		$_REQUEST['interest_payable'] = $interest_payable;
 		$_REQUEST['interest_rate'] = $interRate;
-		$_REQUEST['interest_rate'] = $interRate;
+
+		if (!empty($_REQUEST['user_id'])) {
+			$userData = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single', 'field' => 'unique_id'));
+			if (!empty($userData['unique_id'])) {
+				$_REQUEST['contact_number'] = $userData['unique_id'];
+			}
+		}
 
 		$post = $this->common->getField('user_loan', $_REQUEST);
 		$result = $this->common->insertData('user_loan', $post);
+
 		$loan_id = $this->db->insert_id();
 		if ($result) {
 			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
@@ -1942,8 +2086,16 @@ class Admin extends Base_Controller
 
 			$this->common->insertData('user_loan_status_history', array("loan_id" => $loan_id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$userDetail = !empty($_REQUEST['user_id']) ? $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single')) : array();
+				$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added loan of £" . $amount . " for user: " . $target_name, 'Loan', $_REQUEST['user_id'], $target_name, null, $post);
+			}
+
 			$this->response(true, "Loan added successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -2123,8 +2275,19 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$grp_name = !empty($_REQUEST['group_name']) ? $_REQUEST['group_name'] : (!empty($_REQUEST['name']) ? $_REQUEST['name'] : '');
+				if (empty($grp_name)) {
+					$gInfo = $this->common->getData('group_cycle', array('id' => $id), array('single'));
+					$grp_name = !empty($gInfo['group_name']) ? $gInfo['group_name'] : (!empty($gInfo['name']) ? $gInfo['name'] : '');
+				}
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated group details: " . $grp_name, 'Group Management', null, null, null, $post);
+			}
+
 			$this->response(true, "Group Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -2146,8 +2309,18 @@ class Admin extends Base_Controller
 
 			$this->common->insertData('user_emergency_loan_status_history', array("loan_id" => $loan_id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+				$em_amt = isset($_REQUEST['loan_amount']) ? $_REQUEST['loan_amount'] : '0';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added emergency loan of £" . $em_amt . " for user: " . $target_name, 'Emergency Loan', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Emergency loan submitted successfully", array("loan_id" => $loan_id));
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -2372,8 +2545,23 @@ class Admin extends Base_Controller
 			//           }
 			//          }
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+				$status_text = isset($_REQUEST['status']) ? $_REQUEST['status'] : 'updated';
+				if ($status_text === '4') { $status_text = 'Approved'; }
+				elseif ($status_text === '3') { $status_text = 'Declined'; }
+				elseif ($status_text === '6') { $status_text = 'Cancelled'; }
+				elseif ($status_text === '2') { $status_text = 'Completed'; }
+
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Emergency loan details (status: " . $status_text . ") for user: " . $target_name, 'Emergency Loan', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Emergency Loan Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -2528,8 +2716,13 @@ class Admin extends Base_Controller
 
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added group cycle for group ID: " . ($_REQUEST['group_id'] ?? ''), 'Group Cycle', null, null, null, $post);
+			}
 			$this->response(true, "Add Group Cycle Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -2578,8 +2771,13 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated group cycle details for cycle ID: " . $id, 'Group Cycle', null, null, null, $post);
+			}
 			$this->response(true, "Group Cycle Info Updated Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -3015,8 +3213,16 @@ class Admin extends Base_Controller
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$this->sendMail($userDetailFrom['email'], $cycle_name, $messaged);
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+				$paid_amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added loan payment of £" . $paid_amt . " for user: " . $target_name, 'Loan', $_REQUEST['user_id'], $target_name, null, $post);
+			}
+
 			$this->response(true, "Add loan payment Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -3087,8 +3293,16 @@ class Admin extends Base_Controller
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$this->sendMail($userDetailFrom['email'], $cycle_name, $messaged);
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+				$paid_amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added Miscellaneous payment of £" . $paid_amt . " for user: " . $target_name, 'Miscellaneous', $_REQUEST['user_id'], $target_name, null, $post);
+			}
+
 			$this->response(true, "Add Miscellaneous payment Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -3962,8 +4176,24 @@ class Admin extends Base_Controller
 			}
 		}
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+
+		if (!empty($subadmin_id)) {
+			$uDetail = !empty($userId) ? $this->common->getData('user', array('user_id' => $userId), array('single')) : array();
+			$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+			$status_text = $hasStatus ? $status : 'updated';
+			if ($status_text === '4') { $status_text = 'Approved'; }
+			elseif ($status_text === '3') { $status_text = 'Declined'; }
+			elseif ($status_text === '6') { $status_text = 'Cancelled'; }
+			elseif ($status_text === '5') { $status_text = 'Awaiting Approval'; }
+			elseif ($status_text === '2') { $status_text = 'Completed'; }
+
+			$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated loan details (status: " . $status_text . ") for user: " . $target_name, 'Loan', $userId, $target_name, null, $post);
+		}
+
 		$this->response(true, "Loan Update Successfully");
 	}
+
 
 	public function editLoanPayment()
 	{
@@ -3988,8 +4218,21 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				if (empty($uId)) {
+					$lpInfo = $this->common->getData('user_loan_payment', array('id' => $id), array('single'));
+					$uId = !empty($lpInfo['user_id']) ? $lpInfo['user_id'] : '';
+				}
+				$userDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated loan payment details for user: " . $target_name, 'Loan', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Loan Payment Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -4018,8 +4261,21 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				if (empty($uId)) {
+					$mpInfo = $this->common->getData('user_miscellaneous_payment', array('id' => $id), array('single'));
+					$uId = !empty($mpInfo['user_id']) ? $mpInfo['user_id'] : '';
+				}
+				$userDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Miscellaneous payment details for user: " . $target_name, 'Miscellaneous', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Miscellaneous Payment Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -4163,6 +4419,8 @@ class Admin extends Base_Controller
 		$email = $userdetail['email'];
 		$data['name'] = $userdetail['first_name'] . ' ' . $userdetail['last_name'];
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+
 		if ($_REQUEST['status'] == 1) {
 
 			$this->common->updateData('user', array('status' => $_REQUEST['status'], 'subadmin_status' => '0'), array('user_id' => $_REQUEST['id']));
@@ -4172,10 +4430,18 @@ class Admin extends Base_Controller
 			$message = $this->load->view('template/block-user', $data, true);
 			$this->sendMail($email, $data['status'], $message);
 
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'UNBLOCK', "Unblocked user: " . $data['name'], 'User Management', $_REQUEST['id'], $data['name']);
+			}
+
 			$this->response(true, 'Rejected & User Unblocked successfully', array('status' => $_REQUEST['status']));
 		} else {
 
 			$this->common->updateData('user', array('status' => $_REQUEST['status'], 'subadmin_status' => '1'), array('user_id' => $_REQUEST['id']));
+
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'BLOCK', "Blocked user: " . $data['name'], 'User Management', $_REQUEST['id'], $data['name']);
+			}
 
 			$this->response(true, 'Accepted & User Blocked successfully', array('status' => $_REQUEST['status']));
 		}
@@ -4189,10 +4455,17 @@ class Admin extends Base_Controller
 		$userdetail  = get_user_details($_REQUEST['id']);
 		$email = $userdetail['email'];
 		$array['name'] = $userdetail['first_name'] . ' ' . $userdetail['last_name'];
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
 
 		if ($_REQUEST['admintype'] == '1') {
 
 			$this->common->updateData('user', array('subadmin_status' => $_REQUEST['status']), array('user_id' => $_REQUEST['id']));
+
+			$sub_id = !empty($subadmin_id) ? $subadmin_id : (!empty($_REQUEST['id']) ? $_REQUEST['id'] : '');
+			$action_type = ($_REQUEST['status'] == 1) ? 'REQUEST_UNBLOCK' : 'REQUEST_BLOCK';
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, $action_type, "Requested to " . ($_REQUEST['status'] == 1 ? "unblock" : "block") . " user: " . $array['name'], 'User Management', $_REQUEST['id'], $array['name']);
+			}
 
 			$this->response(true, 'Your request to block this user has been sent to the admin', array('status' => $_REQUEST['status']));
 			exit();
@@ -4208,8 +4481,13 @@ class Admin extends Base_Controller
 			$message = $this->load->view('template/block-user', $array, true);
 			$mail = $this->sendMail($email, $array['status'], $message);
 
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'UNBLOCK', "Unblocked user: " . $array['name'], 'User Management', $_REQUEST['id'], $array['name']);
+			}
+
 			$this->response(true, 'User Unblocked successfully', array('status' => $_REQUEST['status']));
 		} else {
+
 
 			$array['message'] = 'Your Interfriends account has been blocked or suspended by the administrator. This may be due to a breach of our terms and conditions or because you chose to leave Interfriends.
 			If this action was unexpected, please contact the group administrator as soon as possible.';
@@ -4229,9 +4507,18 @@ class Admin extends Base_Controller
 		$email = $userdetail['email'];
 		$array['name'] = $userdetail['first_name'] . ' ' . $userdetail['last_name'];
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+
 		if ($_REQUEST['admintype'] == '1') {
 
 			$this->common->updateData('user', array('subadmin_is_default' => $_REQUEST['is_default']), array('user_id' => $_REQUEST['id']));
+
+			if (!empty($subadmin_id)) {
+				$desc = ($_REQUEST['is_default'] == 2)
+					? ("Requested to add user to Default list: " . $array['name'])
+					: ("Requested to remove user from Default list: " . $array['name']);
+				$this->common->logSubadminActivity($subadmin_id, 'REQUEST_DEFAULT', $desc, 'User Management', $_REQUEST['id'], $array['name']);
+			}
 
 			$this->response(true, 'Your request to add in default this user has been sent to the admin', array('is_default' => $_REQUEST['is_default']));
 			exit();
@@ -4249,6 +4536,10 @@ class Admin extends Base_Controller
 
 			$this->updateCreditScoreUser(300, 'plus', $_REQUEST['id']);
 
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'REMOVE_DEFAULT', "Removed user from Default list: " . $array['name'], 'User Management', $_REQUEST['id'], $array['name']);
+			}
+
 			$this->response(true, 'User remove from Default successfully', array('is_default' => $_REQUEST['is_default']));
 		} else {
 
@@ -4257,6 +4548,10 @@ class Admin extends Base_Controller
 			$mail = $this->sendMail($email, 'Default Account', $message);
 
 			$this->updateCreditScoreUser(600, 'minus', $_REQUEST['id']);
+
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'SET_DEFAULT', "Added user to Default list: " . $array['name'], 'User Management', $_REQUEST['id'], $array['name']);
+			}
 
 			$this->response(true, 'User added in Default successfully', array('is_default' => $_REQUEST['is_default']));
 		}
@@ -4576,9 +4871,14 @@ class Admin extends Base_Controller
 
 	public function addPrivacyPolicy()
 	{
+		$existing = $this->common->getData('privacy_policy', array('id' => '1'), array('single'));
 		$result = $this->common->updateData('privacy_policy', array('info' => $_REQUEST['info']), array('id' => '1'));
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Privacy Policy information", 'CMS / Policy', null, null, $existing, array('info' => $_REQUEST['info']));
+			}
 			$this->response(true, "Update Information Successfully");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -4599,9 +4899,14 @@ class Admin extends Base_Controller
 
 	public function addTerms()
 	{
+		$existing = $this->common->getData('terms', array('id' => '1'), array('single'));
 		$result = $this->common->updateData('terms', array('info' => $_REQUEST['info']), array('id' => '1'));
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Terms & Conditions information", 'CMS / Policy', null, null, $existing, array('info' => $_REQUEST['info']));
+			}
 			$this->response(true, "Update Information Successfully");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -4815,6 +5120,12 @@ class Admin extends Base_Controller
 			$this->common->updateData('user', array('verify_token' => $data['token']), array('user_id' => $userid));
 			$message = $this->load->view('template/add-user-reset-mail', $data, true);
 			$mail = $this->sendMail($_REQUEST['email'], 'Member Registration', $message);
+
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = trim((isset($_REQUEST['first_name']) ? $_REQUEST['first_name'] : '') . ' ' . (isset($_REQUEST['last_name']) ? $_REQUEST['last_name'] : ''));
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new user: " . $target_name . " (" . (isset($_REQUEST['email']) ? $_REQUEST['email'] : '') . ")", 'User Management', $userid, $target_name);
+			}
 
 			if ($mail) {
 				$this->response(true, "User added successfully");
@@ -5196,6 +5507,12 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$userdetail = get_user_details($user_id);
+				$target_name = !empty($userdetail) ? (isset($userdetail['first_name']) ? $userdetail['first_name'] . ' ' . $userdetail['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated details for user: " . $target_name, 'User Management', $user_id, $target_name, null, $post);
+			}
 
 			$this->response(true, "User Update Successfully");
 		} else {
@@ -6265,12 +6582,29 @@ class Admin extends Base_Controller
 	public function removeSafekeepingRequest()
 	{
 		$id = $this->input->post('safekeeping_id');
+		if (empty($id) && isset($_REQUEST['safekeeping_id'])) {
+			$id = $_REQUEST['safekeeping_id'];
+		}
+		if (empty($id) && isset($_REQUEST['id'])) {
+			$id = $_REQUEST['id'];
+		}
 
 		if (!empty($id)) {
+			$existing = $this->common->getData('safe_keeping_withdral_request', ['id' => $id], ['single']);
 			$where = ['id' => $id];
 			$deleted = $this->common->deleteData('safe_keeping_withdral_request', $where);
 
 			if ($deleted) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$target_user_id = !empty($existing['user_id']) ? $existing['user_id'] : null;
+					$target_name = '';
+					if (!empty($target_user_id)) {
+						$targetUser = $this->common->getData('user', array('user_id' => $target_user_id), array('single'));
+						$target_name = !empty($targetUser) ? trim($targetUser['first_name'] . ' ' . $targetUser['last_name']) : '';
+					}
+					$this->common->logSubadminActivity($subadmin_id, 'DELETE', "Deleted safekeeping withdrawal request ID: " . $id . " for user: " . $target_name, 'Safekeeping', $target_user_id, $target_name, $existing, null);
+				}
 				$this->response(true, "Safekeeping request deleted successfully.");
 			} else {
 				$this->response(false, "Failed to delete safekeeping request. Please try again.");
@@ -6424,8 +6758,14 @@ class Admin extends Base_Controller
 
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$grpId = !empty($_REQUEST['id']) ? $_REQUEST['id'] : '';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added user(s) to group ID: " . $grpId, 'Group Management');
+			}
 			$this->response(true, "add user successfully, Please enter each user amount for cycle");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -6455,8 +6795,17 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated group member settings for user: " . $target_name, 'Group Management', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Member Info Successfully Updated");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -6519,6 +6868,12 @@ class Admin extends Base_Controller
 
 		if ($_REQUEST['requested_by'] == 'user') {
 			if ($result) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+					$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+					$this->common->logSubadminActivity($subadmin_id, 'REQUEST_PAYOUT', "Requested payout for user: " . $target_name, 'Payout', $_REQUEST['user_id'], $target_name, null, $post);
+				}
 				$this->response(true, "Your payout request has been sent to the admin for approval.");
 			} else {
 				$this->response(false, "There was a problem submitting your request. Please try again.");
@@ -6532,7 +6887,15 @@ class Admin extends Base_Controller
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+				$p_amt = isset($_REQUEST['payout_amount']) ? $_REQUEST['payout_amount'] : '0';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Processed payout of £" . $p_amt . " for user: " . $target_name, 'Payout', $_REQUEST['user_id'], $target_name, null, $post);
+			}
+
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+
 			$data['useremail'] = "";
 			$data['message'] = '<p>This is a confirmation that your PAYOUT for this cycle has been processed and paid into your account.</p><p>If you were not expecting this payment, please do let us know.</p>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
@@ -6656,6 +7019,15 @@ class Admin extends Base_Controller
 				['user_id' => $payoutRequest['user_id']],
 				['single']
 			);
+
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = $payoutRequest['user_id'] ?? null;
+				$target_name = !empty($userDetails) ? trim($userDetails['first_name'] . ' ' . $userDetails['last_name']) : '';
+				$status_action = $request_status == 1 ? 'Approved' : 'Rejected';
+				$act = $request_status == 1 ? 'APPROVE_PAYOUT' : 'REJECT_PAYOUT';
+				$this->common->logSubadminActivity($subadmin_id, $act, "Payout request " . $status_action . " for user: " . $target_name . " (Amount: £" . ($payoutRequest['payout_amount'] ?? 0) . ")", 'Payout', $uId, $target_name, $payoutRequest, null);
+			}
 
 			$data['sendername'] = !empty($userDetails) ? ($userDetails['first_name'] . ' ' . $userDetails['last_name']) : 'User';
 
@@ -6840,9 +7212,16 @@ class Admin extends Base_Controller
 
 		// If requested_by = user, return early (after calculations + insert)
 		if ($requester === 'user') {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$userDetailFrom = $this->common->getData('user', ['user_id' => $_REQUEST['user_id']], ['single']);
+				$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'REQUEST_SAFEKEEPING', "Requested safekeeping for user: " . $target_name, 'Safekeeping', $_REQUEST['user_id'], $target_name, null, $post);
+			}
 			$this->response(true, "Safekeeping request submitted successfully.");
 			return;
 		}
+
 
 		// ==== Admin: run full logic ====
 		$this->common->insertData('cycle_status_management', [
@@ -6883,8 +7262,16 @@ class Admin extends Base_Controller
 
 		$this->updateCreditScore(0, 'plus');
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		if (!empty($subadmin_id)) {
+			$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+			$sk_amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+			$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added safekeeping entry of £" . $sk_amt . " for user: " . $target_name, 'Safekeeping', $_REQUEST['user_id'], $target_name, null, $post);
+		}
+
 		$this->response(true, "Safekeeping entry added successfully.");
 	}
+
 
 	// public function acceptRejectSafekeepingRequest()
 	// {
@@ -7061,6 +7448,12 @@ class Admin extends Base_Controller
 			// Delete request
 			$this->common->deleteData('safe_keeping', ['id' => $id]);
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($userDetail) ? trim($userDetail['first_name'] . ' ' . $userDetail['last_name']) : '';
+				$this->common->logSubadminActivity($subadmin_id, 'REJECT_SAFEKEEPING', "Rejected safekeeping request (ID: " . $id . ") for user: " . $target_name, 'Safekeeping', $user_id, $target_name, $safekeeping, null);
+			}
+
 			$this->response(true, "Safekeeping request rejected successfully.");
 			return;
 		}
@@ -7151,6 +7544,12 @@ class Admin extends Base_Controller
 		");
 
 		$this->updateCreditScore(0, 'plus');
+
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		if (!empty($subadmin_id)) {
+			$target_name = !empty($userDetail) ? trim($userDetail['first_name'] . ' ' . $userDetail['last_name']) : '';
+			$this->common->logSubadminActivity($subadmin_id, 'ACCEPT_SAFEKEEPING', "Accepted safekeeping request (ID: " . $id . ") for user: " . $target_name, 'Safekeeping', $user_id, $target_name, $safekeeping, null);
+		}
 
 		$this->response(true, "Safekeeping request accepted successfully.");
 	}
@@ -7859,11 +8258,18 @@ class Admin extends Base_Controller
 			$message = "Admin updated your intestment info";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $investment_id, "4");
 
-			$this->common->query_normal("UPDATE credit_score_user SET investment_money = investment_money+0 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(0, 'plus');
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+				$inv_amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added investment of £" . $inv_amt . " for user: " . $target_name, 'Investment', $uId, $target_name, null, $post);
+			}
 
 			$this->response(true, "Add Investment Successfully", array("investment_id" => $investment_id));
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -7912,8 +8318,16 @@ class Admin extends Base_Controller
 
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+				$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated investment details for user: " . $target_name, 'Investment', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "Investment Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -8121,8 +8535,18 @@ class Admin extends Base_Controller
 
 
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		if (!empty($subadmin_id)) {
+			$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+			$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+			$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+			$amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+			$this->common->logSubadminActivity($subadmin_id, 'DEBIT', "Debited PF amount of £" . $amt . " for user: " . $target_name, 'Provident Fund', $uId, $target_name);
+		}
+
 		$this->response(true, "Payment debited successfully");
 	}
+
 
 
 
@@ -8132,8 +8556,18 @@ class Admin extends Base_Controller
 		//$_REQUEST['request_type'] = '1';
 		$this->paymentBySafekeeping('', $_REQUEST['amount'], $_REQUEST['payment_method'], $_REQUEST['request_type']);
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		if (!empty($subadmin_id)) {
+			$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+			$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+			$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
+			$amt = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : '0';
+			$this->common->logSubadminActivity($subadmin_id, 'DEBIT', "Debited Safekeeping amount of £" . $amt . " for user: " . $target_name, 'Safekeeping', $uId, $target_name);
+		}
+
 		$this->response(true, "Payment debited successfully", array('request_status' => 1));
 	}
+
 
 
 	function paymentByPF($id, $amount_paid, $payment_by)
@@ -8189,7 +8623,7 @@ class Admin extends Base_Controller
 
 	public function all_property_list()
 	{
-		$result = $this->common->getData('property', "", array("field" => "property.id as item_id,property.title as item_text"));
+		$result = $this->common->getData('property', "", array("field" => "property.id as item_id,property.title as item_text, property.status as status, property.is_closed as is_closed"));
 		if (!empty($result)) {
 			$this->response(true, "property fetch Successfully.", array("propertyList" => $result));
 		} else {
@@ -8242,6 +8676,12 @@ class Admin extends Base_Controller
 			$result = $this->common->insertData('tbl_banners', $post);
 		}
 
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		if (!empty($subadmin_id)) {
+			$b_title = !empty($_REQUEST['title']) ? $_REQUEST['title'] : 'Banner';
+			$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new banner: " . $b_title, 'Banner Management');
+		}
+
 		$result_banner = $this->common->getData('tbl_banners');
 		if (!empty($result_banner)) {
 			$this->response(true, "Banners fetched successfully.", ["banners" => $result_banner]);
@@ -8256,11 +8696,18 @@ class Admin extends Base_Controller
 		if (!empty($_REQUEST['id'])) {
 			$where = "id = '" . $this->db->escape_str($_REQUEST['id']) . "'";
 			$value = $this->common->deleteData('tbl_banners', $where);
+
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$this->common->logSubadminActivity($subadmin_id, 'DELETE', "Deleted banner ID: " . $_REQUEST['id'], 'Banner Management');
+			}
+
 			$this->response(true, "Deleted successfully.");
 		} else {
 			$this->response(false, "Id can't be empty.");
 		}
 	}
+
 
 	// created by @krishn on 11-08-25
 	public function allBanners()
@@ -8316,6 +8763,14 @@ class Admin extends Base_Controller
 		$result = $this->common->insertData('credit_score_list', $post);
 		$banners = $this->db->insert_id();
 
+		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$score_title = !empty($_REQUEST['title']) ? $_REQUEST['title'] : (!empty($_REQUEST['score']) ? $_REQUEST['score'] : 'Credit Score ID: ' . $banners);
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new credit score item: " . $score_title, 'Credit Score', null, null, null, $post);
+			}
+		}
+
 		$credit_score_list = $this->common->getData('credit_score_list');
 		if (!empty($credit_score_list)) {
 			$this->response(true, "credit_score fetch Successfully.", array("credit_score_list" => $credit_score_list));
@@ -8339,8 +8794,18 @@ class Admin extends Base_Controller
 	public function deleteCreditScoreList()
 	{
 		if (!empty($_REQUEST['id'])) {
-			$where = " id ='" . $_REQUEST['id'] . "'";
+			$existing = $this->common->getData('credit_score_list', array('id' => $_REQUEST['id']), array('single'));
+			$where = " id ='" . $this->db->escape_str($_REQUEST['id']) . "'";
 			$value = $this->common->deleteData('credit_score_list', $where);
+
+			if ($value) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$score_title = !empty($existing['title']) ? $existing['title'] : (!empty($existing['score']) ? $existing['score'] : 'ID: ' . $_REQUEST['id']);
+					$this->common->logSubadminActivity($subadmin_id, 'DELETE', "Deleted credit score item: " . $score_title, 'Credit Score', null, null, $existing, null);
+				}
+			}
+
 			$this->response(true, "Delete Successfully.");
 		} else {
 			$this->response(false, "Id Can't be empty.");
@@ -8350,6 +8815,7 @@ class Admin extends Base_Controller
 	public function editCreditScoreList()
 	{
 		$id = $_REQUEST['id'];
+		$existing = $this->common->getData('credit_score_list', array('id' => $id), array('single'));
 		unset($_REQUEST['id']);
 		$post = $this->common->getField('credit_score_list', $_REQUEST);
 
@@ -8360,6 +8826,11 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$score_title = !empty($post['title']) ? $post['title'] : (!empty($existing['title']) ? $existing['title'] : 'ID: ' . $id);
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated credit score item: " . $score_title, 'Credit Score', null, null, $existing, $post);
+			}
 			$this->response(true, "Credit_score Update Successfully");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -8369,9 +8840,9 @@ class Admin extends Base_Controller
 	// created by @krishn on 11-08-25
 	public function editBanner()
 	{
-		$id = $this->input->post('id', true);
+		$id = !empty($_REQUEST['id']) ? $_REQUEST['id'] : (!empty($_REQUEST['banner_id']) ? $_REQUEST['banner_id'] : $this->input->post('id', true));
 
-		if (!$id) {
+		if (empty($id)) {
 			return $this->response(false, "Banner ID is required.");
 		}
 
@@ -8383,8 +8854,14 @@ class Admin extends Base_Controller
 
 		$updateData = [];
 
-		$title = $this->input->post('title', true);
-		$updateData['title'] = !empty($title) ? $title : "";
+		if (isset($_REQUEST['title'])) {
+			$updateData['title'] = $_REQUEST['title'];
+		} else {
+			$title = $this->input->post('title', true);
+			if (!empty($title)) {
+				$updateData['title'] = $title;
+			}
+		}
 
 		// Image upload
 		if (isset($_FILES['image']) && $_FILES['image']['name'] != '') {
@@ -8393,18 +8870,25 @@ class Admin extends Base_Controller
 				$updateData['image'] = 'assets/banners/' . $upload['upload_data']['file_name'];
 				// Delete old image if exists
 				if (!empty($banner['image']) && file_exists(FCPATH . $banner['image'])) {
-					unlink(FCPATH . $banner['image']);
+					@unlink(FCPATH . $banner['image']);
 				}
 			} else {
 				return $this->response(false, "Image upload failed.");
 			}
-		} else {
-			$updateData['image'] = $banner['image'];
+		}
+
+		if (empty($updateData)) {
+			return $this->response(true, "No changes made to banner.");
 		}
 
 		$result = $this->common->updateData('tbl_banners', $updateData, ['id' => $id]);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$b_title = !empty($updateData['title']) ? $updateData['title'] : (!empty($banner['title']) ? $banner['title'] : 'Banner ID: ' . $id);
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated banner: " . $b_title, 'Banner Management', null, null, $banner, $updateData);
+			}
 			return $this->response(true, "Banner updated successfully.");
 		} else {
 			return $this->response(false, "No changes made or update failed.");
@@ -9037,7 +9521,14 @@ class Admin extends Base_Controller
 				$this->sendMail($userDetail['email'], 'New Welfare Account Created', $mailMessage);
 			}
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($userDetail) ? ($userDetail['first_name'] . ' ' . $userDetail['last_name']) : '';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Created Welfare account for user: " . $target_name, 'Welfare', $_REQUEST['user_id'], $target_name);
+			}
+
 			$this->response(true, "Welfare account created successfully", array("welfare_id" => $loan_id));
+
 		} else {
 			$this->response(false, "There is a problem, please try again.");
 		}
@@ -9290,8 +9781,23 @@ class Admin extends Base_Controller
 		}
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : (!empty($getloan['user_id']) ? $getloan['user_id'] : '');
+				$userDetail = $this->common->getData('user', array('user_id' => $uId), array('single'));
+				$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
+				$status_text = isset($_REQUEST['status']) ? $_REQUEST['status'] : 'updated';
+				if ($status_text === '4') { $status_text = 'Approved'; }
+				elseif ($status_text === '3') { $status_text = 'Declined'; }
+				elseif ($status_text === '6') { $status_text = 'Cancelled'; }
+				elseif ($status_text === '5') { $status_text = 'Awaiting Approval'; }
+
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Welfare status to " . $status_text . " for user: " . $target_name, 'Welfare', $uId, $target_name, null, $post);
+			}
+
 			$this->response(true, "welfare Update Successfully");
 		} else {
+
 			$this->response(false, "There is a problem, please try again.");
 		}
 	}
@@ -9513,6 +10019,12 @@ class Admin extends Base_Controller
 				$this->sendMail($user['email'], 'Welfare Claim Approved', $mailMessage);
 			}
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($user) ? trim($user['first_name'] . ' ' . $user['last_name']) : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Approved welfare claim ID: " . $claimId . " (£" . number_format($payoutAmount, 2) . ") for user: " . $target_name, 'Welfare', $claim['user_id'], $target_name, $claim, $updateClaim);
+			}
+
 			$this->response(true, "Welfare claim approved successfully.", array("new_balance" => $newBalance));
 
 		} elseif ($status == 2) {
@@ -9549,6 +10061,12 @@ class Admin extends Base_Controller
 				<p><strong>Reason:</strong> ' . htmlspecialchars($rejectReason) . '</p>';
 				$mailMessage = $this->load->view('template/common-mail', $mailData, true);
 				$this->sendMail($user['email'], 'Welfare Claim Declined', $mailMessage);
+			}
+
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($user) ? trim($user['first_name'] . ' ' . $user['last_name']) : '';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Declined welfare claim ID: " . $claimId . " for user: " . $target_name, 'Welfare', $claim['user_id'], $target_name, $claim, $updateClaim);
 			}
 
 			$this->response(true, "Welfare claim declined successfully.");
@@ -10091,8 +10609,14 @@ class Admin extends Base_Controller
 			$result = $this->common->insertData('group_circle', $post);
 			$id = $this->db->insert_id();
 			if ($result) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$circle_name = $_REQUEST['circle_name'] ?? '';
+					$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new group circle: " . $circle_name, 'Group Management', null, null, null, $post);
+				}
 				$this->response(true, "Circle added successfully!");
 			} else {
+
 				$this->response(false, "There is a problem, please try again.");
 			}
 		} else {
@@ -10471,6 +10995,12 @@ class Admin extends Base_Controller
 			$_REQUEST['circle_lead'] = "1";
 			$result = $this->common->query_normal("UPDATE user_circle SET circle_lead='" . $_REQUEST['circle_lead'] . "' WHERE `id` = '" . $id . "'");
 			if ($result) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$targetUser = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+					$target_name = !empty($targetUser) ? trim($targetUser['first_name'] . ' ' . $targetUser['last_name']) : '';
+					$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Assigned user: " . $target_name . " as Circle Lead in Circle ID: " . $_REQUEST['circle_id'] . ", Group ID: " . $_REQUEST['group_id'], 'Group Management', $_REQUEST['user_id'], $target_name);
+				}
 				$this->response(true, "Circle Assign Successfully");
 			} else {
 				$this->response(false, "There is a problem, please try again.");
@@ -10498,6 +11028,16 @@ class Admin extends Base_Controller
 			$result = $this->common->query_normal("UPDATE user_circle SET circle_lead = '0' WHERE `id` = '" . $id . "'");
 
 			if ($result) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$target_user_id = !empty($leadUser['user_id']) ? $leadUser['user_id'] : (!empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : null);
+					$target_name = '';
+					if (!empty($target_user_id)) {
+						$targetUser = $this->common->getData('user', array('user_id' => $target_user_id), array('single'));
+						$target_name = !empty($targetUser) ? trim($targetUser['first_name'] . ' ' . $targetUser['last_name']) : '';
+					}
+					$this->common->logSubadminActivity($subadmin_id, 'REMOVE', "Removed Circle Lead role from user: " . $target_name . " in Circle ID: " . $_REQUEST['circle_id'] . ", Group ID: " . $_REQUEST['group_id'], 'Group Management', $target_user_id, $target_name);
+				}
 				$this->response(true, "Circle lead removed successfully.");
 			} else {
 				$this->response(false, "There was a problem removing the circle lead. Please try again.");
@@ -10627,8 +11167,16 @@ class Admin extends Base_Controller
 					$messaged = $this->load->view('template/common-mail', $data, true);
 					$mail = $this->sendMail($value['email'], $_REQUEST['subject'], $messaged);
 				}
+
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$subj = isset($_REQUEST['subject']) ? $_REQUEST['subject'] : '';
+					$this->common->logSubadminActivity($subadmin_id, 'SEND_EMAIL', "Sent broadcast email ('" . $subj . "') to all members", 'Communication');
+				}
+
 				$this->response(true, "Mail sent successfully!");
 			} else {
+
 				$this->response(false, "User not found.Please add users and try again!");
 			}
 		} else {
@@ -10724,8 +11272,16 @@ class Admin extends Base_Controller
 			$mail = $this->sendMail($userDetailFrom1['email'], $_REQUEST['subject'], $messaged);
 
 			if ($mail) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+					$target_name = !empty($userDetailFrom1) ? (isset($userDetailFrom1['first_name']) ? $userDetailFrom1['first_name'] . ' ' . $userDetailFrom1['last_name'] : '') : '';
+					$subj = isset($_REQUEST['subject']) ? $_REQUEST['subject'] : '';
+					$this->common->logSubadminActivity($subadmin_id, 'SEND_EMAIL', "Sent email ('" . $subj . "') to user: " . $target_name, 'Communication', $uId, $target_name);
+				}
 				$this->response(true, "Mail sent successfully!");
 			} else {
+
 				$this->response(false, "There is a problem, please try again.");
 			}
 		} else {
@@ -10784,6 +11340,12 @@ class Admin extends Base_Controller
 			$_REQUEST['deputycirclelead'] = "1";
 			$result = $this->common->query_normal("UPDATE user_circle SET deputycirclelead='" . $_REQUEST['deputycirclelead'] . "' WHERE `id` = '" . $id . "'");
 			if ($result) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$targetUser = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+					$target_name = !empty($targetUser) ? trim($targetUser['first_name'] . ' ' . $targetUser['last_name']) : '';
+					$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Assigned user: " . $target_name . " as Deputy Circle Lead in Circle ID: " . $_REQUEST['circle_id'] . ", Group ID: " . $_REQUEST['group_id'], 'Group Management', $_REQUEST['user_id'], $target_name);
+				}
 				$this->response(true, "Circle assign deputy circle lead Successfully");
 			} else {
 				$this->response(false, "There is a problem, please try again.");
@@ -10811,6 +11373,16 @@ class Admin extends Base_Controller
 			$result = $this->common->query_normal("UPDATE user_circle SET deputycirclelead = '0' WHERE `id` = '" . $id . "'");
 
 			if ($result) {
+				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+				if (!empty($subadmin_id)) {
+					$target_user_id = !empty($deputyUser['user_id']) ? $deputyUser['user_id'] : (!empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : null);
+					$target_name = '';
+					if (!empty($target_user_id)) {
+						$targetUser = $this->common->getData('user', array('user_id' => $target_user_id), array('single'));
+						$target_name = !empty($targetUser) ? trim($targetUser['first_name'] . ' ' . $targetUser['last_name']) : '';
+					}
+					$this->common->logSubadminActivity($subadmin_id, 'REMOVE', "Removed Deputy Circle Lead role from user: " . $target_name . " in Circle ID: " . $_REQUEST['circle_id'] . ", Group ID: " . $_REQUEST['group_id'], 'Group Management', $target_user_id, $target_name);
+				}
 				$this->response(true, "Deputy circle lead removed successfully.");
 			} else {
 				$this->response(false, "There was a problem removing the deputy circle lead. Please try again.");
@@ -12115,6 +12687,15 @@ class Admin extends Base_Controller
 		);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$uId = $request['user_id'] ?? null;
+				$user = $this->common->getData('user', array('user_id' => $uId), array('single'));
+				$target_name = !empty($user) ? trim($user['first_name'] . ' ' . $user['last_name']) : '';
+				$status_action = $status == 1 ? 'Approved' : 'Rejected';
+				$act = $status == 1 ? 'APPROVE_INVESTMENT' : 'REJECT_INVESTMENT';
+				$this->common->logSubadminActivity($subadmin_id, $act, "Investment proposal " . $status_action . " (Request ID: " . $requestId . ", Amount: £" . ($request['amount'] ?? 0) . ") for user: " . $target_name, 'Investment', $uId, $target_name, $request, array('status' => $status));
+			}
 
 			// Insert into investment table when approved
 			if ($status == 1) {
@@ -12483,6 +13064,11 @@ class Admin extends Base_Controller
 		$result = $this->common->insertData('service_categories', $post);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$cat_name = !empty($_REQUEST['category_name']) ? $_REQUEST['category_name'] : 'Service Category';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new service category: " . $cat_name, 'Service Management', null, null, null, $post);
+			}
 			$this->response(true, "Service category added successfully.");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -12599,6 +13185,11 @@ class Admin extends Base_Controller
 		);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$cat_name = !empty($post['category_name']) ? $post['category_name'] : (!empty($category['category_name']) ? $category['category_name'] : 'Category ID: ' . $_REQUEST['category_id']);
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated service category: " . $cat_name, 'Service Management', null, null, $category, $post);
+			}
 			$this->response(true, "Category updated successfully.");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -12684,6 +13275,11 @@ class Admin extends Base_Controller
 		$result = $this->common->insertData('service_subcategories', $post);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$sub_name = !empty($_REQUEST['subcategory_name']) ? $_REQUEST['subcategory_name'] : 'Service SubCategory';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new service subcategory: " . $sub_name, 'Service Management', null, null, null, $post);
+			}
 			$this->response(true, "Sub Category added successfully.");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -12829,6 +13425,11 @@ class Admin extends Base_Controller
 		);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$sub_name = !empty($post['subcategory_name']) ? $post['subcategory_name'] : (!empty($subCategory['subcategory_name']) ? $subCategory['subcategory_name'] : 'SubCategory ID: ' . $_REQUEST['subcategory_id']);
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated service subcategory: " . $sub_name, 'Service Management', null, null, $subCategory, $post);
+			}
 
 			$this->response(true, "Sub Category updated successfully.");
 		} else {
@@ -12899,6 +13500,11 @@ class Admin extends Base_Controller
 		$result = $this->common->insertData('services', $post);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$s_name = !empty($_REQUEST['service_name']) ? $_REQUEST['service_name'] : 'Service';
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Added new service: " . $s_name, 'Service Management', null, null, null, $post);
+			}
 			$this->response(true, "Service added successfully.");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -13031,6 +13637,11 @@ class Admin extends Base_Controller
 		);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$s_name = !empty($post['service_name']) ? $post['service_name'] : (!empty($service['service_name']) ? $service['service_name'] : 'Service ID: ' . $_REQUEST['service_id']);
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated service: " . $s_name, 'Service Management', null, null, $service, $post);
+			}
 			$this->response(true, "Service updated successfully.");
 		} else {
 			$this->response(false, "There is a problem, please try again.");
@@ -13597,6 +14208,13 @@ class Admin extends Base_Controller
 				$mailMessage
 			);
 
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['approved_by']) ? $_REQUEST['approved_by'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : ''));
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($user) ? trim($user['first_name'] . ' ' . $user['last_name']) : '';
+				$s_name = !empty($service['service_name']) ? $service['service_name'] : 'User Service';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Approved user service '" . $s_name . "' (ID: " . $userService['id'] . ") for user: " . $target_name, 'Service Management', $user['user_id'], $target_name, $userService, $post);
+			}
+
 			$this->response(true, "Service approved successfully.");
 		} else {
 
@@ -13631,6 +14249,13 @@ class Admin extends Base_Controller
 				'Service Rejected',
 				$mailMessage
 			);
+
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['approved_by']) ? $_REQUEST['approved_by'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : ''));
+			if (!empty($subadmin_id)) {
+				$target_name = !empty($user) ? trim($user['first_name'] . ' ' . $user['last_name']) : '';
+				$s_name = !empty($service['service_name']) ? $service['service_name'] : 'User Service';
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Rejected user service '" . $s_name . "' (ID: " . $userService['id'] . ") for user: " . $target_name, 'Service Management', $user['user_id'], $target_name, $userService, $post);
+			}
 
 			$this->response(true, "Service rejected successfully.");
 		}
@@ -13857,6 +14482,13 @@ class Admin extends Base_Controller
 		);
 
 		if ($result) {
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			if (!empty($subadmin_id)) {
+				$status_text = $_REQUEST['status'] == 1 ? 'activated' : 'deactivated';
+				$b_title = !empty($banner['title']) ? $banner['title'] : 'Banner ID: ' . $_REQUEST['banner_id'];
+				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated banner status to " . $status_text . " for " . $b_title, 'Banner Management', null, null, $banner, $post);
+			}
+
 			$this->response(
 				true,
 				$_REQUEST['status'] == 1
