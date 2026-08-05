@@ -2592,7 +2592,7 @@ class Api extends Base_Controller
 
 	public function contactUs()
 	{
-		$data = array('name' => $_REQUEST['name'], 'email' => $_REQUEST['email'], 'mobile' => $_REQUEST['mobile_number'], 'message' => $_REQUEST['message']);
+		$data = array('name' => $_REQUEST['name'], 'email' => $_REQUEST['email'], 'mobile' => $_REQUEST['mobile_number'], 'message' => $_REQUEST['message'], 'type' => $_REQUEST['type']);
 		$message = $this->load->view('template/contact-mail', $data, true);
 
 		$superAdmin = $this->common->getData('superAdmin', ['admin_type' => '2'], ['single']);

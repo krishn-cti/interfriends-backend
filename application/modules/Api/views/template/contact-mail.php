@@ -168,7 +168,8 @@
                                             <h2 style="text-align: center;"><strong>Contact Us </strong></h2>
                                             <p> <strong>Hi Interfriends,</strong> </p>
 
-                                            <p style="color:#333; line-height: 1.6;"><?= $message; ?></p> <br>
+                                            <p style="color:#333; line-height: 1.6;"><?= $message; ?></p>
+                                            <p> Type: <?= $type; ?> </p> <br>
                                             <p>Thanks & Regards</p>
                                             <p> <strong><?= $name; ?></strong> </p>
                                             <p> <?= $email; ?> </p>
