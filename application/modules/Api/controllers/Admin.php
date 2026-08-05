@@ -4685,62 +4685,129 @@ class Admin extends Base_Controller
 	}
 
 	// created by @krishn on 12-08-25
+	// function sendMail($email, $subject, $message)
+	// {
+	// 	require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
+	// 	require_once(APPPATH . 'third_party/phpmailer/class.smtp.php');
+
+	// 	try {
+	// 		$mail = new PHPMailer();
+
+	// 		$mail->IsSMTP();
+	// 		$mail->CharSet = 'UTF-8';
+	// 		$mail->Host = "smtp.hostinger.com";
+	// 		$mail->SMTPAuth = true;
+	// 		$mail->Port = 465;
+	// 		$mail->Username = 'admin@interfriends.uk';
+	// 		$mail->Password = 'Mbx9jm!2';
+	// 		$mail->SMTPSecure = "ssl";
+
+	// 		$mail->setFrom("admin@interfriends.uk", 'Interfriends');
+	// 		$mail->isHTML(true);
+	// 		$mail->Subject = $subject;
+	// 		$mail->Body = $message;
+
+	// 		$mail->addAddress($email);
+
+	// 		$send = $mail->send();
+
+	// 		if ($send) {
+	// 			$imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
+	// 			$imapUser = 'admin@interfriends.uk';
+	// 			$imapPass = 'Mbx9jm!2';
+
+	// 			$imapStream = imap_open($imapServer, $imapUser, $imapPass);
+	// 			if ($imapStream) {
+	// 				$mime  = "Date: " . date('r') . "\r\n";
+	// 				$mime .= "From: Interfriends <admin@interfriends.uk>\r\n";
+	// 				$mime .= "To: <$email>\r\n";
+	// 				$mime .= "Subject: $subject\r\n";
+	// 				$mime .= "Message-ID: <" . md5(uniqid(time())) . "@interfriends.uk>\r\n";
+	// 				$mime .= "MIME-Version: 1.0\r\n";
+	// 				$mime .= "Content-Type: text/html; charset=UTF-8\r\n";
+	// 				$mime .= "\r\n";
+	// 				$mime .= $message;
+
+	// 				imap_append($imapStream, $imapServer, $mime, "\\Seen");
+	// 				imap_close($imapStream);
+	// 			}
+	// 			return true;
+	// 		} else {
+	// 			return false;
+	// 		}
+	// 	} catch (Exception $e) {
+	// 		return false;
+	// 	}
+	// }
+
+
+	// created by @krishn on 05-08-26
 	function sendMail($email, $subject, $message)
 	{
 		require_once(APPPATH . 'third_party/phpmailer/class.phpmailer.php');
 		require_once(APPPATH . 'third_party/phpmailer/class.smtp.php');
 
 		try {
-			$mail = new PHPMailer();
 
-			$mail->IsSMTP();
+			$mail = new PHPMailer(true);
+
+			$mail->isSMTP();
 			$mail->CharSet = 'UTF-8';
 			$mail->Host = "smtp.hostinger.com";
 			$mail->SMTPAuth = true;
-			$mail->Port = 465;
 			$mail->Username = 'admin@interfriends.uk';
 			$mail->Password = 'Mbx9jm!2';
-			$mail->SMTPSecure = "ssl";
+			$mail->SMTPSecure = 'ssl';
+			$mail->Port = 465;
 
-			$mail->setFrom("admin@interfriends.uk", 'Interfriends');
-			$mail->isHTML(true);
-			$mail->Subject = $subject;
-			$mail->Body = $message;
-
+			$mail->setFrom('admin@interfriends.uk', 'Interfriends');
 			$mail->addAddress($email);
 
-			$send = $mail->send();
+			$mail->isHTML(true);
+			$mail->Subject = $subject;
+			$mail->Body    = $message;
 
-			if ($send) {
+			// Better timeout
+			$mail->Timeout = 60;
+			$mail->SMTPKeepAlive = false;
+
+			if (!$mail->send()) {
+				log_message('error', 'Mail Error : ' . $mail->ErrorInfo);
+				return false;
+			}
+
+			// Save to Sent Folder (optional)
+			if (function_exists('imap_open')) {
+
 				$imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
-				$imapUser = 'admin@interfriends.uk';
-				$imapPass = 'Mbx9jm!2';
+				$imapUser   = 'admin@interfriends.uk';
+				$imapPass   = 'Mbx9jm!2';
 
-				$imapStream = imap_open($imapServer, $imapUser, $imapPass);
-				if ($imapStream) {
+				$imap = @imap_open($imapServer, $imapUser, $imapPass);
+
+				if ($imap) {
+
 					$mime  = "Date: " . date('r') . "\r\n";
 					$mime .= "From: Interfriends <admin@interfriends.uk>\r\n";
 					$mime .= "To: <$email>\r\n";
 					$mime .= "Subject: $subject\r\n";
-					$mime .= "Message-ID: <" . md5(uniqid(time())) . "@interfriends.uk>\r\n";
 					$mime .= "MIME-Version: 1.0\r\n";
-					$mime .= "Content-Type: text/html; charset=UTF-8\r\n";
-					$mime .= "\r\n";
+					$mime .= "Content-Type: text/html; charset=UTF-8\r\n\r\n";
 					$mime .= $message;
 
-					imap_append($imapStream, $imapServer, $mime, "\\Seen");
-					imap_close($imapStream);
+					@imap_append($imap, $imapServer, $mime);
+					imap_close($imap);
 				}
-				return true;
-			} else {
-				return false;
 			}
+
+			return true;
+
 		} catch (Exception $e) {
+
+			log_message('error', 'Mail Exception : ' . $e->getMessage());
 			return false;
 		}
 	}
-
-
 
 	public function ticketList()
 	{
@@ -11160,24 +11227,44 @@ class Admin extends Base_Controller
 			$userDetailFrom = $this->common->getData('user', array('status!=' => '2', 'is_default' => '1', 'recommended' => '0'), array());
 			if (!empty($userDetailFrom)) {
 
+				$queueCount = 0;
 				foreach ($userDetailFrom as $value) {
+					$data = array();
 					$data['sendername'] = $value['first_name'] . " " . $value['last_name'];
 					$data['useremail'] = "";
 					$data['message'] = '<p>' . $_REQUEST['message'] . '</p>';
 					$messaged = $this->load->view('template/common-mail', $data, true);
-					$mail = $this->sendMail($value['email'], $_REQUEST['subject'], $messaged);
+
+					$queueData = array(
+						'user_id'    => $value['user_id'],
+						'group_id'   => 0,
+						'email'      => $value['email'],
+						'subject'    => $_REQUEST['subject'],
+						'message'    => $messaged,
+						'status'     => 0, // Pending
+						'attempts'   => 0,
+						'created_at' => date('Y-m-d H:i:s'),
+						'updated_at' => date('Y-m-d H:i:s')
+					);
+
+					if ($this->common->insertData('email_queue', $queueData)) {
+						$queueCount++;
+					}
 				}
 
 				$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
 				if (!empty($subadmin_id)) {
 					$subj = isset($_REQUEST['subject']) ? $_REQUEST['subject'] : '';
-					$this->common->logSubadminActivity($subadmin_id, 'SEND_EMAIL', "Sent broadcast email ('" . $subj . "') to all members", 'Communication');
+					$this->common->logSubadminActivity($subadmin_id, 'SEND_EMAIL', "Queued broadcast email ('" . $subj . "') to all members", 'Communication');
 				}
 
-				$this->response(true, "Mail sent successfully!");
+				if ($queueCount > 0) {
+					$this->response(true, $queueCount . " email(s) added to queue successfully.", array("queued_emails" => $queueCount));
+				} else {
+					$this->response(false, "Unable to add emails to queue.");
+				}
 			} else {
-
-				$this->response(false, "User not found.Please add users and try again!");
+				$this->response(false, "User not found. Please add users and try again!");
 			}
 		} else {
 			$this->response(false, "Please add message and subject");
@@ -13514,12 +13601,13 @@ class Admin extends Base_Controller
 	// API created by @krishn on 14/07/26
 	public function serviceList()
 	{
-		if (empty($_REQUEST['start'])) {
-			$start = 10;
-			$end = 0;
+		// Pagination: If start is sent in payload, default limit to 10 (unless limit is specified). Otherwise fetch all.
+		if (isset($_REQUEST['start']) && $_REQUEST['start'] !== '') {
+			$start = (int)$_REQUEST['start'];
+			$limit = (isset($_REQUEST['limit']) && $_REQUEST['limit'] !== '') ? (int)$_REQUEST['limit'] : 10;
 		} else {
-			$start = 10;
-			$end = $_REQUEST['start'];
+			$start = null;
+			$limit = null;
 		}
 
 		$where = array();
@@ -13548,22 +13636,31 @@ class Admin extends Base_Controller
 			$where['S.created_by_type'] = 'subadmin';
 		}
 
-		$result = $this->user_model->service_detail($where, array(), $start, $end);
+		// If pagination is passed, use it. Otherwise fetch all.
+		if ($start !== null && $limit !== null) {
+			$result = $this->user_model->service_detail($where, array(), $limit, $start);
+		} else {
+			$result = $this->user_model->service_detail($where);
+		}
 
 		$listCount = $this->user_model->service_detail($where, array('count'));
 
-		$countData = $end + 1;
-
 		if (!empty($result)) {
 
-			foreach ($result as $key => $value) {
-				$result[$key]['sno'] = $countData++;
+			// Add serial number when pagination is used
+			if ($start !== null) {
+				$countData = $start + 1;
+
+				foreach ($result as $key => $value) {
+					$result[$key]['sno'] = $countData++;
+				}
 			}
 
 			$this->response(true, "Service fetched successfully.", array(
 				'lists' => $result,
 				'listCount' => $listCount
 			));
+
 		} else {
 
 			$this->response(true, "Service fetched successfully.", array(
@@ -13820,7 +13917,7 @@ class Admin extends Base_Controller
 					$user['user_id'],
 					$createdBy,
 					0,
-					"A new service has been assigned to your account.",
+					"A new service/profile has been assigned to your account.",
 					$userServiceId,
 					"20"
 				);
@@ -13832,18 +13929,18 @@ class Admin extends Base_Controller
 				$data['message'] = "
 						<p>Congratulations!</p>
 
-						<p>A new service has been assigned to your account by the administrator.</p>
+						<p>A new service/profile has been assigned to your account by the administrator.</p>
 
 						<p><strong>Service :</strong> {$service['service_name']}</p>
 
-						<p>You can now view this service from your Directory section on your dashboard.</p>
+						<p>You can now view this service from the Directory section on your dashboard.</p>
 						";
 
 				$mailMessage = $this->load->view('template/common-mail', $data, true);
 
 				$this->sendMail(
 					$user['email'],
-					'New Service Assigned',
+					'New Service/Profile Created',
 					$mailMessage
 				);
 			} else {

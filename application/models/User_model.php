@@ -1793,8 +1793,12 @@ class User_model extends CI_Model
 
 		$this->db->order_by('S.id', 'DESC');
 
-		if ($limit != '') {
-			$this->db->limit($limit, $start);
+		if ($limit !== '' && $limit !== null) {
+			if ($start !== '' && $start !== null) {
+				$this->db->limit((int)$limit, (int)$start);
+			} else {
+				$this->db->limit((int)$limit);
+			}
 		}
 
 		$res = $this->db->get()->result_array();
