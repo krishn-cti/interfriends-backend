@@ -11224,7 +11224,7 @@ class Admin extends Base_Controller
 	public function sendEmailtoAllMembers()
 	{
 		if (!empty($_REQUEST['subject']) && !empty($_REQUEST['message'])) {
-			$userDetailFrom = $this->common->getData('user', array('status!=' => '2', 'is_default' => '1', 'recommended' => '0'), array());
+			$userDetailFrom = $this->common->getData('user', array('status!=' => '2', 'is_default!=' => '2', 'recommended' => '0'), array());
 			if (!empty($userDetailFrom)) {
 
 				$queueCount = 0;
@@ -12974,10 +12974,12 @@ class Admin extends Base_Controller
 		$linkDecline = API_BASE_URL . "handleDecline/{$token}/2";
 		$reminderSentAt = date('d M Y h:i A');
 
+		$_mobileCountryCode = !empty($recommendUser['country_code']) ? $recommendUser['country_code'] . ' ' : '';
+		$_fullMobile = $_mobileCountryCode . $recommendUser['mobile_number'];
 		$memberDetails = "
 			<ol>
 				<li><strong>Name of proposed member:</strong> {$recommendUser['first_name']}</li>
-				<li><strong>Telephone number:</strong> {$recommendUser['mobile_number']}</li>
+				<li><strong>Telephone number:</strong> {$_fullMobile}</li>
 				<li><strong>Email:</strong> {$recommendUser['email']}</li>
 				<li><strong>Employment status:</strong> {$employmentStatus}</li>
 			</ol>
@@ -13841,6 +13843,7 @@ class Admin extends Base_Controller
 				'user_id'           => $value['user_id'],
 				'service_id'        => $_REQUEST['service_id'],
 				'description'       => $providerDescription,
+				'country_code'      => !empty($value['country_code']) ? $value['country_code'] : '',
 				'mobile'            => !empty($value['mobile']) ? $value['mobile'] : '',
 				'email'             => !empty($value['email']) ? $value['email'] : '',
 				'website'           => !empty($value['website']) ? $value['website'] : '',

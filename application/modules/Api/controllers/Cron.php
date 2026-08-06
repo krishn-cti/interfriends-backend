@@ -277,10 +277,12 @@ class Cron extends Base_Controller
             $approveLink = API_BASE_URL . "handleApproval/" . urlencode($approval['token']) . "/1";
             $declineLink = API_BASE_URL . "handleDecline/" . urlencode($approval['token']) . "/2";
 
+            $_mobileCountryCode = !empty($recommendUser['country_code']) ? $recommendUser['country_code'] . ' ' : '';
+            $_fullMobile = $_mobileCountryCode . $recommendUser['mobile_number'];
             $memberDetails = "
                 <ol>
                     <li><strong>Name of proposed member:</strong> {$recommendUser['first_name']}</li>
-                    <li><strong>Telephone number:</strong> {$recommendUser['mobile_number']}</li>
+                    <li><strong>Telephone number:</strong> {$_fullMobile}</li>
                     <li><strong>Email:</strong> {$recommendUser['email']}</li>
                     <li><strong>Employment status:</strong> {$employmentStatus}</li>
                 </ol>";
