@@ -10,10 +10,10 @@ class Api extends Base_Controller
 		parent::__construct();
 		// $this->checkAuth();		
 		$this->load->helper(
-			array('common', 'user')
+			array('common', 'user', 'whatsapp')
 		);
 		$this->load->library('email');
-		// $this->load->library('whatsapp');
+		$this->load->library('whatsapp');
 		$this->load->model("user_model");
 		header('Access-Control-Allow-Origin: *');
 		header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -1295,6 +1295,10 @@ class Api extends Base_Controller
 
 			$subject = "New User Interested in Joining Interfriends";
 
+			$countryCode = !empty($_REQUEST['country_code']) ? trim($_REQUEST['country_code']) : '';
+			$phoneNumber = $_REQUEST['phone_number'] ?? '';
+			$fullPhone   = (!empty($countryCode) ? $countryCode . ' ' : '') . $phoneNumber;
+
 			$messaged1 = "
 			Hello " . $superAdmin['name'] . ",<br><br>
 
@@ -1302,7 +1306,7 @@ class Api extends Base_Controller
 
 			<b>Name:</b> " . ($_REQUEST['first_name'] ?? '') . " " . ($_REQUEST['last_name'] ?? '') . "<br>
 			<b>Email:</b> " . ($_REQUEST['email'] ?? '') . "<br>
-			<b>Phone:</b> " . ($_REQUEST['phone_number'] ?? '') . "<br><br>
+			<b>Phone:</b> " . $fullPhone . "<br><br>
 
 			Please review the details and take the necessary action.<br><br>
 
@@ -4034,10 +4038,12 @@ class Api extends Base_Controller
 		}
 
 		// Common details list
+		$_mobileCountryCode = !empty($recommendedUser['country_code']) ? $recommendedUser['country_code'] . ' ' : '';
+		$_fullMobile = $_mobileCountryCode . $recommendedUser['mobile_number'];
 		$memberDetails = "
 			<ol>
 				<li><strong>Name of proposed member:</strong> {$recommendedUser['first_name']}</li>
-				<li><strong>Telephone number:</strong> {$recommendedUser['mobile_number']}</li>
+				<li><strong>Telephone number:</strong> {$_fullMobile}</li>
 				<li><strong>Email:</strong> {$recommendedUser['email']}</li>
 				<li><strong>Employment status:</strong> {$employmentStatus}</li>
 			</ol>
@@ -4750,6 +4756,7 @@ class Api extends Base_Controller
 			'company_name'      => !empty($_REQUEST['company_name']) ? $_REQUEST['company_name'] : '',
 			'company_logo'      => $companyLogo,
 			'description'       => !empty($_REQUEST['description']) ? $_REQUEST['description'] : '',
+			'country_code'      => !empty($_REQUEST['country_code']) ? $_REQUEST['country_code'] : '',
 			'mobile'            => !empty($_REQUEST['mobile']) ? $_REQUEST['mobile'] : '',
 			'email'             => !empty($_REQUEST['email']) ? $_REQUEST['email'] : '',
 			'website'           => !empty($_REQUEST['website']) ? $_REQUEST['website'] : '',
@@ -5032,6 +5039,10 @@ class Api extends Base_Controller
 			$updateArr['mobile'] = $_REQUEST['mobile'];
 		}
 
+		if (isset($_REQUEST['country_code'])) {
+			$updateArr['country_code'] = $_REQUEST['country_code'];
+		}
+
 		if (isset($_REQUEST['email'])) {
 			$updateArr['email'] = $_REQUEST['email'];
 		}
@@ -5192,35 +5203,75 @@ class Api extends Base_Controller
 	 *   - parameters: Parameters array or JSON for template placeholders (optional)
 	 *   - language_code: Language code e.g. 'en' (optional, default 'en')
 	 */
-	// public function test_whatsapp()
-	// {
-	// 	$recipient     = isset($_REQUEST['recipient']) ? trim($_REQUEST['recipient']) : '';
-	// 	$message       = isset($_REQUEST['message']) ? trim($_REQUEST['message']) : 'Test WhatsApp Message from Interfriends API';
-	// 	$template_name = isset($_REQUEST['template_name']) ? trim($_REQUEST['template_name']) : '';
-	// 	$params_raw    = isset($_REQUEST['parameters']) ? $_REQUEST['parameters'] : '';
-	// 	$language_code = isset($_REQUEST['language_code']) ? trim($_REQUEST['language_code']) : 'en';
+	public function test_whatsapp()
+	{
+		$recipient     = isset($_REQUEST['recipient']) ? trim($_REQUEST['recipient']) : '';
+		$message       = isset($_REQUEST['message']) ? trim($_REQUEST['message']) : 'Test WhatsApp Message from Interfriends API';
+		$template_name = isset($_REQUEST['template_name']) ? trim($_REQUEST['template_name']) : '';
+		$params_raw    = isset($_REQUEST['parameters']) ? $_REQUEST['parameters'] : '';
+		$language_code = isset($_REQUEST['language_code']) ? trim($_REQUEST['language_code']) : 'en';
 
-	// 	if (empty($recipient)) {
-	// 		$this->response(false, 'Recipient (phone number or email) is required.');
-	// 		return;
-	// 	}
+		if (empty($recipient)) {
+			$this->response(false, 'Recipient (phone number or email) is required.');
+			return;
+		}
 
-	// 	$parameters = array();
-	// 	if (!empty($params_raw)) {
-	// 		if (is_array($params_raw)) {
-	// 			$parameters = $params_raw;
-	// 		} else {
-	// 			$decoded = json_decode($params_raw, true);
-	// 			$parameters = is_array($decoded) ? $decoded : explode(',', $params_raw);
-	// 		}
-	// 	}
+		$parameters = array();
+		if (!empty($params_raw)) {
+			if (is_array($params_raw)) {
+				$parameters = $params_raw;
+			} else {
+				$decoded = json_decode($params_raw, true);
+				$parameters = is_array($decoded) ? $decoded : explode(',', $params_raw);
+			}
+		}
 
-	// 	$result = send_whatsapp_notification($recipient, $message, $template_name, $parameters, $language_code);
+		$result = send_whatsapp_notification($recipient, $message, $template_name, $parameters, $language_code);
 
-	// 	if (!empty($result['success'])) {
-	// 		$this->response(true, 'WhatsApp message sent successfully', $result);
-	// 	} else {
-	// 		$this->response(false, isset($result['message']) ? $result['message'] : 'Failed to send WhatsApp message', isset($result['data']) ? $result['data'] : $result);
-	// 	}
-	// }
+		if (!empty($result['success'])) {
+			$this->response(true, 'WhatsApp message sent successfully', $result);
+		} else {
+			$this->response(false, isset($result['message']) ? $result['message'] : 'Failed to send WhatsApp message', isset($result['data']) ? $result['data'] : $result);
+		}
+	}
+
+	// webhook for whatsapp message
+	public function whatsapp_webhook()
+	{
+		// 1. Meta Verification Challenge (GET Request)
+		if ($this->input->method() === 'get') {
+			$mode      = $this->input->get('hub_mode');
+			$token     = $this->input->get('hub_verify_token');
+			$challenge = $this->input->get('hub_challenge');
+
+			$config_token = $this->config->item('whatsapp_verify_token', 'whatsapp');
+			if (empty($config_token)) {
+				$config_token = 'INTERFRIENDS_WA_WEBHOOK_2026';
+			}
+
+			if ($mode === 'subscribe' && $token === $config_token) {
+				http_response_code(200);
+				echo $challenge;
+				exit;
+			} else {
+				http_response_code(403);
+				echo 'Forbidden';
+				exit;
+			}
+		}
+
+		// 2. Incoming Notification / Webhook Payload (POST Request)
+		if ($this->input->method() === 'post') {
+			$input = file_get_contents('php://input');
+			$data  = json_decode($input, true);
+
+			if (!empty($data)) {
+				log_message('info', 'WhatsApp Webhook Notification: ' . $input);
+			}
+
+			http_response_code(200);
+			echo 'EVENT_RECEIVED';
+			exit;
+		}
+	}
 }

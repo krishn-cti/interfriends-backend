@@ -730,7 +730,7 @@ class User_model extends CI_Model
 	{
 		// new-changes  ,UG.jnr_amount,
 
-		$this->db->select('UG.id,UG.group_id,UG.user_id,UG.amount,UG.expected_date,UG.jnr_amount,U.first_name,U.last_name,U.email,U.dob,U.mobile_number,U.home_number,U.emergency_number,U.kin_name,U.kin_number,U.address_line_1,U.address_line_2,U.post_code,U.city,U.profile_image,U.profile_image_thumb');
+		$this->db->select('UG.id,UG.group_id,UG.user_id,UG.amount,UG.expected_date,UG.jnr_amount,U.first_name,U.last_name,U.email,U.dob,U.country_code,U.mobile_number,U.home_country_code,U.home_number,U.emergency_country_code,U.emergency_number,U.kin_name,U.kin_country_code,U.kin_number,U.address_line_1,U.address_line_2,U.post_code,U.city,U.profile_image,U.profile_image_thumb');
 		$this->db->from('user_group as UG');
 		if ($where != "") {
 			$this->db->where($where);
@@ -767,7 +767,7 @@ class User_model extends CI_Model
 
 	public function user_circle_detail($where = "", $options = array(), $limit = '', $start = '', $having = '')
 	{
-		$this->db->select('UG.id,UG.group_id,UG.circle_lead,UG.circle_id,UG.user_id,U.first_name,U.last_name,U.email,U.dob,U.mobile_number,U.home_number,U.emergency_number,U.kin_name,U.kin_number,U.address_line_1,U.address_line_2,U.post_code,U.city,U.	profile_image,U.profile_image_thumb');
+		$this->db->select('UG.id,UG.group_id,UG.circle_lead,UG.circle_id,UG.user_id,U.first_name,U.last_name,U.email,U.dob,U.country_code,U.mobile_number,U.home_country_code,U.home_number,U.emergency_country_code,U.emergency_number,U.kin_name,U.kin_country_code,U.kin_number,U.address_line_1,U.address_line_2,U.post_code,U.city,U.profile_image,U.profile_image_thumb');
 		$this->db->from('user_circle as UG');
 		if ($where != "") {
 			$this->db->where($where);
@@ -1834,6 +1834,7 @@ class User_model extends CI_Model
 			US.location,
 			US.latitude,
 			US.longitude,
+			US.country_code,
 			US.approval_status,
 			US.status
 		");
@@ -1913,6 +1914,7 @@ class User_model extends CI_Model
 			US.company_logo,
 			US.price,
 			US.description as provider_description,
+			US.country_code,
 			US.mobile,
 			US.email,
 			US.website,
@@ -1996,6 +1998,7 @@ class User_model extends CI_Model
 				$this->db->or_like('US.company_name', $where['search']);
 				$this->db->or_like('US.description', $where['search']);
 				$this->db->or_like('US.email', $where['search']);
+				$this->db->or_like('US.country_code', $where['search']);
 				$this->db->or_like('US.mobile', $where['search']);
 				$this->db->or_like('US.location', $where['search']);
 				$this->db->or_like('U.first_name', $where['search']);
