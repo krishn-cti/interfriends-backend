@@ -83,7 +83,7 @@ class Cron extends Base_Controller
     public function processEmailQueue()
     {
         // Optional Security Token
-        $token = $_REQUEST['token'] ?? '';
+        $token = $this->input->get('token', true);
 
         if ($token != 'INTERFRIENDS_SECRET_2026') {
             $this->response(false, "Unauthorized.");
@@ -287,9 +287,9 @@ class Cron extends Base_Controller
                     <li><strong>Employment status:</strong> {$employmentStatus}</li>
                 </ol>";
 
-                if ($approval['approver_role'] == 'second_recommender') {
+            if ($approval['approver_role'] == 'second_recommender') {
 
-                    $message = "
+                $message = "
                 <p>This is a friendly reminder.</p>
 
                 <p><strong>{$recommenderName}</strong> has recommended
@@ -298,10 +298,10 @@ class Cron extends Base_Controller
                 {$memberDetails}
 
                 <p>Please review this recommendation.</p>";
-                } elseif (
-                    $approval['approver_role'] == 'circle_lead' ||
-                    $approval['approver_role'] == 'deputy_circle_lead'
-                ) {
+            } elseif (
+                $approval['approver_role'] == 'circle_lead' ||
+                $approval['approver_role'] == 'deputy_circle_lead'
+            ) {
 
                 $message = "
                 <p>This is a friendly reminder.</p>
@@ -313,9 +313,9 @@ class Cron extends Base_Controller
                 {$memberDetails}
 
                 <p>Please review this recommendation.</p>";
-                } else {
+            } else {
 
-                    $message = "
+                $message = "
                 <p>This is a friendly reminder.</p>
 
                 <p><strong>{$recommenderName}</strong> and
@@ -325,7 +325,7 @@ class Cron extends Base_Controller
                 {$memberDetails}
 
                 <p>Please review this recommendation.</p>";
-                }
+            }
 
             $message .= "
             <p>
@@ -376,7 +376,7 @@ class Cron extends Base_Controller
             echo "Unauthorized";
             return;
         }
-        
+
         $where = "
             UL.status = 4
             AND ULP.status NOT IN (1,2)
