@@ -47,6 +47,7 @@ class Admin extends Base_Controller
 			"email" => $adminInfo["email"],
 			"group_ids" => $adminInfo["group_ids"],
 			"circle_ids" => $adminInfo["circle_ids"],
+			"permission_ids" => $adminInfo["permission_ids"],
 			"token" => $token,
 			"name" => $adminInfo["name"],
 			"admin_type" => $adminInfo["admin_type"]
@@ -689,9 +690,13 @@ class Admin extends Base_Controller
 				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
 				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
 				$status_text = isset($_REQUEST['status']) ? $_REQUEST['status'] : 'updated';
-				if ($status_text === '2') { $status_text = 'Paid On Time'; }
-				elseif ($status_text === '4') { $status_text = 'Paid Late'; }
-				elseif ($status_text === '3') { $status_text = 'Missed Payment Deadline'; }
+				if ($status_text === '2') {
+					$status_text = 'Paid On Time';
+				} elseif ($status_text === '4') {
+					$status_text = 'Paid Late';
+				} elseif ($status_text === '3') {
+					$status_text = 'Missed Payment Deadline';
+				}
 
 				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated user group cycle payment (status: " . $status_text . ") for user: " . $target_name, 'Group Cycle', $uId, $target_name, null, $post);
 			}
@@ -2551,10 +2556,15 @@ class Admin extends Base_Controller
 				$uDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
 				$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
 				$status_text = isset($_REQUEST['status']) ? $_REQUEST['status'] : 'updated';
-				if ($status_text === '4') { $status_text = 'Approved'; }
-				elseif ($status_text === '3') { $status_text = 'Declined'; }
-				elseif ($status_text === '6') { $status_text = 'Cancelled'; }
-				elseif ($status_text === '2') { $status_text = 'Completed'; }
+				if ($status_text === '4') {
+					$status_text = 'Approved';
+				} elseif ($status_text === '3') {
+					$status_text = 'Declined';
+				} elseif ($status_text === '6') {
+					$status_text = 'Cancelled';
+				} elseif ($status_text === '2') {
+					$status_text = 'Completed';
+				}
 
 				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Emergency loan details (status: " . $status_text . ") for user: " . $target_name, 'Emergency Loan', $uId, $target_name, null, $post);
 			}
@@ -4182,11 +4192,17 @@ class Admin extends Base_Controller
 			$uDetail = !empty($userId) ? $this->common->getData('user', array('user_id' => $userId), array('single')) : array();
 			$target_name = !empty($uDetail) ? (isset($uDetail['first_name']) ? $uDetail['first_name'] . ' ' . $uDetail['last_name'] : '') : '';
 			$status_text = $hasStatus ? $status : 'updated';
-			if ($status_text === '4') { $status_text = 'Approved'; }
-			elseif ($status_text === '3') { $status_text = 'Declined'; }
-			elseif ($status_text === '6') { $status_text = 'Cancelled'; }
-			elseif ($status_text === '5') { $status_text = 'Awaiting Approval'; }
-			elseif ($status_text === '2') { $status_text = 'Completed'; }
+			if ($status_text === '4') {
+				$status_text = 'Approved';
+			} elseif ($status_text === '3') {
+				$status_text = 'Declined';
+			} elseif ($status_text === '6') {
+				$status_text = 'Cancelled';
+			} elseif ($status_text === '5') {
+				$status_text = 'Awaiting Approval';
+			} elseif ($status_text === '2') {
+				$status_text = 'Completed';
+			}
 
 			$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated loan details (status: " . $status_text . ") for user: " . $target_name, 'Loan', $userId, $target_name, null, $post);
 		}
@@ -4801,7 +4817,6 @@ class Admin extends Base_Controller
 			}
 
 			return true;
-
 		} catch (Exception $e) {
 
 			log_message('error', 'Mail Exception : ' . $e->getMessage());
@@ -9348,8 +9363,8 @@ class Admin extends Base_Controller
 	// public function savingJnrTotal_nnnn()
 	// {
 	// 	$where = "UG.group_id != 34
-    //           AND UG.group_id != 0
-    //           AND U.status != 2";
+	//           AND UG.group_id != 0
+	//           AND U.status != 2";
 
 	// 	$users = $this->user_model->user_group_detail($where, array());
 
@@ -9595,7 +9610,6 @@ class Admin extends Base_Controller
 			}
 
 			$this->response(true, "Welfare account created successfully", array("welfare_id" => $loan_id));
-
 		} else {
 			$this->response(false, "There is a problem, please try again.");
 		}
@@ -9854,10 +9868,15 @@ class Admin extends Base_Controller
 				$userDetail = $this->common->getData('user', array('user_id' => $uId), array('single'));
 				$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
 				$status_text = isset($_REQUEST['status']) ? $_REQUEST['status'] : 'updated';
-				if ($status_text === '4') { $status_text = 'Approved'; }
-				elseif ($status_text === '3') { $status_text = 'Declined'; }
-				elseif ($status_text === '6') { $status_text = 'Cancelled'; }
-				elseif ($status_text === '5') { $status_text = 'Awaiting Approval'; }
+				if ($status_text === '4') {
+					$status_text = 'Approved';
+				} elseif ($status_text === '3') {
+					$status_text = 'Declined';
+				} elseif ($status_text === '6') {
+					$status_text = 'Cancelled';
+				} elseif ($status_text === '5') {
+					$status_text = 'Awaiting Approval';
+				}
 
 				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated Welfare status to " . $status_text . " for user: " . $target_name, 'Welfare', $uId, $target_name, null, $post);
 			}
@@ -10093,7 +10112,6 @@ class Admin extends Base_Controller
 			}
 
 			$this->response(true, "Welfare claim approved successfully.", array("new_balance" => $newBalance));
-
 		} elseif ($status == 2) {
 
 			// Update claim record
@@ -13662,7 +13680,6 @@ class Admin extends Base_Controller
 				'lists' => $result,
 				'listCount' => $listCount
 			));
-
 		} else {
 
 			$this->response(true, "Service fetched successfully.", array(
@@ -14598,5 +14615,73 @@ class Admin extends Base_Controller
 		} else {
 			$this->response(false, "There is a problem, please try again.");
 		}
+	}
+
+	// created by @krishn on 06/08/26
+	public function updateSubadminPermission()
+	{
+		if (empty($_REQUEST['subadmin_id'])) {
+			$this->response(false, "Subadmin ID is required.");
+			return;
+		}
+
+		if (!isset($_REQUEST['permission_ids'])) {
+			$this->response(false, "Permission IDs are required.");
+			return;
+		}
+
+		$subadmin = $this->common->getData(
+			'superAdmin',
+			array(
+				'id' => $_REQUEST['subadmin_id'],
+				'admin_type' => 1
+			),
+			array('single')
+		);
+
+		if (empty($subadmin)) {
+			$this->response(false, "Subadmin not found.");
+			return;
+		}
+
+		// Convert comma separated string into array
+		$permissionIds = explode(',', $_REQUEST['permission_ids']);
+		$permissionIds = array_map('trim', $permissionIds);
+		$permissionIds = array_filter($permissionIds);
+		$permissionIds = array_unique($permissionIds);
+
+		if (empty($permissionIds)) {
+			$this->response(false, "Please select at least one permission.");
+			return;
+		}
+
+		// Validate permission ids
+		$permissions = $this->db
+			->select('id')
+			->where_in('id', $permissionIds)
+			->where('status', 1)
+			->get('menu_permissions')
+			->result_array();
+
+		$validIds = array_column($permissions, 'id');
+
+		if (empty($validIds)) {
+			$this->response(false, "Invalid permissions selected.");
+			return;
+		}
+
+		$update = array(
+			'permission_ids' => implode(',', $validIds)
+		);
+
+		$this->common->updateData(
+			'superAdmin',
+			$update,
+			array('id' => $_REQUEST['subadmin_id'])
+		);
+
+		$this->response(true, "Permissions updated successfully.", array(
+			'permission_ids' => implode(',', $validIds)
+		));
 	}
 }
