@@ -391,33 +391,45 @@ class Cron extends Base_Controller
             return;
         }
 
+        $loanTypeMap = array(
+            1 => 'Loan',
+            2 => 'Help To Pay(Car Insurance)',
+            3 => 'Help To Buy(Car)',
+            4 => 'Help To Buy(Credit Card)',
+            5 => 'Help Me Pay Something Else',
+            6 => 'Help To Buy(House)',
+            7 => 'Welfare'
+        );
+
         foreach ($payments as $row) {
 
             $data['sendername'] = $row['first_name'] . ' ' . $row['last_name'];
             $data['useremail']  = $row['email'];
 
+            $loanType = isset($loanTypeMap[$row['loan_type']])
+                ? $loanTypeMap[$row['loan_type']]
+                : 'Unknown Loan Type';
+
             $data['message'] = '
 
-            <p>This is a reminder that your loan repayment is still outstanding.</p>
+                <p>This is a reminder that your '. $loanType .' repayment is still outstanding.</p>
 
-            <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
-                <tr>
-                    <td><strong>EMI Amount</strong></td>
-                    <td>£' . number_format($row['amount'], 2) . '</td>
-                </tr>
-                <tr>
-                    <td><strong>Due Date</strong></td>
-                    <td>' . date('d M Y', strtotime($row['emi_date'])) . '</td>
-                </tr>
-            </table>
+                <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
+                    <tr>
+                        <td><strong>Outstanding Amount</strong></td>
+                        <td>£' . number_format($row['amount'], 2) . '</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Due Date</strong></td>
+                        <td>' . date('d M Y', strtotime($row['emi_date'])) . '</td>
+                    </tr>
+                </table>
 
-            <br>
+                <br>
 
-            <p>Your payment has not yet been received.</p>
+                <p>Your payment has not yet been received.</p>
 
-            <p>Please login to your Interfriends account and make the payment as soon as possible.</p>
-
-            <p>This reminder will continue to be sent daily until the outstanding payment is received.</p>';
+                <p>Please login to your Interfriends account and make the payment as soon as possible.</p>';
 
             $mailMessage = $this->load->view('template/common-mail', $data, true);
 

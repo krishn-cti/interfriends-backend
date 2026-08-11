@@ -332,54 +332,188 @@ public function room_detail($where="",$options=array())
 
 
 
-    public function do_upload_thumb($file,$path)
-    { 	
-        $config['upload_path']          = $path;
-		$config['allowed_types']        = '*';
-        // $config['allowed_types']        = 'gif|jpg|png|gif|jpeg|wmv|jfif|webp';
-        $config['encrypt_name']        = true;
-        // $config['max_size']             = 100;
-        // $config['max_width']            = 1024;
-        // $config['max_height']           = 768;
+    // public function do_upload_thumb($file,$path)
+    // { 	
+    //     $config['upload_path']          = $path;
+	// 	$config['allowed_types']        = '*';
+    //     // $config['allowed_types']        = 'gif|jpg|png|gif|jpeg|wmv|jfif|webp';
+    //     $config['encrypt_name']        = true;
+    //     // $config['max_size']             = 100;
+    //     // $config['max_width']            = 1024;
+    //     // $config['max_height']           = 768;
 
-        $this->load->library('upload');
-        $this->upload->initialize($config);
+    //     $this->load->library('upload');
+    //     $this->upload->initialize($config);
         
-        if ( ! $this->upload->do_upload($file))
-        {
-            $error = array('error' => $this->upload->display_errors());
-            return $error;
-        }
-        else
-        {
-        	$photo = $this->upload->file_name;
+    //     if ( ! $this->upload->do_upload($file))
+    //     {
+    //         $error = array('error' => $this->upload->display_errors());
+    //         return $error;
+    //     }
+    //     else
+    //     {
+    //     	$photo = $this->upload->file_name;
         	
 
 
-        	$this->load->library('image_lib');
-            $config['image_library'] = 'gd2';
-            $config['source_image'] = $path.$photo;
-            $config['new_image'] = $path.'/thumb/' . $photo;
-            $config['maintain_ratio'] = TRUE;
-            $config['width'] = 300;
-            $config['height'] = 300;
+    //     	$this->load->library('image_lib');
+    //         $config['image_library'] = 'gd2';
+    //         $config['source_image'] = $path.$photo;
+    //         $config['new_image'] = $path.'/thumb/' . $photo;
+    //         $config['maintain_ratio'] = TRUE;
+    //         $config['width'] = 300;
+    //         $config['height'] = 300;
 
 
-            $this->image_lib->clear();
-            $this->image_lib->initialize($config);
+    //         $this->image_lib->clear();
+    //         $this->image_lib->initialize($config);
 
-            if (!$this->image_lib->resize()) {
-             	$error = array('error' => $this->image_lib->display_errors());
-           	 	return $error;
-            }
+    //         if (!$this->image_lib->resize()) {
+    //          	$error = array('error' => $this->image_lib->display_errors());
+    //        	 	return $error;
+    //         }
 
 
 
-            $data = array('upload_data' => $this->upload->data());
-            return $data;
-        }
+    //         $data = array('upload_data' => $this->upload->data());
+    //         return $data;
+    //     }
+    // }
+
+public function do_upload_thumb($file, $path)
+{
+    $config['upload_path']   = $path;
+    $config['allowed_types'] = 'gif|jpg|jpeg|png|webp|jfif';
+    $config['encrypt_name']  = true;
+
+    $this->load->library('upload');
+    $this->upload->initialize($config);
+
+    if (!$this->upload->do_upload($file)) {
+
+        return array(
+            'error' => $this->upload->display_errors('', '')
+        );
     }
 
+    $uploadData = $this->upload->data();
+
+    $photo = $uploadData['file_name'];
+
+    $sourcePath = $path . $photo;
+    $thumbPath  = $path . '/thumb/' . $photo;
+
+    /*
+     * Handle WebP separately because CodeIgniter's
+     * Image_lib does not support WebP.
+     */
+    if (strtolower($uploadData['file_ext']) === '.webp') {
+
+        if (!function_exists('imagecreatefromwebp')) {
+            return array(
+                'error' => 'WebP is not supported by the server.'
+            );
+        }
+
+        if (!function_exists('imagewebp')) {
+            return array(
+                'error' => 'WebP processing is not supported by the server.'
+            );
+        }
+
+        $srcImage = imagecreatefromwebp($sourcePath);
+
+        if (!$srcImage) {
+            return array(
+                'error' => 'Unable to read the WebP image.'
+            );
+        }
+
+        $originalWidth  = imagesx($srcImage);
+        $originalHeight = imagesy($srcImage);
+
+        /*
+         * Calculate proportional thumbnail dimensions.
+         */
+        $maxWidth  = 300;
+        $maxHeight = 300;
+
+        $ratio = min(
+            $maxWidth / $originalWidth,
+            $maxHeight / $originalHeight
+        );
+
+        $newWidth  = max(1, (int)($originalWidth * $ratio));
+        $newHeight = max(1, (int)($originalHeight * $ratio));
+
+        $thumbImage = imagecreatetruecolor(
+            $newWidth,
+            $newHeight
+        );
+
+        /*
+         * Preserve WebP transparency.
+         */
+        imagealphablending($thumbImage, false);
+        imagesavealpha($thumbImage, true);
+
+        imagecopyresampled(
+            $thumbImage,
+            $srcImage,
+            0,
+            0,
+            0,
+            0,
+            $newWidth,
+            $newHeight,
+            $originalWidth,
+            $originalHeight
+        );
+
+        if (!imagewebp($thumbImage, $thumbPath, 90)) {
+
+            imagedestroy($srcImage);
+            imagedestroy($thumbImage);
+
+            return array(
+                'error' => 'Unable to create WebP thumbnail.'
+            );
+        }
+
+        imagedestroy($srcImage);
+        imagedestroy($thumbImage);
+
+        return array(
+            'upload_data' => $uploadData
+        );
+    }
+
+    /*
+     * Existing processing for JPG/PNG/GIF.
+     */
+    $this->load->library('image_lib');
+
+    $resizeConfig['image_library']  = 'gd2';
+    $resizeConfig['source_image']   = $sourcePath;
+    $resizeConfig['new_image']      = $thumbPath;
+    $resizeConfig['maintain_ratio'] = TRUE;
+    $resizeConfig['width']          = 300;
+    $resizeConfig['height']         = 300;
+
+    $this->image_lib->clear();
+    $this->image_lib->initialize($resizeConfig);
+
+    if (!$this->image_lib->resize()) {
+
+        return array(
+            'error' => $this->image_lib->display_errors('', '')
+        );
+    }
+
+    return array(
+        'upload_data' => $uploadData
+    );
+}
 
 
     public function do_upload_file($file,$path)
