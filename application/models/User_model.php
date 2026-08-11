@@ -2111,4 +2111,381 @@ class User_model extends CI_Model
 
 		return $this->db->get()->result_array();
 	}
+
+	// created by @krishn on 07/08/26
+	public function createDividendForAllUsers($dividendYear, $percentage, $description, $createdBy)
+	{
+		$duplicate = $this->db
+			->where('dividend_year', $dividendYear)
+			->where('property_id IS NULL', null, false)
+			->get('dividend')
+			->row_array();
+
+		if (!empty($duplicate)) {
+			return array(
+				'status' => false,
+				'message' => 'Dividend has already been applied for this year.'
+			);
+		}
+
+		$eligibleUsers = $this->getDividendEligibleUsers();
+
+		if (empty($eligibleUsers)) {
+			return array(
+				'status' => false,
+				'message' => 'No eligible users found for dividend.'
+			);
+		}
+
+		$now = date('Y-m-d H:i:s');
+
+		$this->db->trans_begin();
+
+		$this->db->insert('dividend', array(
+			'dividend_year' => $dividendYear,
+			'percentage' => number_format($percentage, 2, '.', ''),
+			'property_id' => null,
+			'description' => $description,
+			'status' => 1,
+			'created_by' => $createdBy,
+			'created_at' => $now
+		));
+
+		$dividendId = $this->db->insert_id();
+
+		if (empty($dividendId)) {
+			$this->db->trans_rollback();
+
+			return array(
+				'status' => false,
+				'message' => 'There is a problem creating dividend.'
+			);
+		}
+
+		$rows = array();
+
+		$usersProcessed = 0;
+		$totalProvidentDividend = 0;
+		$totalInvestmentDividend = 0;
+		$totalDividend = 0;
+
+		foreach ($eligibleUsers as $user) {
+			$providentBalance = max(0, (float) $user['provident_balance']);
+			$investmentBalance = max(0, (float) $user['investment_balance']);
+
+			$providentDividend = round(($providentBalance * $percentage) / 100, 2);
+			$investmentDividend = round(($investmentBalance * $percentage) / 100, 2);
+			$rowTotalDividend = round($providentDividend + $investmentDividend, 2);
+
+			if ($rowTotalDividend <= 0) {
+				continue;
+			}
+
+			$rows[] = array(
+				'dividend_id' => $dividendId,
+				'user_id' => $user['user_id'],
+				'group_id' => $user['group_id'],
+				'provident_balance' => $providentBalance,
+				'investment_balance' => $investmentBalance,
+				'percentage' => number_format($percentage, 2, '.', ''),
+				'provident_dividend' => $providentDividend,
+				'investment_dividend' => $investmentDividend,
+				'total_dividend' => $rowTotalDividend,
+				'paid_amount' => 0,
+				'balance_amount' => $rowTotalDividend,
+				'status' => 2,
+				'created_at' => $now
+			);
+
+			$usersProcessed++;
+			$totalProvidentDividend += $providentDividend;
+			$totalInvestmentDividend += $investmentDividend;
+			$totalDividend += $rowTotalDividend;
+		}
+
+		if (empty($rows)) {
+			$this->db->trans_rollback();
+
+			return array(
+				'status' => false,
+				'message' => 'No eligible users found with a positive dividend amount.'
+			);
+		}
+
+		$this->db->insert_batch('dividend_user', $rows);
+
+		if ($this->db->trans_status() === false) {
+			$this->db->trans_rollback();
+
+			return array(
+				'status' => false,
+				'message' => 'There is a problem applying dividend, please try again.'
+			);
+		}
+
+		$this->db->trans_commit();
+
+		return array(
+			'status' => true,
+			'message' => 'Dividend applied successfully. All user payout requests are pending.',
+			'data' => array(
+				'dividend_id' => $dividendId,
+				'dividend_year' => $dividendYear,
+				'percentage' => number_format($percentage, 2, '.', ''),
+				'usersProcessed' => $usersProcessed,
+				'totalProvidentDividend' => number_format($totalProvidentDividend, 2, '.', ''),
+				'totalInvestmentDividend' => number_format($totalInvestmentDividend, 2, '.', ''),
+				'totalDividend' => number_format($totalDividend, 2, '.', '')
+			)
+		);
+	}
+
+	public function dividendList($where = array(), $limit = 10, $start = 0)
+	{
+		$this->db->select("
+			D.*,
+			COUNT(DU.id) as users_processed,
+			IFNULL(SUM(DU.provident_dividend), 0) as total_provident_dividend,
+			IFNULL(SUM(DU.investment_dividend), 0) as total_investment_dividend,
+			IFNULL(SUM(DU.total_dividend), 0) as total_dividend,
+			IFNULL(SUM(DU.paid_amount), 0) as total_paid_amount,
+			IFNULL(SUM(DU.balance_amount), 0) as total_balance_amount
+		", false);
+
+		$this->db->from('dividend D');
+		$this->db->join('dividend_user DU', 'DU.dividend_id = D.id', 'left');
+
+		if (!empty($where)) {
+			$this->db->where($where);
+		}
+
+		$this->db->group_by('D.id');
+		$this->db->order_by('D.id', 'DESC');
+		$this->db->limit($limit, $start);
+
+		$result = $this->db->get()->result_array();
+
+		$this->db->select('D.id');
+		$this->db->from('dividend D');
+
+		if (!empty($where)) {
+			$this->db->where($where);
+		}
+
+		$resultCount = $this->db->count_all_results();
+		$countData = $start + 1;
+
+		if (!empty($result)) {
+			foreach ($result as $key => $value) {
+				$result[$key]['sno'] = $countData++;
+			}
+		}
+
+		return array(
+			'lists' => !empty($result) ? $result : array(),
+			'listCount' => $resultCount
+		);
+	}
+
+	public function dividendDetail($dividendId, $filters = array())
+	{
+		$dividend = $this->db
+			->where('id', $dividendId)
+			->get('dividend')
+			->row_array();
+
+		if (empty($dividend)) {
+			return false;
+		}
+
+		$this->db->select('DU.*, U.first_name, U.last_name, U.email');
+		$this->db->from('dividend_user DU');
+		$this->db->join('user U', 'U.user_id = DU.user_id');
+		$this->db->where('DU.dividend_id', $dividendId);
+
+		if (!empty($filters['user_id'])) {
+			$this->db->where('DU.user_id', $filters['user_id']);
+		}
+
+		if (!empty($filters['group_id'])) {
+			$this->db->where('DU.group_id', $filters['group_id']);
+		}
+
+		if (isset($filters['status']) && $filters['status'] !== '') {
+			$this->db->where('DU.status', $filters['status']);
+		}
+
+		$this->db->order_by('DU.id', 'DESC');
+		$users = $this->db->get()->result_array();
+
+		return array(
+			'dividendDetail' => $dividend,
+			'users' => !empty($users) ? $users : array()
+		);
+	}
+
+	public function dividendPayoutRequestList($status = '', $limit = 10, $start = 0)
+	{
+		$this->db->select('
+			DU.*,
+			D.dividend_year,
+			D.percentage,
+			U.first_name,
+			U.last_name,
+			U.email
+		');
+
+		$this->db->from('dividend_user DU');
+		$this->db->join('dividend D', 'D.id = DU.dividend_id', 'left');
+		$this->db->join('user U', 'U.user_id = DU.user_id', 'left');
+
+		if ($status !== '') {
+			$this->db->where('DU.status', (int) $status);
+		}
+
+		$countQuery = clone $this->db;
+
+		$totalCount = $countQuery
+			->select('COUNT(DU.id) as total', false)
+			->get()
+			->row_array();
+
+		$totalCount = !empty($totalCount['total']) ? (int) $totalCount['total'] : 0;
+
+		$this->db->order_by('DU.updated_at', 'DESC');
+		$this->db->limit($limit, $start);
+
+		$result = $this->db->get()->result_array();
+		$countData = $start + 1;
+
+		if (!empty($result)) {
+			foreach ($result as &$row) {
+				$row['sno'] = $countData++;
+			}
+
+			unset($row);
+		}
+
+		return array(
+			'lists' => !empty($result) ? $result : array(),
+			'listCount' => $totalCount,
+			'limit' => $limit,
+			'start' => $start
+		);
+	}
+
+	public function updateDividendPayoutRequestStatus($dividendUserId, $requestStatus)
+	{
+		$request = $this->getPendingDividendPayoutRequest($dividendUserId);
+
+		if (empty($request)) {
+			return array(
+				'status' => false,
+				'message' => 'Dividend payout request not found or already processed.'
+			);
+		}
+
+		$this->db->trans_begin();
+
+		if ($requestStatus === '1') {
+			$balanceAmount = (float) $request['balance_amount'];
+			$paidAmount = (float) $request['paid_amount'];
+
+			$update = array(
+				'paid_amount' => $paidAmount + $balanceAmount,
+				'balance_amount' => 0,
+				'status' => 1,
+				'updated_at' => date('Y-m-d H:i:s')
+			);
+		} else {
+			$update = array(
+				'status' => 0,
+				'updated_at' => date('Y-m-d H:i:s')
+			);
+		}
+
+		$this->db
+			->where('id', $dividendUserId)
+			->where('status', 2)
+			->update('dividend_user', $update);
+
+		if ($this->db->affected_rows() < 1 || $this->db->trans_status() === false) {
+			$this->db->trans_rollback();
+
+			return array(
+				'status' => false,
+				'message' => 'There is a problem updating the payout request.'
+			);
+		}
+
+		$this->db->trans_commit();
+
+		return array(
+			'status' => true,
+			'request' => $request
+		);
+	}
+
+	private function getPendingDividendPayoutRequest($dividendUserId)
+	{
+		$this->db->select('
+			DU.*,
+			D.dividend_year,
+			D.percentage,
+			U.first_name,
+			U.last_name,
+			U.email
+		');
+
+		$this->db->from('dividend_user DU');
+		$this->db->join('dividend D', 'D.id = DU.dividend_id', 'left');
+		$this->db->join('user U', 'U.user_id = DU.user_id', 'left');
+		$this->db->where('DU.id', $dividendUserId);
+		$this->db->where('DU.status', 2);
+
+		return $this->db->get()->row_array();
+	}
+
+	private function getDividendEligibleUsers()
+	{
+		$sql = "
+			SELECT
+				U.user_id,
+				G.group_id,
+				GREATEST(IFNULL(PF.provident_balance, 0), 0) as provident_balance,
+				GREATEST(IFNULL(INV.investment_balance, 0), 0) as investment_balance
+			FROM user U
+			INNER JOIN (
+				SELECT user_id, group_id FROM pf_user
+				UNION
+				SELECT user_id, group_id FROM investment WHERE payment_status = 2 AND status = 1
+			) G ON G.user_id = U.user_id
+			LEFT JOIN (
+				SELECT
+					user_id,
+					group_id,
+					SUM(CASE
+						WHEN payment_type = 2 THEN pf_amount
+						WHEN payment_type = 1 THEN -pf_amount
+						ELSE 0
+					END) as provident_balance
+				FROM pf_user
+				GROUP BY user_id, group_id
+			) PF ON PF.user_id = G.user_id AND PF.group_id = G.group_id
+			LEFT JOIN (
+				SELECT
+					user_id,
+					group_id,
+					SUM(amount) as investment_balance
+				FROM investment
+				WHERE payment_status = 2
+				AND status = 1
+				GROUP BY user_id, group_id
+			) INV ON INV.user_id = G.user_id AND INV.group_id = G.group_id
+			WHERE U.status != 2
+			HAVING provident_balance > 0 OR investment_balance > 0
+		";
+
+		return $this->db->query($sql)->result_array();
+	}
 }
