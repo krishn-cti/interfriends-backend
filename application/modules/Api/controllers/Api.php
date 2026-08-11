@@ -3610,46 +3610,42 @@ class Api extends Base_Controller
 
 		//  new-changes 04-06-2024
 
-		$totalPaidAmount = 0;
-		$totalActivePayment = 0;
-
 		$avgwelfareAmount = 0;
+		$totalWelfarePaidAmount = 0;
+		$welfareUserId = (int) $_REQUEST['user_id'];
+		$welfareGroupWhere = !empty($_REQUEST['group_id']) ? " AND L.group_id = '" . (int) $_REQUEST['group_id'] . "'" : "";
 
-		$grouplifecycle = $this->common->getData('group_lifecycle', array("group_id" => $_REQUEST['group_id'], "group_type_id" => '4'), array('sort_by' => 'id', 'sort_direction' => 'desc'));
+		$whereComplete = "L.user_id = '" . $welfareUserId . "' {$welfareGroupWhere} AND L.loan_type = '7' AND L.status = 2";
+		$resultComplete = $this->user_model->loan_detail($whereComplete, array());
 
-		$avgAmount = 0;
-
-		$_REQUEST['group_cycle_id'] = $grouplifecycle[0]['id'];
-
-		$cycleTransfer = $this->common->getData('cycle_status_management', array('user_id' => $_REQUEST['user_id'], 'group_id' => $_REQUEST['group_id'], 'group_cycle_id' => $_REQUEST['group_cycle_id']), array('single'));
-
-		if (empty($cycleTransfer)) {
-			$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
-
-			if (!empty($result['total_payment'])) {
-				$avgwelfareAmount = $result['total_payment'];
-			} else {
-				$avgwelfareAmount = 0.00;
+		if (!empty($resultComplete)) {
+			foreach ($resultComplete as $key => $value) {
+				$totalWelfarePaidAmount += (float) ($value['paid_amount'] ?? 0);
 			}
-		} else {
-			$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
-
-			if (!empty($paidResult['total_payment'])) {
-				$paidAvgAmount = $paidResult['total_payment'];
-			} else {
-				$paidAvgAmount = 0;
-			}
-
-			$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $_REQUEST['group_cycle_id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-			$payout_amount_total = $result['total_amount'];
-
-			// print_r($payout_amount_total);die;
-			// $avgwelfareAmount =  $payout_amount_total - $paidAvgAmount;
-			$avgwelfareAmount =  $paidAvgAmount -  $payout_amount_total;
 		}
+
+		$whereActiveWelfare = "L.user_id = '" . $welfareUserId . "' {$welfareGroupWhere} AND L.loan_type = '7' AND L.status = 4";
+		$resultActiveWelfare = $this->user_model->loan_detail($whereActiveWelfare, array());
+
+		if (!empty($resultActiveWelfare)) {
+			foreach ($resultActiveWelfare as $key => $value) {
+				$totalWelfarePaidAmount += (float) ($value['paid_amount'] ?? 0);
+			}
+		}
+
+		$claimWhere = array('user_id' => $welfareUserId, 'status' => 1);
+		if (!empty($_REQUEST['group_id'])) {
+			$claimWhere['group_id'] = (int) $_REQUEST['group_id'];
+		}
+
+		$approvedClaimsData = $this->common->getData(
+			'welfare_claim',
+			$claimWhere,
+			array('field' => 'IFNULL(SUM(payout_amount), 0) as total_claimed', 'single')
+		);
+
+		$totalApprovedClaims = (float) ($approvedClaimsData['total_claimed'] ?? 0);
+		$avgwelfareAmount = $totalWelfarePaidAmount - $totalApprovedClaims;
 
 
 		$whereActive = "L.user_id = '" . $_REQUEST['user_id'] . "' AND L.group_id = '" . $_REQUEST['group_id'] . "' AND L.status = 4 AND L.loan_type= '1'";
@@ -3687,15 +3683,28 @@ class Api extends Base_Controller
 		}
 
 
-		$whereDivided = "I.user_id = '" . $_REQUEST['user_id'] . "' AND I.group_id = '" . $_REQUEST['group_id'] . "' AND I.payment_status = '1'";
-		$dividedTotal = $this->common->getData('investment as I', $whereDivided, array("field" => 'sum(I.amount) as total_payment', "single"));
+		// $whereDivided = "I.user_id = '" . $_REQUEST['user_id'] . "' AND I.group_id = '" . $_REQUEST['group_id'] . "' AND I.payment_status = '1'";
+		// $dividedTotal = $this->common->getData('investment as I', $whereDivided, array("field" => 'sum(I.amount) as total_payment', "single"));
 
-		if (!empty($dividedTotal['total_payment'])) {
-			$totalAmountDivided = $dividedTotal['total_payment'];
+		// if (!empty($dividedTotal['total_payment'])) {
+		// 	$totalAmountDivided = $dividedTotal['total_payment'];
+		// } else {
+		// 	$totalAmountDivided = 0;
+		// }
+
+		$this->db->select('IFNULL(SUM(DU.balance_amount), 0) AS balance_amount', false);
+		$this->db->from('dividend_user DU');
+		$this->db->join('dividend D', 'D.id = DU.dividend_id', 'left');
+		$this->db->where('DU.user_id', (int) $_REQUEST['user_id']);
+		$this->db->where('DU.group_id', (int) $_REQUEST['group_id']);
+		$this->db->where('D.status', 1);
+		$dividedTotal = $this->db->get()->row_array();
+
+		if (!empty($dividedTotal['balance_amount'])) {
+			$totalAmountDivided = $dividedTotal['balance_amount'];
 		} else {
-			$totalAmountDivided = 0;
+			$totalAmountDivided = "0";
 		}
-
 
 
 		$where = "I.user_id = '" . $_REQUEST['user_id'] . "' AND I.group_id = '" . $_REQUEST['group_id'] . "' AND I.payment_status = '2'";
