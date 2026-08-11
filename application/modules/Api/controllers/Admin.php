@@ -5018,7 +5018,7 @@ class Admin extends Base_Controller
 		}
 
 		$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-		$_REQUEST['permission_ids'] = $_POST['permission_ids'] == '' ? '1,2' : $_POST['permission_ids'];
+		$_REQUEST['permission_ids'] = $_POST['permission_ids'] == '' ? '2' : $_POST['permission_ids'];
 		$const_password = rand();
 
 		$_REQUEST['const_password'] = $const_password;
