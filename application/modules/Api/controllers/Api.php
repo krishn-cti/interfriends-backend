@@ -921,46 +921,148 @@ class Api extends Base_Controller
 
 
 
+	// public function editUser()
+	// {
+	// 	$user_id = $_REQUEST['user_id'];
+	// 	unset($_REQUEST['user_id']);
+
+	// 	$whereEmail = "email = '" . $_POST['email'] . "' AND user_id != '" . $user_id . "'";
+	// 	$emailExist = $this->common->getData('user', $whereEmail, array('single', 'field' => 'email'));
+
+	// 	if ($emailExist) {
+	// 		$this->response(false, 'Email already exists');
+	// 		die;
+	// 	}
+
+
+
+	// 	if (isset($_FILES['image'])) {
+	// 		$image = $this->common->do_upload_thumb('image', './assets/userfile/profile/');
+	// 		if (isset($image['upload_data'])) {
+	// 			$iname = 'assets/userfile/profile/' . $image['upload_data']['file_name'];
+	// 			$iname_thumb = 'assets/userfile/profile/thumb/' . $image['upload_data']['file_name'];
+	// 			$_REQUEST['profile_image'] = $iname;
+	// 			$_REQUEST['profile_image_thumb'] = $iname_thumb;
+	// 		}
+	// 	}
+
+	// 	$post = $this->common->getField('user', $_REQUEST);
+
+	// 	if (!empty($post)) {
+	// 		$result = $this->common->updateData('user', $post, array('user_id' => $user_id));
+	// 	} else {
+	// 		$result = "";
+	// 	}
+
+	// 	if ($result) {
+	// 		$this->response(true, "User Update Successfully");
+	// 	} else {
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
 	public function editUser()
 	{
 		$user_id = $_REQUEST['user_id'];
 		unset($_REQUEST['user_id']);
 
-		$whereEmail = "email = '" . $_POST['email'] . "' AND user_id != '" . $user_id . "'";
-		$emailExist = $this->common->getData('user', $whereEmail, array('single', 'field' => 'email'));
+		// Check email only if email is provided
+		if (!empty($_POST['email'])) {
 
-		if ($emailExist) {
-			$this->response(false, 'Email already exists');
-			die;
-		}
+			$whereEmail = "email = '" . $_POST['email'] . "' AND user_id != '" . $user_id . "'";
 
+			$emailExist = $this->common->getData(
+				'user',
+				$whereEmail,
+				array(
+					'single',
+					'field' => 'email'
+				)
+			);
 
-
-		if (isset($_FILES['image'])) {
-			$image = $this->common->do_upload_thumb('image', './assets/userfile/profile/');
-			if (isset($image['upload_data'])) {
-				$iname = 'assets/userfile/profile/' . $image['upload_data']['file_name'];
-				$iname_thumb = 'assets/userfile/profile/thumb/' . $image['upload_data']['file_name'];
-				$_REQUEST['profile_image'] = $iname;
-				$_REQUEST['profile_image_thumb'] = $iname_thumb;
+			if ($emailExist) {
+				$this->response(false, 'Email already exists');
+				return;
 			}
 		}
 
-		$post = $this->common->getField('user', $_REQUEST);
+		/*
+     * Profile Image Upload
+     */
+		if (isset($_FILES['image']) && !empty($_FILES['image']['name'])) {
+
+			$image = $this->common->do_upload_thumb(
+				'image',
+				'./assets/userfile/profile/'
+			);
+
+			if (!empty($image['upload_data'])) {
+
+				$fileName = $image['upload_data']['file_name'];
+
+				$_REQUEST['profile_image'] =
+					'assets/userfile/profile/' . $fileName;
+
+				$_REQUEST['profile_image_thumb'] =
+					'assets/userfile/profile/thumb/' . $fileName;
+			} else {
+
+				// Log actual upload/processing error
+				log_message(
+					'error',
+					'editUser profile image upload failed for user_id ' .
+						$user_id . ': ' .
+						print_r($image, true)
+				);
+
+				$errorMessage = !empty($image['error'])
+					? $image['error']
+					: 'Unable to process profile image.';
+
+				$this->response(false, $errorMessage);
+				return;
+			}
+		}
+
+		/*
+     * Prepare user update
+     */
+		$post = $this->common->getField(
+			'user',
+			$_REQUEST
+		);
 
 		if (!empty($post)) {
-			$result = $this->common->updateData('user', $post, array('user_id' => $user_id));
+
+			$result = $this->common->updateData(
+				'user',
+				$post,
+				array(
+					'user_id' => $user_id
+				)
+			);
 		} else {
-			$result = "";
+
+			$result = false;
 		}
 
+		/*
+     * Response
+     */
 		if ($result) {
-			$this->response(true, "User Update Successfully");
+
+			$this->response(
+				true,
+				"User Update Successfully"
+			);
 		} else {
-			$this->response(false, "There is a problem, please try again.");
+
+			$this->response(
+				false,
+				"There is a problem, please try again."
+			);
 		}
 	}
-
 
 	public function addLoanPayment()
 	{
@@ -5191,7 +5293,7 @@ class Api extends Base_Controller
 			"totalCount" => $totalCount
 		));
 	}
-	
+
 	/**
 	 * Test API for sending WhatsApp messages
 	 * Endpoint: Api/test_whatsapp
@@ -5273,5 +5375,464 @@ class Api extends Base_Controller
 			echo 'EVENT_RECEIVED';
 			exit;
 		}
+	}
+
+	// created by @krishn on 07/08/26
+	public function myDividendList()
+	{
+		/*
+		* Validate User
+		*/
+		if (empty($_REQUEST['user_id'])) {
+			$this->response(false, "User ID is required.");
+			return;
+		}
+
+		$userId = (int) $_REQUEST['user_id'];
+
+		/*
+		* Pagination
+		*/
+		$limit = !empty($_REQUEST['limit'])
+			? (int) $_REQUEST['limit']
+			: 10;
+
+		$start = isset($_REQUEST['start'])
+			? (int) $_REQUEST['start']
+			: 0;
+
+		if ($limit < 1) {
+			$limit = 10;
+		}
+
+		if ($start < 0) {
+			$start = 0;
+		}
+
+		/*
+		* Status:
+		* 0 = Rejected
+		* 1 = Accepted
+		* 2 = Pending
+		*/
+		$status = isset($_REQUEST['status'])
+			? trim($_REQUEST['status'])
+			: '';
+
+		if ($status !== '') {
+
+			$status = (int) $status;
+
+			if (!in_array($status, array(0, 1, 2), true)) {
+				$this->response(false, "Invalid status.");
+				return;
+			}
+		}
+
+		/*
+		* -----------------------------
+		* Main List Query
+		* -----------------------------
+		*/
+		$this->db->select('
+			DU.*,
+			D.dividend_year,
+			D.percentage AS dividend_percentage,
+			D.description,
+
+			CASE
+				WHEN DU.status = 0 THEN "Rejected"
+				WHEN DU.status = 1 THEN "Accepted"
+				WHEN DU.status = 2 THEN "Pending"
+				ELSE "Unknown"
+			END AS status_name
+		', false);
+
+		$this->db->from('dividend_user DU');
+
+		$this->db->join(
+			'dividend D',
+			'D.id = DU.dividend_id',
+			'left'
+		);
+
+		$this->db->where('DU.user_id', $userId);
+		$this->db->where('D.status', 1);
+
+		/*
+		* Group Filter
+		*/
+		if (!empty($_REQUEST['group_id'])) {
+			$this->db->where(
+				'DU.group_id',
+				(int) $_REQUEST['group_id']
+			);
+		}
+
+		/*
+		* Year Filter
+		*/
+		if (!empty($_REQUEST['dividend_year'])) {
+			$this->db->where(
+				'D.dividend_year',
+				trim($_REQUEST['dividend_year'])
+			);
+		}
+
+		/*
+		* Status Filter
+		*/
+		if ($status !== '') {
+			$this->db->where('DU.status', $status);
+		}
+
+		/*
+		* -----------------------------
+		* Total Count
+		* -----------------------------
+		*/
+		$countQuery = clone $this->db;
+
+		$totalCountData = $countQuery
+			->select('COUNT(DU.id) AS total', false)
+			->get()
+			->row_array();
+
+		$totalCount = !empty($totalCountData['total'])
+			? (int) $totalCountData['total']
+			: 0;
+
+		/*
+		* -----------------------------
+		* Pagination + Sorting
+		* -----------------------------
+		*/
+		$this->db->order_by('D.dividend_year', 'DESC');
+		$this->db->order_by('DU.id', 'DESC');
+		$this->db->limit($limit, $start);
+
+		$lists = $this->db->get()->result_array();
+
+		/*
+		* -----------------------------
+		* Serial Number
+		* -----------------------------
+		*/
+		$countData = $start + 1;
+
+		if (!empty($lists)) {
+
+			foreach ($lists as &$row) {
+				$row['sno'] = $countData++;
+			}
+
+			unset($row);
+		}
+
+		/*
+		* -----------------------------
+		* Summary Query
+		* -----------------------------
+		*
+		* Summary is calculated for all
+		* user's dividends, not only the
+		* current pagination page.
+		*/
+		$this->db->select('
+			IFNULL(SUM(DU.total_dividend), 0) AS total_dividend,
+			IFNULL(SUM(DU.paid_amount), 0) AS paid_amount,
+			IFNULL(SUM(DU.balance_amount), 0) AS balance_amount
+		', false);
+
+		$this->db->from('dividend_user DU');
+
+		$this->db->join(
+			'dividend D',
+			'D.id = DU.dividend_id',
+			'left'
+		);
+
+		$this->db->where('DU.user_id', $userId);
+		$this->db->where('D.status', 1);
+
+		/*
+		* Apply same group filter
+		*/
+		if (!empty($_REQUEST['group_id'])) {
+			$this->db->where(
+				'DU.group_id',
+				(int) $_REQUEST['group_id']
+			);
+		}
+
+		/*
+		* Apply year filter
+		*/
+		if (!empty($_REQUEST['dividend_year'])) {
+			$this->db->where(
+				'D.dividend_year',
+				trim($_REQUEST['dividend_year'])
+			);
+		}
+
+		$summary = $this->db->get()->row_array();
+
+		/*
+		* -----------------------------
+		* Response
+		* -----------------------------
+		*/
+		$this->response(
+			true,
+			"Dividend list fetched successfully.",
+			array(
+				'lists' => !empty($lists)
+					? $lists
+					: array(),
+
+				'listCount' => $totalCount,
+
+				'limit' => $limit,
+
+				'start' => $start,
+
+				'summary' => !empty($summary)
+					? $summary
+					: array(
+						'total_dividend' => 0,
+						'paid_amount' => 0,
+						'balance_amount' => 0
+					)
+			)
+		);
+	}
+
+	// created by @krishn on 07/08/26
+	public function requestDividendPayout()
+	{
+		$dividendUserId = isset($_REQUEST['dividend_user_id'])
+			? (int) $_REQUEST['dividend_user_id']
+			: 0;
+
+		$userId = isset($_REQUEST['user_id'])
+			? (int) $_REQUEST['user_id']
+			: 0;
+
+		/*
+		* Validate parameters
+		*/
+		if (empty($dividendUserId) || empty($userId)) {
+			$this->response(
+				false,
+				"Dividend ID and User ID are required."
+			);
+			return;
+		}
+
+		/*
+		* Get user's dividend record
+		*/
+		$this->db->select('
+			DU.*,
+			D.dividend_year,
+			D.percentage,
+			D.description,
+			U.first_name,
+			U.last_name,
+			U.email
+		');
+
+		$this->db->from('dividend_user DU');
+
+		$this->db->join(
+			'dividend D',
+			'D.id = DU.dividend_id',
+			'left'
+		);
+
+		$this->db->join(
+			'user U',
+			'U.user_id = DU.user_id',
+			'left'
+		);
+
+		$this->db->where('DU.id', $dividendUserId);
+		$this->db->where('DU.user_id', $userId);
+		$this->db->where('D.status', 1);
+		$this->db->where('U.status !=', 2);
+
+		$dividend = $this->db->get()->row_array();
+
+		if (empty($dividend)) {
+			$this->response(false, "Dividend not found.");
+			return;
+		}
+
+		/*
+		* Status:
+		* 0 = Rejected
+		* 1 = Accepted
+		* 2 = Pending
+		*/
+
+		$currentStatus = (int) $dividend['status'];
+
+		/*
+		* Already pending
+		*/
+		if ($currentStatus === 2) {
+			$this->response(
+				false,
+				"Dividend payout request is already pending."
+			);
+			return;
+		}
+
+		/*
+		* Rejected request
+		*
+		* Allow user to submit again if the
+		* previous request was rejected.
+		*
+		* If you do NOT want this behavior,
+		* remove this condition.
+		*/
+		if ($currentStatus === 0) {
+			// Allow resubmission
+		}
+
+		/*
+		* No balance available
+		*/
+		$balanceAmount = (float) $dividend['balance_amount'];
+
+		if ($balanceAmount <= 0) {
+			$this->response(
+				false,
+				"Dividend payout has already been completed."
+			);
+			return;
+		}
+
+		/*
+		* User can request payout only when
+		* dividend is accepted OR previously rejected.
+		*
+		* Status will become Pending (2).
+		*/
+		if (
+			$currentStatus !== 1 &&
+			$currentStatus !== 0
+		) {
+			$this->response(
+				false,
+				"Dividend payout cannot be requested at this time."
+			);
+			return;
+		}
+
+		/*
+		* Update status to Pending
+		*/
+		$result = $this->common->updateData(
+			'dividend_user',
+			array(
+				'status' => 2,
+				'updated_at' => date('Y-m-d H:i:s')
+			),
+			array(
+				'id' => $dividendUserId,
+				'user_id' => $userId
+			)
+		);
+
+		if (!$result) {
+			$this->response(
+				false,
+				"There is a problem submitting the payout request."
+			);
+			return;
+		}
+
+		/*
+		* Notify Admin
+		*/
+		$message = "Dividend payout request";
+
+		$this->send_nofificationAdmin(
+			$userId,
+			$dividend['group_id'],
+			$message,
+			$dividendUserId,
+			"17"
+		);
+
+		/*
+		* Send email to admins
+		*/
+		$admins = $this->common->getData(
+			'superAdmin',
+			array(
+				'admin_type' => '2'
+			)
+		);
+
+		if (!empty($admins)) {
+
+			foreach ($admins as $admin) {
+
+				if (empty($admin['email'])) {
+					continue;
+				}
+
+				$userName = trim(
+					$dividend['first_name'] . ' ' . $dividend['last_name']
+				);
+
+				$data['sendername'] = !empty($admin['name'])
+					? $admin['name']
+					: 'Admin';
+
+				$data['useremail'] = $admin['email'];
+
+				$data['message'] = '
+					<p>
+						<strong>' . htmlspecialchars($userName) . '</strong>
+						has requested dividend payout for
+						<strong>' . htmlspecialchars($dividend['dividend_year']) . '</strong>.
+					</p>
+
+					<p>
+						<strong>Amount:</strong>
+						GBP ' . number_format($balanceAmount, 2) . '
+					</p>
+
+					<p>
+						Please review and process the payout request
+						from the admin panel.
+					</p>
+				';
+
+				$mailMessage = $this->load->view(
+					'template/common-mail',
+					$data,
+					true
+				);
+
+				$this->sendMail(
+					$admin['email'],
+					'Dividend Payout Request',
+					$mailMessage
+				);
+			}
+		}
+
+		/*
+		* Response
+		*/
+		$this->response(
+			true,
+			"Dividend payout request submitted successfully."
+		);
 	}
 }
