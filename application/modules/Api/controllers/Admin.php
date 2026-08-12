@@ -4211,20 +4211,98 @@ class Admin extends Base_Controller
 	}
 
 
+	// public function editLoanPayment()
+	// {
+	// 	$id = $_REQUEST['id'];
+	// 	unset($_REQUEST['id']);
+	// 	if ($_REQUEST['payment_method'] === '3') {
+	// 		$this->paymentBySafekeeping($id, $_REQUEST['amount'], '3', '0');
+	// 	}
+
+
+	// 	if ($_REQUEST['payment_method'] === '2') {
+	// 		$this->paymentByPF($id, $_REQUEST['amount'], '3');
+	// 	}
+
+
+	// 	$post = $this->common->getField('user_loan_payment', $_REQUEST);
+
+	// 	if (!empty($post)) {
+	// 		$result = $this->common->updateData('user_loan_payment', $post, array('id' => $id));
+	// 	} else {
+	// 		$result = "";
+	// 	}
+
+	// 	if ($result) {
+	// 		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+	// 		if (!empty($subadmin_id)) {
+	// 			$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
+	// 			if (empty($uId)) {
+	// 				$lpInfo = $this->common->getData('user_loan_payment', array('id' => $id), array('single'));
+	// 				$uId = !empty($lpInfo['user_id']) ? $lpInfo['user_id'] : '';
+	// 			}
+	// 			$userDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
+	// 			$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
+	// 			$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated loan payment details for user: " . $target_name, 'Loan', $uId, $target_name, null, $post);
+	// 		}
+
+	// 		$this->response(true, "Loan Payment Update Successfully");
+	// 	} else {
+
+	// 		$this->response(false, "There is a problem, please try again.");
+	// 	}
+	// }
+
+	//created by @krishn on 12-08-26
 	public function editLoanPayment()
 	{
-		$id = $_REQUEST['id'];
+		$id = !empty($_REQUEST['id']) ? $_REQUEST['id'] : '';
+		if (empty($id)) {
+			$this->response(false, "Loan Payment ID is required.");
+			return;
+		}
+
+		//Get existing payment details BEFORE updating.
+		//We need the old status so that trust score is not
+		//added multiple times for the same payment.
+		$oldPayment = $this->common->getData('user_loan_payment', array('id' => $id), array('single'));
+
+		if (empty($oldPayment)) {
+			$this->response(false, "Loan payment not found.");
+			return;
+		}
+
+		//Keep user/group details from existing record if they
+		//are not sent in the request.
+		$userId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : $oldPayment['user_id'];
+
+		$groupId = !empty($_REQUEST['group_id']) ? $_REQUEST['group_id'] : $oldPayment['group_id'];
+
+		$amount = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : $oldPayment['amount'];
+
+		/*
+		* Old and new payment status
+		*
+		* 1 = Paid On Time
+		* 2 = Paid Late
+		* 3 = Missed Payment Deadline
+		*/
+		$oldStatus = (int)$oldPayment['status'];
+		$newStatus = isset($_REQUEST['status']) ? (int)$_REQUEST['status'] : $oldStatus;
+
 		unset($_REQUEST['id']);
-		if ($_REQUEST['payment_method'] === '3') {
-			$this->paymentBySafekeeping($id, $_REQUEST['amount'], '3', '0');
+
+		//Payment through Safekeeping
+		if (isset($_REQUEST['payment_method']) && $_REQUEST['payment_method'] === '3') {
+			$this->paymentBySafekeeping($id, $amount, '3', '0');
 		}
 
-
-		if ($_REQUEST['payment_method'] === '2') {
-			$this->paymentByPF($id, $_REQUEST['amount'], '3');
+		//Payment through Provident Fund
+		if (isset($_REQUEST['payment_method']) && $_REQUEST['payment_method'] === '2') {
+			$this->paymentByPF($id, $amount, '3');
 		}
 
-
+		//Prepare update data
 		$post = $this->common->getField('user_loan_payment', $_REQUEST);
 
 		if (!empty($post)) {
@@ -4233,26 +4311,164 @@ class Admin extends Base_Controller
 			$result = "";
 		}
 
-		if ($result) {
-			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
-			if (!empty($subadmin_id)) {
-				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
-				if (empty($uId)) {
-					$lpInfo = $this->common->getData('user_loan_payment', array('id' => $id), array('single'));
-					$uId = !empty($lpInfo['user_id']) ? $lpInfo['user_id'] : '';
-				}
-				$userDetail = !empty($uId) ? $this->common->getData('user', array('user_id' => $uId), array('single')) : array();
-				$target_name = !empty($userDetail) ? (isset($userDetail['first_name']) ? $userDetail['first_name'] . ' ' . $userDetail['last_name'] : '') : '';
-				$this->common->logSubadminActivity($subadmin_id, 'UPDATE', "Updated loan payment details for user: " . $target_name, 'Loan', $uId, $target_name, null, $post);
+		//Update failed
+		if (!$result) {
+			$this->response(false, "There is a problem, please try again.");
+			return;
+		}
+
+		//GET USER DETAILS
+		$userDetail = $this->common->getData('user', array('user_id' => $userId), array('single'));
+
+		//GET LOAN DETAILS
+		$loanDetail = $this->common->getData('user_loan', array('id' => $oldPayment['loan_id']), array('single'));
+
+		$loanType = !empty($loanDetail['loan_type']) ? (int)$loanDetail['loan_type'] : 0;
+
+		// Loan type mapping		
+		$loanTypeMap = array(
+			1 => 'Loan',
+			2 => 'Help To Pay(Car Insurance)',
+			3 => 'Help To Buy(Car)',
+			4 => 'Help To Buy(Credit Card)',
+			5 => 'Help Me Pay Something Else',
+			6 => 'Help To Buy(House)',
+			7 => 'Welfare'
+		);
+
+		$loanTypeTitle = isset($loanTypeMap[$loanType]) ? $loanTypeMap[$loanType] : 'Loan';
+
+		//SEND PAYMENT EMAIL
+		if (!empty($userDetail['email'])) {
+
+			$data = array();
+			$data['sendername'] = trim(($userDetail['first_name'] ?? '') . ' ' . ($userDetail['last_name'] ?? ''));
+			$data['useremail'] = $userDetail['email'] ?? '';
+
+			$paymentDate = !empty($oldPayment['created_at']) ? date('d M Y', strtotime($oldPayment['created_at'])) : date('d M Y');
+
+			$dueDate = !empty($oldPayment['emi_date']) ? date('d M Y', strtotime($oldPayment['emi_date'])) : 'N/A';
+
+			// Payment status text
+			switch ($newStatus) {
+
+				case 1:
+					$statusText = 'Paid On Time';
+					break;
+
+				case 2:
+					$statusText = 'Paid Late';
+					break;
+
+				case 3:
+					$statusText = 'Missed Payment Deadline';
+					break;
+
+				default:
+					$statusText = 'Payment Updated';
+					break;
 			}
 
-			$this->response(true, "Loan Payment Update Successfully");
-		} else {
+			// Payment email content
+			$data['message'] = '
+				<p>
+					Your payment has been successfully recorded on your
+					Interfriends account.
+				</p>
+				<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; margin-top: 10px;">
+					<tr>
+						<td><strong>Payment Type</strong></td>
+						<td>' . htmlspecialchars($loanTypeTitle) . '</td>
+					</tr>
+					<tr>
+						<td><strong>Payment Amount</strong></td>
+						<td>£' . number_format((float)$amount, 2) . '</td>
+					</tr>
+					<tr>
+						<td><strong>Due Date</strong></td>
+						<td>' . htmlspecialchars($dueDate) . '</td>
+					</tr>
+					<tr>
+						<td><strong>Payment Status</strong></td>
+						<td>' . htmlspecialchars($statusText) . '</td>
+					</tr>
+					<tr>
+						<td><strong>Payment Date</strong></td>
+						<td>' . htmlspecialchars($paymentDate) . '</td>
+					</tr>
+				</table>
+				<p>
+					Thank you for keeping your payments up to date.
+				</p>
+				<p>
+					We appreciate your commitment and thank you for being
+					a valued Interfriends member.
+				</p>
+			';
 
-			$this->response(false, "There is a problem, please try again.");
+			$mailMessage = $this->load->view(
+				'template/common-mail',
+				$data,
+				true
+			);
+
+			// Send email
+			$this->sendMail(
+				$userDetail['email'],
+				$loanTypeTitle . ' Payment Received',
+				$mailMessage
+			);
 		}
-	}
 
+		/*
+		* ---------------------------------------------------------
+		* TRUST SCORE
+		* ---------------------------------------------------------
+		*
+		* CURRENT REQUIREMENT:
+		*
+		* Only Welfare (loan_type = 7)
+		* AND
+		* Paid On Time (status = 1)
+		*
+		* gets +15 trust score.
+		*
+		* We also check oldStatus != 1 so that the same payment
+		* cannot receive +15 multiple times.
+		*/
+		if ($loanType == 7 && $newStatus == 1 && $oldStatus != 1) {
+
+			//Update user's Welfare payment trust-score field
+			$this->common->query_normal("UPDATE credit_score_user SET loan_paid_on_time = loan_paid_on_time + 15 WHERE user_id = '" . $userId . "'");
+			
+			$this->updateCreditScore(15, 'plus');
+		}
+
+		//SUB ADMIN ACTIVITY LOG
+		$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+
+		if (!empty($subadmin_id)) {
+			$uId = $userId;
+			$target_name = '';
+
+			if (!empty($userDetail)) {
+				$target_name = trim(($userDetail['first_name'] ?? '') . ' ' . ($userDetail['last_name'] ?? ''));
+			}
+
+			$this->common->logSubadminActivity(
+				$subadmin_id,
+				'UPDATE',
+				"Updated " . $loanTypeTitle . " payment details for user: " . $target_name,
+				$loanTypeTitle . ' Payment',
+				$uId,
+				$target_name,
+				null,
+				$post
+			);
+		}
+
+		$this->response(true, $loanTypeTitle . " Payment Update Successfully");
+	}
 
 	public function editMiscellaneousPayment()
 	{
