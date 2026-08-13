@@ -2113,18 +2113,20 @@ class User_model extends CI_Model
 	}
 
 	// created by @krishn on 07/08/26
-	public function createDividendForAllUsers($dividendYear, $percentage, $description, $createdBy)
+	public function createDividendForAllUsers($dividendYear, $percentage, $description, $createdBy, $type = 1)
 	{
 		$duplicate = $this->db
 			->where('dividend_year', $dividendYear)
+			->where('type', $type)
 			->where('property_id IS NULL', null, false)
 			->get('dividend')
 			->row_array();
 
 		if (!empty($duplicate)) {
+			$typeName = ($type == 2) ? 'Provident' : 'Investment';
 			return array(
 				'status' => false,
-				'message' => 'Dividend has already been applied for this year.'
+				'message' => 'Dividend for ' . $typeName . ' has already been applied for this year.'
 			);
 		}
 
@@ -2144,6 +2146,7 @@ class User_model extends CI_Model
 		$this->db->insert('dividend', array(
 			'dividend_year' => $dividendYear,
 			'percentage' => number_format($percentage, 2, '.', ''),
+			'type' => $type,
 			'property_id' => null,
 			'description' => $description,
 			'status' => 1,
@@ -2173,8 +2176,19 @@ class User_model extends CI_Model
 			$providentBalance = max(0, (float) $user['provident_balance']);
 			$investmentBalance = max(0, (float) $user['investment_balance']);
 
-			$providentDividend = round(($providentBalance * $percentage) / 100, 2);
-			$investmentDividend = round(($investmentBalance * $percentage) / 100, 2);
+			if ($type == 1) {
+				// Investment dividend only
+				$providentDividend = 0.00;
+				$investmentDividend = round(($investmentBalance * $percentage) / 100, 2);
+			} else if ($type == 2) {
+				// Provident dividend only
+				$providentDividend = round(($providentBalance * $percentage) / 100, 2);
+				$investmentDividend = 0.00;
+			} else {
+				$providentDividend = round(($providentBalance * $percentage) / 100, 2);
+				$investmentDividend = round(($investmentBalance * $percentage) / 100, 2);
+			}
+
 			$rowTotalDividend = round($providentDividend + $investmentDividend, 2);
 
 			if ($rowTotalDividend <= 0) {
@@ -2193,7 +2207,7 @@ class User_model extends CI_Model
 				'total_dividend' => $rowTotalDividend,
 				'paid_amount' => 0,
 				'balance_amount' => $rowTotalDividend,
-				'status' => 2,
+				'status' => 3,
 				'created_at' => $now
 			);
 
@@ -2227,11 +2241,13 @@ class User_model extends CI_Model
 
 		return array(
 			'status' => true,
-			'message' => 'Dividend applied successfully. All user payout requests are pending.',
+			'message' => 'Dividend applied successfully. All user dividends initiated.',
 			'data' => array(
 				'dividend_id' => $dividendId,
 				'dividend_year' => $dividendYear,
 				'percentage' => number_format($percentage, 2, '.', ''),
+				'type' => $type,
+				'type_name' => ($type == 2 ? 'Provident' : 'Investment'),
 				'usersProcessed' => $usersProcessed,
 				'totalProvidentDividend' => number_format($totalProvidentDividend, 2, '.', ''),
 				'totalInvestmentDividend' => number_format($totalInvestmentDividend, 2, '.', ''),
@@ -2278,6 +2294,7 @@ class User_model extends CI_Model
 		if (!empty($result)) {
 			foreach ($result as $key => $value) {
 				$result[$key]['sno'] = $countData++;
+				$result[$key]['type_name'] = isset($value['type']) && $value['type'] == 2 ? 'Provident' : 'Investment';
 			}
 		}
 
@@ -2297,6 +2314,8 @@ class User_model extends CI_Model
 		if (empty($dividend)) {
 			return false;
 		}
+
+		$dividend['type_name'] = isset($dividend['type']) && $dividend['type'] == 2 ? 'Provident' : 'Investment';
 
 		$this->db->select('DU.*, U.first_name, U.last_name, U.email');
 		$this->db->from('dividend_user DU');
@@ -2330,17 +2349,31 @@ class User_model extends CI_Model
 			DU.*,
 			D.dividend_year,
 			D.percentage,
+			D.type,
 			U.first_name,
 			U.last_name,
 			U.email
 		');
 
 		$this->db->from('dividend_user DU');
-		$this->db->join('dividend D', 'D.id = DU.dividend_id', 'left');
-		$this->db->join('user U', 'U.user_id = DU.user_id', 'left');
+		$this->db->join(
+			'dividend D',
+			'D.id = DU.dividend_id',
+			'left'
+		);
 
+		$this->db->join(
+			'user U',
+			'U.user_id = DU.user_id',
+			'left'
+		);
+
+		// If specific status is requested
 		if ($status !== '') {
 			$this->db->where('DU.status', (int) $status);
+		} else {
+			// Default: only 0, 1, 2
+			$this->db->where_in('DU.status', array(0, 1, 2));
 		}
 
 		$countQuery = clone $this->db;
@@ -2350,17 +2383,28 @@ class User_model extends CI_Model
 			->get()
 			->row_array();
 
-		$totalCount = !empty($totalCount['total']) ? (int) $totalCount['total'] : 0;
+		$totalCount = !empty($totalCount['total'])
+			? (int) $totalCount['total']
+			: 0;
 
 		$this->db->order_by('DU.updated_at', 'DESC');
 		$this->db->limit($limit, $start);
 
 		$result = $this->db->get()->result_array();
+
 		$countData = $start + 1;
 
 		if (!empty($result)) {
+
 			foreach ($result as &$row) {
+
 				$row['sno'] = $countData++;
+
+				$row['type_name'] = (
+					isset($row['type']) && $row['type'] == 2
+				)
+					? 'Provident'
+					: 'Investment';
 			}
 
 			unset($row);
@@ -2404,17 +2448,15 @@ class User_model extends CI_Model
 			);
 		}
 
-		$this->db
-			->where('id', $dividendUserId)
-			->where('status', 2)
-			->update('dividend_user', $update);
+		$this->db->where('id', $dividendUserId);
+		$this->db->update('dividend_user', $update);
 
-		if ($this->db->affected_rows() < 1 || $this->db->trans_status() === false) {
+		if ($this->db->trans_status() === false) {
 			$this->db->trans_rollback();
 
 			return array(
 				'status' => false,
-				'message' => 'There is a problem updating the payout request.'
+				'message' => 'Failed to update dividend payout request status.'
 			);
 		}
 
@@ -2432,6 +2474,7 @@ class User_model extends CI_Model
 			DU.*,
 			D.dividend_year,
 			D.percentage,
+			D.type,
 			U.first_name,
 			U.last_name,
 			U.email
@@ -2444,6 +2487,145 @@ class User_model extends CI_Model
 		$this->db->where('DU.status', 2);
 
 		return $this->db->get()->row_array();
+	}
+
+	// created by @krishn on 07/08/26
+	public function getMyDividendList($userId, $filters = array(), $limit = 10, $start = 0)
+	{
+		$this->db->select('
+			DU.*,
+			D.dividend_year,
+			D.percentage AS dividend_percentage,
+			D.type AS dividend_type,
+			CASE
+				WHEN D.type = 2 THEN "Provident"
+				WHEN D.type = 1 THEN "Investment"
+				ELSE "Investment"
+			END AS dividend_type_name,
+			D.description,
+
+			CASE
+				WHEN DU.status = 0 THEN "Rejected"
+				WHEN DU.status = 1 THEN "Accepted"
+				WHEN DU.status = 2 THEN "Pending"
+				WHEN DU.status = 3 THEN "Initiated"
+				ELSE "Unknown"
+			END AS status_name
+		', false);
+
+		$this->db->from('dividend_user DU');
+		$this->db->join('dividend D', 'D.id = DU.dividend_id', 'left');
+		$this->db->where('DU.user_id', $userId);
+		$this->db->where('D.status', 1);
+
+		if (!empty($filters['group_id'])) {
+			$this->db->where('DU.group_id', (int) $filters['group_id']);
+		}
+
+		if (!empty($filters['dividend_year'])) {
+			$this->db->where('D.dividend_year', trim($filters['dividend_year']));
+		}
+
+		if (isset($filters['status']) && $filters['status'] !== '') {
+			$this->db->where('DU.status', (int) $filters['status']);
+		}
+
+		$countQuery = clone $this->db;
+		$totalCountData = $countQuery
+			->select('COUNT(DU.id) AS total', false)
+			->get()
+			->row_array();
+
+		$totalCount = !empty($totalCountData['total']) ? (int) $totalCountData['total'] : 0;
+
+		$this->db->order_by('D.dividend_year', 'DESC');
+		$this->db->order_by('DU.id', 'DESC');
+		$this->db->limit($limit, $start);
+
+		$lists = $this->db->get()->result_array();
+
+		$countData = $start + 1;
+		if (!empty($lists)) {
+			foreach ($lists as &$row) {
+				$row['sno'] = $countData++;
+			}
+			unset($row);
+		}
+
+		// Summary Query
+		$this->db->select('
+			IFNULL(SUM(DU.total_dividend), 0) AS total_dividend,
+			IFNULL(SUM(DU.paid_amount), 0) AS paid_amount,
+			IFNULL(SUM(DU.balance_amount), 0) AS balance_amount
+		', false);
+
+		$this->db->from('dividend_user DU');
+		$this->db->join('dividend D', 'D.id = DU.dividend_id', 'left');
+		$this->db->where('DU.user_id', $userId);
+		$this->db->where('D.status', 1);
+
+		if (!empty($filters['group_id'])) {
+			$this->db->where('DU.group_id', (int) $filters['group_id']);
+		}
+
+		if (!empty($filters['dividend_year'])) {
+			$this->db->where('D.dividend_year', trim($filters['dividend_year']));
+		}
+
+		$summary = $this->db->get()->row_array();
+
+		return array(
+			'lists' => !empty($lists) ? $lists : array(),
+			'listCount' => $totalCount,
+			'limit' => $limit,
+			'start' => $start,
+			'summary' => !empty($summary) ? $summary : array(
+				'total_dividend' => 0,
+				'paid_amount' => 0,
+				'balance_amount' => 0
+			)
+		);
+	}
+
+	// created by @krishn on 07/08/26
+	public function getUserDividendForPayout($dividendUserId, $userId)
+	{
+		$this->db->select('
+			DU.*,
+			D.dividend_year,
+			D.percentage,
+			D.type,
+			D.description,
+			U.first_name,
+			U.last_name,
+			U.email
+		');
+
+		$this->db->from('dividend_user DU');
+		$this->db->join('dividend D', 'D.id = DU.dividend_id', 'left');
+		$this->db->join('user U', 'U.user_id = DU.user_id', 'left');
+		$this->db->where('DU.id', $dividendUserId);
+		$this->db->where('DU.user_id', $userId);
+		$this->db->where('D.status', 1);
+		$this->db->where('U.status !=', 2);
+
+		return $this->db->get()->row_array();
+	}
+
+	// created by @krishn on 07/08/26
+	public function applyDividendPayoutRequest($dividendUserId, $userId)
+	{
+		return $this->common->updateData(
+			'dividend_user',
+			array(
+				'status' => 2,
+				'updated_at' => date('Y-m-d H:i:s')
+			),
+			array(
+				'id' => $dividendUserId,
+				'user_id' => $userId
+			)
+		);
 	}
 
 	private function getDividendEligibleUsers()

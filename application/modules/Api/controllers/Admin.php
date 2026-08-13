@@ -4440,7 +4440,7 @@ class Admin extends Base_Controller
 
 			//Update user's Welfare payment trust-score field
 			$this->common->query_normal("UPDATE credit_score_user SET loan_paid_on_time = loan_paid_on_time + 15 WHERE user_id = '" . $userId . "'");
-			
+
 			$this->updateCreditScore(15, 'plus');
 		}
 
@@ -15026,8 +15026,14 @@ class Admin extends Base_Controller
 	{
 		$dividendYear = isset($_REQUEST['dividend_year']) ? trim($_REQUEST['dividend_year']) : '';
 		$percentage = isset($_REQUEST['percentage']) ? (float) $_REQUEST['percentage'] : 0;
+		$type = isset($_REQUEST['type']) ? (int) $_REQUEST['type'] : 0;
 		$description = isset($_REQUEST['description']) ? trim($_REQUEST['description']) : '';
 		$createdBy = isset($_REQUEST['admin_id']) ? (int) $_REQUEST['admin_id'] : 0;
+
+		if (!in_array($type, array(1, 2), true)) {
+			$this->response(false, "Dividend type is required.");
+			return;
+		}
 
 		if ($dividendYear === '' || !preg_match('/^\d{4}$/', $dividendYear)) {
 			$this->response(false, "Valid dividend year is required.");
@@ -15058,7 +15064,8 @@ class Admin extends Base_Controller
 			$dividendYear,
 			$percentage,
 			$description,
-			$createdBy
+			$createdBy,
+			$type
 		);
 
 		if (empty($result['status'])) {
@@ -15075,10 +15082,12 @@ class Admin extends Base_Controller
 			$logData['description'] = $description;
 			$logData['created_by'] = $createdBy;
 
+			$typeName = ($type == 2) ? 'Provident' : 'Investment';
+
 			$this->common->logSubadminActivity(
 				$subadmin_id,
 				'CREATE',
-				"Created dividend for year " . $dividendYear . " at " . number_format($percentage, 2, '.', '') . "%. Users processed: " . $result['data']['usersProcessed'] . ", Total dividend: £" . $result['data']['totalDividend'],
+				"Created " . $typeName . " dividend for year " . $dividendYear . " at " . number_format($percentage, 2, '.', '') . "%. Users processed: " . $result['data']['usersProcessed'] . ", Total dividend: £" . $result['data']['totalDividend'],
 				'Dividend',
 				null,
 				null,
@@ -15094,19 +15103,18 @@ class Admin extends Base_Controller
 	public function dividendList()
 	{
 		// limit code start
-		if (empty($_REQUEST['start'])) {
-			$start = 10;
-			$end = 0;
-		} else {
-			$start = 10;
-			$end = $_REQUEST['start'];
-		}
+		$start = !empty($_REQUEST['limit']) ? (int) $_REQUEST['limit'] : 10;
+		$end   = !empty($_REQUEST['start']) ? (int) $_REQUEST['start'] : 0;
 		// limit code end
 
 		$where = array();
 
 		if (!empty($_REQUEST['dividend_year'])) {
 			$where['D.dividend_year'] = $_REQUEST['dividend_year'];
+		}
+
+		if (isset($_REQUEST['type']) && $_REQUEST['type'] !== '') {
+			$where['D.type'] = $_REQUEST['type'];
 		}
 
 		if (isset($_REQUEST['status']) && $_REQUEST['status'] !== '') {
@@ -15146,27 +15154,15 @@ class Admin extends Base_Controller
 	public function dividendPayoutRequestList()
 	{
 		// Pagination
-		$limit = !empty($_REQUEST['limit'])
-			? (int) $_REQUEST['limit']
-			: 10;
-
-		$start = isset($_REQUEST['start'])
-			? (int) $_REQUEST['start']
-			: 0;
-
-		if ($limit < 1) {
-			$limit = 10;
-		}
-
-		if ($start < 0) {
-			$start = 0;
-		}
+		$start = !empty($_REQUEST['limit']) ? (int) $_REQUEST['limit'] : 10;
+		$end   = !empty($_REQUEST['start']) ? (int) $_REQUEST['start'] : 0;
 
 		/*
 		* Status:
 		* 0 = Rejected
 		* 1 = Accepted
 		* 2 = Pending
+		* 3 = Initiated
 		*/
 
 		$status = isset($_REQUEST['status'])
@@ -15177,13 +15173,18 @@ class Admin extends Base_Controller
 
 			$status = (int) $status;
 
+			// Status 3 should not be allowed in this API
 			if (!in_array($status, array(0, 1, 2), true)) {
 				$this->response(false, "Invalid status.");
 				return;
 			}
 		}
 
-		$result = $this->user_model->dividendPayoutRequestList($status, $limit, $start);
+		$result = $this->user_model->dividendPayoutRequestList(
+			$status,
+			$start,
+			$end
+		);
 
 		$this->response(
 			true,
@@ -15278,7 +15279,7 @@ class Admin extends Base_Controller
 				</p>
 				<p>
 					<strong>Amount:</strong>
-					GBP ' . number_format($balanceAmount, 2) . '
+					£ ' . number_format($balanceAmount, 2) . '
 				</p>
 			';
 
