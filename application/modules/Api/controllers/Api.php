@@ -5423,6 +5423,7 @@ class Api extends Base_Controller
 		* 0 = Rejected
 		* 1 = Accepted
 		* 2 = Pending
+		* 3 = Initiated
 		*/
 		$status = isset($_REQUEST['status'])
 			? trim($_REQUEST['status'])
@@ -5432,187 +5433,24 @@ class Api extends Base_Controller
 
 			$status = (int) $status;
 
-			if (!in_array($status, array(0, 1, 2), true)) {
+			if (!in_array($status, array(0, 1, 2, 3), true)) {
 				$this->response(false, "Invalid status.");
 				return;
 			}
 		}
 
-		/*
-		* -----------------------------
-		* Main List Query
-		* -----------------------------
-		*/
-		$this->db->select('
-			DU.*,
-			D.dividend_year,
-			D.percentage AS dividend_percentage,
-			D.description,
-
-			CASE
-				WHEN DU.status = 0 THEN "Rejected"
-				WHEN DU.status = 1 THEN "Accepted"
-				WHEN DU.status = 2 THEN "Pending"
-				ELSE "Unknown"
-			END AS status_name
-		', false);
-
-		$this->db->from('dividend_user DU');
-
-		$this->db->join(
-			'dividend D',
-			'D.id = DU.dividend_id',
-			'left'
+		$filters = array(
+			'group_id' => isset($_REQUEST['group_id']) ? $_REQUEST['group_id'] : '',
+			'dividend_year' => isset($_REQUEST['dividend_year']) ? $_REQUEST['dividend_year'] : '',
+			'status' => $status
 		);
 
-		$this->db->where('DU.user_id', $userId);
-		$this->db->where('D.status', 1);
+		$result = $this->user_model->getMyDividendList($userId, $filters, $limit, $start);
 
-		/*
-		* Group Filter
-		*/
-		if (!empty($_REQUEST['group_id'])) {
-			$this->db->where(
-				'DU.group_id',
-				(int) $_REQUEST['group_id']
-			);
-		}
-
-		/*
-		* Year Filter
-		*/
-		if (!empty($_REQUEST['dividend_year'])) {
-			$this->db->where(
-				'D.dividend_year',
-				trim($_REQUEST['dividend_year'])
-			);
-		}
-
-		/*
-		* Status Filter
-		*/
-		if ($status !== '') {
-			$this->db->where('DU.status', $status);
-		}
-
-		/*
-		* -----------------------------
-		* Total Count
-		* -----------------------------
-		*/
-		$countQuery = clone $this->db;
-
-		$totalCountData = $countQuery
-			->select('COUNT(DU.id) AS total', false)
-			->get()
-			->row_array();
-
-		$totalCount = !empty($totalCountData['total'])
-			? (int) $totalCountData['total']
-			: 0;
-
-		/*
-		* -----------------------------
-		* Pagination + Sorting
-		* -----------------------------
-		*/
-		$this->db->order_by('D.dividend_year', 'DESC');
-		$this->db->order_by('DU.id', 'DESC');
-		$this->db->limit($limit, $start);
-
-		$lists = $this->db->get()->result_array();
-
-		/*
-		* -----------------------------
-		* Serial Number
-		* -----------------------------
-		*/
-		$countData = $start + 1;
-
-		if (!empty($lists)) {
-
-			foreach ($lists as &$row) {
-				$row['sno'] = $countData++;
-			}
-
-			unset($row);
-		}
-
-		/*
-		* -----------------------------
-		* Summary Query
-		* -----------------------------
-		*
-		* Summary is calculated for all
-		* user's dividends, not only the
-		* current pagination page.
-		*/
-		$this->db->select('
-			IFNULL(SUM(DU.total_dividend), 0) AS total_dividend,
-			IFNULL(SUM(DU.paid_amount), 0) AS paid_amount,
-			IFNULL(SUM(DU.balance_amount), 0) AS balance_amount
-		', false);
-
-		$this->db->from('dividend_user DU');
-
-		$this->db->join(
-			'dividend D',
-			'D.id = DU.dividend_id',
-			'left'
-		);
-
-		$this->db->where('DU.user_id', $userId);
-		$this->db->where('D.status', 1);
-
-		/*
-		* Apply same group filter
-		*/
-		if (!empty($_REQUEST['group_id'])) {
-			$this->db->where(
-				'DU.group_id',
-				(int) $_REQUEST['group_id']
-			);
-		}
-
-		/*
-		* Apply year filter
-		*/
-		if (!empty($_REQUEST['dividend_year'])) {
-			$this->db->where(
-				'D.dividend_year',
-				trim($_REQUEST['dividend_year'])
-			);
-		}
-
-		$summary = $this->db->get()->row_array();
-
-		/*
-		* -----------------------------
-		* Response
-		* -----------------------------
-		*/
 		$this->response(
 			true,
 			"Dividend list fetched successfully.",
-			array(
-				'lists' => !empty($lists)
-					? $lists
-					: array(),
-
-				'listCount' => $totalCount,
-
-				'limit' => $limit,
-
-				'start' => $start,
-
-				'summary' => !empty($summary)
-					? $summary
-					: array(
-						'total_dividend' => 0,
-						'paid_amount' => 0,
-						'balance_amount' => 0
-					)
-			)
+			$result
 		);
 	}
 
@@ -5639,38 +5477,12 @@ class Api extends Base_Controller
 		}
 
 		/*
-		* Get user's dividend record
+		* Get user's dividend record from model
 		*/
-		$this->db->select('
-			DU.*,
-			D.dividend_year,
-			D.percentage,
-			D.description,
-			U.first_name,
-			U.last_name,
-			U.email
-		');
-
-		$this->db->from('dividend_user DU');
-
-		$this->db->join(
-			'dividend D',
-			'D.id = DU.dividend_id',
-			'left'
+		$dividend = $this->user_model->getUserDividendForPayout(
+			$dividendUserId,
+			$userId
 		);
-
-		$this->db->join(
-			'user U',
-			'U.user_id = DU.user_id',
-			'left'
-		);
-
-		$this->db->where('DU.id', $dividendUserId);
-		$this->db->where('DU.user_id', $userId);
-		$this->db->where('D.status', 1);
-		$this->db->where('U.status !=', 2);
-
-		$dividend = $this->db->get()->row_array();
 
 		if (empty($dividend)) {
 			$this->response(false, "Dividend not found.");
@@ -5682,6 +5494,7 @@ class Api extends Base_Controller
 		* 0 = Rejected
 		* 1 = Accepted
 		* 2 = Pending
+		* 3 = Initiated
 		*/
 
 		$currentStatus = (int) $dividend['status'];
@@ -5702,9 +5515,6 @@ class Api extends Base_Controller
 		*
 		* Allow user to submit again if the
 		* previous request was rejected.
-		*
-		* If you do NOT want this behavior,
-		* remove this condition.
 		*/
 		if ($currentStatus === 0) {
 			// Allow resubmission
@@ -5724,12 +5534,29 @@ class Api extends Base_Controller
 		}
 
 		/*
-		* User can request payout only when
-		* dividend is accepted OR previously rejected.
+		* Dividend Type:
+		* 1 = Investment
+		* 2 = Provident
+		*/
+		$dividendType = (int) $dividend['type'];
+
+		if ($dividendType === 1) {
+			$dividendTypeName = 'Investment';
+		} elseif ($dividendType === 2) {
+			$dividendTypeName = 'Provident';
+		} else {
+			$dividendTypeName = 'Unknown';
+		}
+
+		/*
+		* User can request payout when
+		* dividend is Initiated (3), Accepted (1)
+		* OR previously Rejected (0).
 		*
 		* Status will become Pending (2).
 		*/
 		if (
+			$currentStatus !== 3 &&
 			$currentStatus !== 1 &&
 			$currentStatus !== 0
 		) {
@@ -5741,19 +5568,9 @@ class Api extends Base_Controller
 		}
 
 		/*
-		* Update status to Pending
+		* Apply payout request status in model
 		*/
-		$result = $this->common->updateData(
-			'dividend_user',
-			array(
-				'status' => 2,
-				'updated_at' => date('Y-m-d H:i:s')
-			),
-			array(
-				'id' => $dividendUserId,
-				'user_id' => $userId
-			)
-		);
+		$result = $this->user_model->applyDividendPayoutRequest($dividendUserId, $userId);
 
 		if (!$result) {
 			$this->response(
@@ -5805,22 +5622,31 @@ class Api extends Base_Controller
 				$data['useremail'] = $admin['email'];
 
 				$data['message'] = '
-					<p>
-						<strong>' . htmlspecialchars($userName) . '</strong>
-						has requested dividend payout for
-						<strong>' . htmlspecialchars($dividend['dividend_year']) . '</strong>.
-					</p>
+				<p>
+					<strong>' . htmlspecialchars($userName) . '</strong>
+					has requested a dividend payout.
+				</p>
 
-					<p>
-						<strong>Amount:</strong>
-						GBP ' . number_format($balanceAmount, 2) . '
-					</p>
+				<p>
+					<strong>Dividend Year:</strong>
+					' . htmlspecialchars($dividend['dividend_year']) . '
+				</p>
 
-					<p>
-						Please review and process the payout request
-						from the admin panel.
-					</p>
-				';
+				<p>
+					<strong>Dividend Type:</strong>
+					' . htmlspecialchars($dividendTypeName) . '
+				</p>
+
+				<p>
+					<strong>Amount:</strong>
+					£ ' . number_format($balanceAmount, 2) . '
+				</p>
+
+				<p>
+					Please review and process the payout request
+					from the admin panel.
+				</p>
+			';
 
 				$mailMessage = $this->load->view(
 					'template/common-mail',
@@ -5830,7 +5656,7 @@ class Api extends Base_Controller
 
 				$this->sendMail(
 					$admin['email'],
-					'Dividend Payout Request',
+					'Dividend Payout Request - ' . $dividendTypeName,
 					$mailMessage
 				);
 			}
