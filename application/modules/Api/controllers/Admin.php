@@ -4330,7 +4330,7 @@ class Admin extends Base_Controller
 			1 => 'Loan',
 			2 => 'Help To Pay(Car Insurance)',
 			3 => 'Help To Buy(Car)',
-			4 => 'Help To Buy(Credit Card)',
+			4 => 'Help To Pay(Credit Card)',
 			5 => 'Help Me Pay Something Else',
 			6 => 'Help To Buy(House)',
 			7 => 'Welfare'
@@ -12523,7 +12523,7 @@ class Admin extends Base_Controller
 
 
 
-	// created by @krishn on 22-05-25
+	// created by @krishn on 22-05-25 (Not in use)
 	public function getAllMissedPayments()
 	{
 		if (empty($_REQUEST['start'])) {
@@ -12798,7 +12798,7 @@ class Admin extends Base_Controller
 		));
 	}
 
-	// created by @krishn on 27-05-25
+	// created by @krishn on 27-05-25 (Not in use)
 	public function getAllOutstandingPayments()
 	{
 		// limit code start
@@ -15365,5 +15365,431 @@ class Admin extends Base_Controller
 		} else {
 			$this->response(true, "Dividend payout request rejected.");
 		}
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingLoanPayments()
+	{
+		$this->getOutstandingLoanProductPayments(1);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingHelpToPayCarInsurancePayments()
+	{
+		$this->getOutstandingLoanProductPayments(2);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingHelpToBuyCarPayments()
+	{
+		$this->getOutstandingLoanProductPayments(3);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingHelpToPayCreditCardPayments()
+	{
+		$this->getOutstandingLoanProductPayments(4);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingHelpMePaySomethingElsePayments()
+	{
+		$this->getOutstandingLoanProductPayments(5);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingHelpToBuyHousePayments()
+	{
+		$this->getOutstandingLoanProductPayments(6);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingWelfarePayments()
+	{
+		$this->getOutstandingLoanProductPayments(7);
+	}
+
+	// created by @krishn on 13/08/26
+	private function getOutstandingLoanProductPayments($loanType)
+	{
+		$limit = isset($_REQUEST['limit']) && $_REQUEST['limit'] !== ''
+			? (int) $_REQUEST['limit']
+			: '';
+
+		$start = isset($_REQUEST['start']) && $_REQUEST['start'] !== ''
+			? (int) $_REQUEST['start']
+			: 0;
+
+		if ($limit !== '' && $limit <= 0) {
+			$limit = 10;
+		}
+
+		if ($start < 0) {
+			$start = 0;
+		}
+
+		$where = "UL.status = 4 AND U.status != 2";
+		$where .= " AND UL.loan_type = " . (int) $loanType;
+
+		/* Group Filter */
+		if (!empty($_REQUEST['group_ids'])) {
+
+			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+			$groupIds = implode(',', $groupIds);
+
+			$where .= " AND UL.group_id IN ($groupIds)";
+		}
+
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+
+			$circleIds = array_map('intval', explode(',', $_REQUEST['circle_ids']));
+			$circleIds = implode(',', $circleIds);
+
+			$where .= " AND EXISTS (
+				SELECT 1
+				FROM user_circle UC
+				WHERE UC.user_id = UL.user_id
+				AND UC.circle_id IN ($circleIds)
+			)";
+		}
+
+		/* Get total count WITHOUT pagination */
+		$allLoanCount = $this->user_model->outstanding_loan_payment_detail(
+			$where,
+			'',
+			0
+		);
+
+		$listCount = count($allLoanCount);
+
+		/* Get paginated records */
+		$allLoan = $this->user_model->outstanding_loan_payment_detail(
+			$where,
+			$limit,
+			$start
+		);
+
+		$allLoan = !empty($allLoan)
+			? array_values($allLoan)
+			: array();
+
+		/* Search */
+		if (!empty($_REQUEST['search'])) {
+
+			$search = strtolower(trim($_REQUEST['search']));
+
+			$allLoan = array_filter(
+				$allLoan,
+				function ($item) use ($search) {
+
+					$name = strtolower(
+						(isset($item['first_name']) ? $item['first_name'] : '') . ' ' .
+							(isset($item['last_name']) ? $item['last_name'] : '')
+					);
+
+					$email = strtolower(
+						isset($item['email']) ? $item['email'] : ''
+					);
+
+					return (
+						strpos($name, $search) !== false ||
+						strpos($email, $search) !== false
+					);
+				}
+			);
+
+			$allLoan = array_values($allLoan);
+		}
+
+		/* Serial number */
+		$sno = $start + 1;
+
+		foreach ($allLoan as &$row) {
+			$row['sno'] = $sno++;
+		}
+
+		unset($row);
+
+		$this->response(
+			true,
+			"Outstanding payment data fetched successfully.",
+			array(
+				'lists' => $allLoan,
+				'listCount' => $listCount,
+				'limit' => $limit,
+				'start' => $start
+			)
+		);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingEmergencyLoanPayments()
+	{
+		$limit = isset($_REQUEST['limit']) && $_REQUEST['limit'] !== ''
+			? (int) $_REQUEST['limit']
+			: '';
+
+		$start = isset($_REQUEST['start']) && $_REQUEST['start'] !== ''
+			? (int) $_REQUEST['start']
+			: 0;
+
+		if ($limit !== '' && $limit <= 0) {
+			$limit = 10;
+		}
+
+		if ($start < 0) {
+			$start = 0;
+		}
+
+		$where = "U.status != 2";
+
+		/* Group Filter */
+		if (!empty($_REQUEST['group_ids'])) {
+
+			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+			$groupIds = implode(',', $groupIds);
+
+			$where .= " AND UEL.group_id IN ($groupIds)";
+		}
+
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+
+			$circleIds = array_map('intval', explode(',', $_REQUEST['circle_ids']));
+			$circleIds = implode(',', $circleIds);
+
+			$where .= " AND EXISTS (
+				SELECT 1
+				FROM user_circle UC
+				WHERE UC.user_id = UEL.user_id
+				AND UC.circle_id IN ($circleIds)
+			)";
+		}
+
+		/* Get total records WITHOUT pagination */
+		$allEmergencyLoanCount = $this->user_model->outstanding_emergency_loan_payment_detail(
+			$where,
+			'',
+			0
+		);
+
+		$listCount = count($allEmergencyLoanCount);
+
+		/* Get paginated records */
+		$allEmergencyLoan = $this->user_model->outstanding_emergency_loan_payment_detail(
+			$where,
+			$limit,
+			$start
+		);
+
+		$allEmergencyLoan = !empty($allEmergencyLoan)
+			? array_values($allEmergencyLoan)
+			: array();
+
+		/* Search */
+		if (!empty($_REQUEST['search'])) {
+
+			$search = strtolower(trim($_REQUEST['search']));
+
+			$allEmergencyLoan = array_filter(
+				$allEmergencyLoan,
+				function ($item) use ($search) {
+
+					$name = strtolower(
+						(isset($item['first_name']) ? $item['first_name'] : '') . ' ' .
+							(isset($item['last_name']) ? $item['last_name'] : '')
+					);
+
+					$email = strtolower(
+						isset($item['email']) ? $item['email'] : ''
+					);
+
+					return (
+						strpos($name, $search) !== false ||
+						strpos($email, $search) !== false
+					);
+				}
+			);
+
+			$allEmergencyLoan = array_values($allEmergencyLoan);
+		}
+
+		/* Serial number*/
+		$sno = $start + 1;
+
+		foreach ($allEmergencyLoan as &$row) {
+			$row['sno'] = $sno++;
+		}
+
+		unset($row);
+
+		$this->response(
+			true,
+			"Outstanding emergency loan payment data fetched successfully.",
+			array(
+				'lists' => $allEmergencyLoan,
+				'listCount' => $listCount,
+				'limit' => $limit,
+				'start' => $start
+			)
+		);
+	}
+
+	// created by @krishn on 14/08/26
+	public function getOutstandingSavingPayments()
+	{
+		$this->getOutstandingSavingProductPayments(1);
+	}
+
+	// created by @krishn on 14/08/26
+	public function getOutstandingSavingJnrPayments()
+	{
+		$this->getOutstandingSavingProductPayments(2);
+	}
+
+	// Created by @krishn on 14/08/26
+	public function getOutstandingSavingProductPayments($savingType)
+	{
+		$limit = isset($_REQUEST['limit']) && $_REQUEST['limit'] !== ''
+			? (int) $_REQUEST['limit']
+			: '';
+
+		$start = isset($_REQUEST['start']) && $_REQUEST['start'] !== ''
+			? (int) $_REQUEST['start']
+			: 0;
+
+		if ($limit !== '' && $limit <= 0) {
+			$limit = 10;
+		}
+
+		if ($start < 0) {
+			$start = 0;
+		}
+
+		$where = "U.status != 2";
+
+		/* Saving Product Type */
+		$where .= " AND GL.group_type_id = " . (int)$savingType;
+
+		/* Group Filter */
+		if (!empty($_REQUEST['group_ids'])) {
+
+			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+			$groupIds = implode(',', $groupIds);
+
+			$where .= " AND UGL.group_id IN ($groupIds)";
+		}
+
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+
+			$circleIds = array_map('intval', explode(',', $_REQUEST['circle_ids']));
+			$circleIds = implode(',', $circleIds);
+
+			$where .= " AND EXISTS (
+				SELECT 1
+				FROM user_circle UC
+				WHERE UC.user_id = UGL.user_id
+				AND UC.circle_id IN ($circleIds)
+			)";
+		}
+
+		/* Get paginated records*/
+		$allSavingPayments = $this->user_model->outstanding_saving_payment_detail(
+			$where,
+			$limit,
+			$start
+		);
+
+		$allSavingPayments = !empty($allSavingPayments)
+			? array_values($allSavingPayments)
+			: array();
+
+		/* Search & Keep your existing search functionality.*/
+		if (!empty($_REQUEST['search'])) {
+
+			$search = strtolower(trim($_REQUEST['search']));
+
+			$allSavingPayments = array_filter(
+				$allSavingPayments,
+				function ($item) use ($search) {
+
+					$name = strtolower(
+						(isset($item['first_name']) ? $item['first_name'] : '') . ' ' .
+							(isset($item['last_name']) ? $item['last_name'] : '')
+					);
+
+					$email = strtolower(
+						isset($item['email']) ? $item['email'] : ''
+					);
+
+					return (
+						strpos($name, $search) !== false ||
+						strpos($email, $search) !== false
+					);
+				}
+			);
+
+			$allSavingPayments = array_values($allSavingPayments);
+		}
+
+		/* Get total count WITHOUT pagination*/
+		$totalPayments = $this->user_model->outstanding_saving_payment_detail(
+			$where,
+			'',
+			0
+		);
+
+		/* Search */
+		if (!empty($_REQUEST['search'])) {
+
+			$search = strtolower(trim($_REQUEST['search']));
+
+			$totalPayments = array_filter(
+				$totalPayments,
+				function ($item) use ($search) {
+
+					$name = strtolower(
+						(isset($item['first_name']) ? $item['first_name'] : '') . ' ' .
+							(isset($item['last_name']) ? $item['last_name'] : '')
+					);
+
+					$email = strtolower(
+						isset($item['email']) ? $item['email'] : ''
+					);
+
+					return (
+						strpos($name, $search) !== false ||
+						strpos($email, $search) !== false
+					);
+				}
+			);
+
+			$totalPayments = array_values($totalPayments);
+		}
+
+		$listCount = count($totalPayments);
+
+		/* Serial number*/
+		$sno = $start + 1;
+
+		foreach ($allSavingPayments as &$row) {
+			$row['sno'] = $sno++;
+		}
+
+		unset($row);
+
+		$this->response(
+			true,
+			"Outstanding savings payment data fetched successfully.",
+			array(
+				'lists' => $allSavingPayments,
+				'listCount' => $listCount,
+				'limit' => $limit,
+				'start' => $start,
+				'savingType' => (int)$savingType
+			)
+		);
 	}
 }

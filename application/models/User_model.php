@@ -2670,4 +2670,364 @@ class User_model extends CI_Model
 
 		return $this->db->query($sql)->result_array();
 	}
+
+	// // created by @krishn on 13/08/26
+	// public function loan_payment_detail($where = "", $options = array(), $limit = '', $start = '')
+	// {
+	// 	$this->db->select("
+	// 		U.first_name,
+	// 		U.last_name,
+	// 		U.email,
+
+	// 		UL.loan_amount,
+	// 		UL.loan_emi,
+	// 		UL.loan_type,
+	// 		UL.reference_no,
+
+	// 		ULP.id AS payment_id,
+	// 		ULP.amount AS payment_amount,
+	// 		ULP.payment_method,
+	// 		ULP.status AS payment_status,
+	// 		ULP.emi_date AS payment_emi_date,
+	// 		ULP.created_at AS payment_created_at
+
+	// 	", false);
+
+	// 	$this->db->from('user_loan_payment AS ULP');
+
+	// 	$this->db->join('user AS U', 'U.user_id = ULP.user_id');
+	// 	$this->db->where('U.status !=', 2);
+
+	// 	$this->db->join('user_loan AS UL', 'UL.id = ULP.loan_id', 'left');
+
+	// 	if ($where != '') {
+	// 		$this->db->where($where);
+	// 	}
+
+	// 	$this->db->group_start();
+
+	// 	$this->db->where('ULP.status', 3);
+
+	// 	$this->db->or_group_start();
+	// 	$this->db->where('ULP.emi_date <', date('Y-m-d'));
+	// 	$this->db->where('ULP.status !=', 1);
+	// 	$this->db->group_end();
+
+	// 	$this->db->group_end();
+
+	// 	if (!empty($options) && in_array('count', $options)) {
+	// 		$result = $this->db->get()->result_array();
+	// 		return count($result);
+	// 	}
+
+	// 	$this->db->order_by('ULP.emi_date', 'ASC');
+	// 	$this->db->order_by('UL.id', 'DESC');
+
+	// 	if ($limit != '') {
+	// 		$this->db->limit($limit, $start);
+	// 	}
+
+	// 	$result = $this->db->get()->result_array();
+
+	// 	return !empty($result) ? $result : array();
+	// }
+
+	// created by @krishn on 13/08/26
+	public function outstanding_loan_payment_detail($where = "", $limit = '', $start = '')
+	{
+		$this->db->select("
+			U.first_name,
+			U.last_name,
+			U.email,
+
+			UL.loan_amount,
+			UL.loan_emi,
+			UL.loan_type,
+			UL.reference_no,
+
+			ULP.user_id,
+			ULP.id AS payment_id,
+			ULP.amount AS payment_amount,
+			ULP.payment_method,
+			ULP.status AS payment_status,
+			ULP.emi_date AS payment_emi_date,
+			ULP.created_at AS payment_created_at
+
+		", false);
+
+		$this->db->from('user_loan_payment AS ULP');
+
+		// User
+		$this->db->join(
+			'user AS U',
+			'U.user_id = ULP.user_id'
+		);
+
+		$this->db->where('U.status !=', 2);
+
+		// Loan
+		$this->db->join(
+			'user_loan AS UL',
+			'UL.id = ULP.loan_id',
+			'left'
+		);
+
+		// Additional filters
+		if ($where != '') {
+			$this->db->where($where);
+		}
+
+		/*
+		* Outstanding Loan Payment Logic
+		*
+		* Status:
+		* 0 = Pending
+		* 1 = Paid On Time
+		* 2 = Paid Late
+		* 3 = Missed Payment Deadline
+		*
+		* Include:
+		* 1. Status 3 (Missed Payment Deadline)
+		* 2. Status 0 (Pending) AND EMI date has passed
+		*
+		* Exclude:
+		* 1. Status 1 (Paid On Time)
+		* 2. Status 2 (Paid Late)
+		*/
+
+		$this->db->group_start();
+
+		// Explicitly missed payment
+		$this->db->where('ULP.status', 3);
+
+		// OR pending payment whose due date has passed
+		$this->db->or_group_start();
+
+		$this->db->where('ULP.status', 0);
+		$this->db->where(
+			'ULP.emi_date <',
+			date('Y-m-d')
+		);
+
+		$this->db->group_end();
+
+		$this->db->group_end();
+
+		// Oldest outstanding payment first
+		$this->db->order_by('ULP.emi_date', 'ASC');
+		$this->db->order_by('ULP.id', 'DESC');
+
+		// Pagination
+		if ($limit !== '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$result = $this->db->get()->result_array();
+
+		return !empty($result) ? $result : array();
+	}
+
+	// created by @krishn on 13/08/26
+	public function outstanding_emergency_loan_payment_detail($where = "", $limit = '', $start = '')
+	{
+		$this->db->select("
+			U.first_name,
+			U.last_name,
+			U.email,
+
+			UEL.user_id,
+			UEL.id AS payment_id,
+			UEL.loan_amount AS payment_amount,
+			UEL.pay_by AS payment_date,
+			UEL.status AS loan_status,
+			UEL.created_at AS payment_created_at,
+			UEL.payment_method,
+			UEL.paid_status AS payment_status
+
+		", false);
+
+		$this->db->from('user_emergency_loan AS UEL');
+
+		$this->db->join('user AS U', 'U.user_id = UEL.user_id');
+
+		$this->db->where('U.status !=', 2);
+
+		// Only consider approved/active emergency loans
+		$this->db->where('UEL.status', 4);
+
+		if ($where != '') {
+			$this->db->where($where);
+		}
+
+		/*
+		* Outstanding Emergency Loan Payment:
+		*
+		* 1. paid_status = 3
+		*    -> Missed Payment Deadline
+		*
+		* 2. paid_status = 0 AND pay_by < today
+		*    -> Pending payment whose due date has passed
+		*
+		* Excluded:
+		* 1 = Paid On Time
+		* 2 = Paid Late
+		*/
+		$this->db->group_start();
+
+		// Explicitly missed payment
+		$this->db->where('UEL.paid_status', 3);
+
+		$this->db->or_group_start();
+
+		// Pending payment whose due date has passed
+		$this->db->where('UEL.paid_status', 0);
+		$this->db->where('UEL.pay_by <', date('Y-m-d'));
+
+		$this->db->group_end();
+
+		$this->db->group_end();
+
+		// Oldest outstanding payments first
+		$this->db->order_by('UEL.pay_by', 'ASC');
+		$this->db->order_by('UEL.id', 'DESC');
+
+		if ($limit !== '') {
+			$this->db->limit($limit, $start);
+		}
+
+		$result = $this->db->get()->result_array();
+
+		return !empty($result) ? $result : array();
+	}
+
+	// created by @krishn on 13/08/26
+	public function outstanding_saving_payment_detail($where = "", $limit = '', $start = '', $savingType = '') {
+		$this->db->select("
+			U.first_name,
+			U.last_name,
+			U.email,
+
+			GL.group_type_id,
+			GL.start_date,
+			GL.end_date,
+
+			UGL.user_id,
+			UGL.id AS payment_id,
+			UGL.amount AS payment_amount,
+			UGL.date AS monthly_payment_date,
+			UGL.status AS payment_status,
+			UGL.created_at AS payment_created_at,
+			UGL.payment_method
+
+		", false);
+
+		$this->db->from('user_group_lifecycle AS UGL');
+
+		$this->db->join(
+			'user AS U',
+			'U.user_id = UGL.user_id',
+			'inner'
+		);
+
+		$this->db->join(
+			'group_lifecycle AS GL',
+			'GL.id = UGL.groupLifecycle_id',
+			'left'
+		);
+
+		/*
+		* Only active users
+		*/
+		$this->db->where('U.status !=', 2);
+
+		/*
+		* Only active group lifecycle
+		*/
+		$this->db->where('GL.status', 1);
+
+		/*
+		* Saving Product Type
+		*
+		* 1 = Simple Saving
+		* 2 = Saving JNR
+		* 4 = Welfare
+		* etc.
+		*/
+		if ($savingType !== '' && $savingType !== null) {
+			$this->db->where(
+				'GL.group_type_id',
+				(int) $savingType
+			);
+		}
+
+		/*
+		* Additional filters
+		*/
+		if (!empty($where)) {
+			$this->db->where($where);
+		}
+
+		/*
+		* =====================================================
+		* OUTSTANDING PAYMENT LOGIC
+		* =====================================================
+		*
+		* Status:
+		*
+		* 1 = Pending
+		* 2 = Paid On Time
+		* 3 = Missed Payment Deadline
+		* 4 = Paid Late
+		*
+		* Outstanding means:
+		*
+		* 1. Pending payment whose due date has passed
+		* 2. Missed payment (status = 3)
+		*
+		* Exclude:
+		*
+		* 2 = Paid On Time
+		* 4 = Paid Late
+		*/
+
+		$this->db->group_start();
+
+		/*
+         * Pending payment
+         * Include only when payment date has passed.
+         */
+		$this->db->group_start();
+
+		$this->db->where('UGL.status', 1);
+		$this->db->where('UGL.date <', date('Y-m-d'));
+
+		$this->db->group_end();
+
+		/*
+         * Missed payment deadline
+         */
+		$this->db->or_where('UGL.status', 3);
+
+		$this->db->group_end();
+
+		/*
+		* Sort oldest outstanding payment first
+		*/
+		$this->db->order_by('UGL.date', 'ASC');
+		$this->db->order_by('UGL.id', 'DESC');
+
+		/*
+		* Pagination
+		*/
+		if ($limit !== '' && $limit !== null) {
+			$this->db->limit(
+				(int) $limit,
+				(int) $start
+			);
+		}
+
+		$result = $this->db->get()->result_array();
+
+		return !empty($result) ? $result : array();
+	}
 }
