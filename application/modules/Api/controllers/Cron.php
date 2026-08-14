@@ -395,7 +395,7 @@ class Cron extends Base_Controller
             1 => 'Loan',
             2 => 'Help To Pay(Car Insurance)',
             3 => 'Help To Buy(Car)',
-            4 => 'Help To Buy(Credit Card)',
+            4 => 'Help To Pay(Credit Card)',
             5 => 'Help Me Pay Something Else',
             6 => 'Help To Buy(House)',
             7 => 'Welfare'
