@@ -2420,14 +2420,6 @@ class Admin extends Base_Controller
 		if ($_REQUEST['payment_method'] === '1' && $_REQUEST['status'] === '2') {
 			$message2 = "emergency loan fully  paid";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "5");
-
-			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-			$data['useremail'] = "";
-			$data['message'] = 'This is a confirmation that your Emergency Loan has been fully paid and marked as completed.<p>Payment due date - <b>' . date('d M Y', strtotime($_REQUEST['pay_by'])) . '</b></p>';
-			$messaged = $this->load->view('template/common-mail', $data, true);
-			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
 		}
 
 
@@ -2436,10 +2428,11 @@ class Admin extends Base_Controller
 			$this->common->query_normal("UPDATE credit_score_user SET loan_emergency_payment_fully_paid = loan_emergency_payment_fully_paid+0 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 			$this->updateCreditScore(0, 'plus');
 
+			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 			$data['useremail'] = "";
-			$data['message'] = '<p>Your loan repayment has been completed successfully.</p>
-			<p>Thank you for your cooperation. If you need any assistance, please contact the group admin.</p>';
+			$data['message'] = 'This is a confirmation that your Emergency Loan has been fully paid and marked as completed.<p>Payment due date - <b>' . date('d M Y', strtotime($_REQUEST['pay_by'])) . '</b></p>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
 		}
