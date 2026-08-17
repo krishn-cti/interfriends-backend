@@ -3,6 +3,9 @@
 
 function get_restaurant_details($restaurant_id)
 {
+   /**
+   * @var restaurant_model
+   */
    $ci =& get_instance();
    $where = "R.restaurant_id ='".$restaurant_id."'";
    $info  = $ci->restaurant_model->restaurant_detail($where,array('single'));
