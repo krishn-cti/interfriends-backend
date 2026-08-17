@@ -1,26 +1,51 @@
 <?php
-defined('BASEPATH') OR exit('No direct script access allowed');
+defined('BASEPATH') or exit('No direct script access allowed');
 
-class Whatsapp {
-
+class Whatsapp
+{
+    /**
+     * CodeIgniter Super Object
+     *
+     * @var CI_Controller
+     */
     protected $CI;
+
     private $access_token;
     private $phone_number_id;
     private $api_version;
     private $enabled;
 
-    public function __construct() {
-        // CodeIgniter Super-Object instance
-        $this->CI =& get_instance();
+    /**
+     * Constructor
+     */
+    public function __construct()
+    {
+        /**
+         * @var config for WhatsApp Cloud API
+         */
+        $this->CI = &get_instance();
 
-        // Load whatsapp config file
         $this->CI->config->load('whatsapp', TRUE);
 
-        // Load configurations
-        $this->access_token    = $this->CI->config->item('whatsapp_access_token', 'whatsapp');
-        $this->phone_number_id = $this->CI->config->item('whatsapp_phone_number_id', 'whatsapp');
-        $this->api_version     = $this->CI->config->item('whatsapp_api_version', 'whatsapp');
-        $this->enabled         = $this->CI->config->item('whatsapp_enabled', 'whatsapp');
+        $this->access_token = $this->CI->config->item(
+            'whatsapp_access_token',
+            'whatsapp'
+        );
+
+        $this->phone_number_id = $this->CI->config->item(
+            'whatsapp_phone_number_id',
+            'whatsapp'
+        );
+
+        $this->api_version = $this->CI->config->item(
+            'whatsapp_api_version',
+            'whatsapp'
+        );
+
+        $this->enabled = $this->CI->config->item(
+            'whatsapp_enabled',
+            'whatsapp'
+        );
 
         if (empty($this->api_version)) {
             $this->api_version = 'v20.0';
@@ -28,20 +53,61 @@ class Whatsapp {
     }
 
     /**
-     * Format and sanitize phone numbers (removes non-numeric characters, handles country code prefixing)
-     * 
+     * Format Phone Number
+     *
+     * Converts phone number into WhatsApp Cloud API format.
+     *
+     * Example:
+     * 07123456789 + 44
+     * becomes:
+     * 447123456789
+     *
      * @param string $phone
      * @param string $country_code
      * @return string
      */
-    public function format_phone_number($phone, $country_code = '') {
-        $clean_phone   = preg_replace('/[^0-9]/', '', (string)$phone);
-        $clean_country = preg_replace('/[^0-9]/', '', (string)$country_code);
+    public function format_phone_number($phone, $country_code = '')
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Remove Non-Numeric Characters
+        |--------------------------------------------------------------------------
+        */
+
+        $clean_phone = preg_replace(
+            '/[^0-9]/',
+            '',
+            (string) $phone
+        );
+
+        $clean_country = preg_replace(
+            '/[^0-9]/',
+            '',
+            (string) $country_code
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Phone
+        |--------------------------------------------------------------------------
+        */
+
+        if (empty($clean_phone)) {
+            return '';
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Add Country Code
+        |--------------------------------------------------------------------------
+        */
 
         if (!empty($clean_country)) {
-            // Trim leading zero from mobile number if country code is supplied
+
+            // Remove leading zero
             $clean_phone = ltrim($clean_phone, '0');
-            // If phone doesn't already start with country code, prepend it
+
+            // Add country code only if it isn't already present
             if (strpos($clean_phone, $clean_country) !== 0) {
                 $clean_phone = $clean_country . $clean_phone;
             }
@@ -50,143 +116,541 @@ class Whatsapp {
         return $clean_phone;
     }
 
+
     /**
-     * Send Template Message via WhatsApp Cloud API (cURL)
-     * 
-     * @param string $to_phone_number Phone number with country code (e.g. 919876543210 or 447123456789)
-     * @param string $template_name   Meta dashboard approved template name
-     * @param string $language_code   Language code (default: 'en')
-     * @param array  $parameters       Indexed array of parameters (e.g. array('John', 'ORD-123'))
+     * Send WhatsApp Template Message
+     *
+     * Supports any number of template parameters.
+     *
+     * Example:
+     *
+     * send_template_message(
+     *     '447123456789',
+     *     'outstanding_payment_reminder',
+     *     'en_UK',
+     *     array(
+     *         'John Smith',
+     *         'Saving',
+     *         '100.00',
+     *         'August 2026'
+     *     )
+     * );
+     *
+     * @param string $to_phone_number
+     * @param string $template_name
+     * @param string $language_code
+     * @param array $parameters
      * @return array
      */
-    public function send_template_message($to_phone_number, $template_name, $language_code = 'en', $parameters = array()) {
+    public function send_template_message(
+        $to_phone_number,
+        $template_name,
+        $language_code = 'en_UK',
+        $parameters = array()
+    ) {
+        /*
+        |--------------------------------------------------------------------------
+        | WhatsApp Disabled
+        |--------------------------------------------------------------------------
+        */
+
         if ($this->enabled === FALSE) {
-            return array('success' => FALSE, 'message' => 'WhatsApp messaging is disabled in config.');
+            return array(
+                'success' => FALSE,
+                'skipped' => TRUE,
+                'message' => 'WhatsApp messaging is disabled in config.'
+            );
         }
 
-        if (empty($this->access_token) || empty($this->phone_number_id)) {
-            return array('success' => FALSE, 'message' => 'WhatsApp configuration variables (access_token / phone_number_id) are missing.');
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Configuration
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            empty($this->access_token) ||
+            empty($this->phone_number_id)
+        ) {
+            return array(
+                'success' => FALSE,
+                'message' => 'WhatsApp access token or phone number ID is missing.'
+            );
         }
 
-        $formatted_to = $this->format_phone_number($to_phone_number);
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Template
+        |--------------------------------------------------------------------------
+        */
+
+        if (empty($template_name)) {
+            return array(
+                'success' => FALSE,
+                'message' => 'WhatsApp template name is required.'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Format Recipient Phone
+        |--------------------------------------------------------------------------
+        */
+
+        $formatted_to = $this->format_phone_number(
+            $to_phone_number
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Recipient
+        |--------------------------------------------------------------------------
+        */
+
         if (empty($formatted_to)) {
-            return array('success' => FALSE, 'message' => 'Invalid or empty phone number provided.');
+            return array(
+                'success' => FALSE,
+                'skipped' => TRUE,
+                'message' => 'Invalid or empty WhatsApp phone number.'
+            );
         }
 
-        $url = "https://graph.facebook.com/{$this->api_version}/{$this->phone_number_id}/messages";
+        /*
+        |--------------------------------------------------------------------------
+        | Meta WhatsApp API URL
+        |--------------------------------------------------------------------------
+        */
 
-        // Build body parameters array
+        $url =
+            'https://graph.facebook.com/' .
+            $this->api_version .
+            '/' .
+            $this->phone_number_id .
+            '/messages';
+
+        /*
+        |--------------------------------------------------------------------------
+        | Prepare Template Parameters
+        |--------------------------------------------------------------------------
+        */
+
         $body_params = array();
-        if (is_array($parameters)) {
+
+        if (!empty($parameters)) {
+
+            // Allow single parameter as well
+            if (!is_array($parameters)) {
+                $parameters = array($parameters);
+            }
+
             foreach ($parameters as $param) {
+
                 $body_params[] = array(
                     'type' => 'text',
-                    'text' => (string)$param
+                    'text' => (string) $param
                 );
             }
         }
 
-        // Payload structure
+        /*
+        |--------------------------------------------------------------------------
+        | Build WhatsApp Template Payload
+        |--------------------------------------------------------------------------
+        */
+
         $payload = array(
             'messaging_product' => 'whatsapp',
-            'recipient_type'    => 'individual',
-            'to'                => $formatted_to,
-            'type'              => 'template',
-            'template'          => array(
-                'name'     => $template_name,
+            'recipient_type' => 'individual',
+            'to' => $formatted_to,
+            'type' => 'template',
+            'template' => array(
+                'name' => $template_name,
                 'language' => array(
                     'code' => $language_code
                 )
             )
         );
 
+        /*
+        |--------------------------------------------------------------------------
+        | Add Body Parameters
+        |--------------------------------------------------------------------------
+        */
+
         if (!empty($body_params)) {
+
             $payload['template']['components'] = array(
                 array(
-                    'type'       => 'body',
+                    'type' => 'body',
                     'parameters' => $body_params
                 )
             );
         }
 
-        return $this->execute_curl($url, $payload);
+        /*
+        |--------------------------------------------------------------------------
+        | Send Request
+        |--------------------------------------------------------------------------
+        */
+
+        return $this->execute_curl(
+            $url,
+            $payload
+        );
     }
 
+
     /**
-     * Send Standard Text Message via WhatsApp Cloud API (cURL)
-     * 
-     * @param string $to_phone_number Phone number with country code
-     * @param string $message_text    Plain text message body
+     * Send Standard Text Message
+     *
+     * Note:
+     * Normal text messages are subject to WhatsApp
+     * conversation/messaging window rules.
+     *
+     * @param string $to_phone_number
+     * @param string $message_text
      * @return array
      */
-    public function send_text_message($to_phone_number, $message_text) {
+    public function send_text_message(
+        $to_phone_number,
+        $message_text
+    ) {
+        /*
+        |--------------------------------------------------------------------------
+        | WhatsApp Disabled
+        |--------------------------------------------------------------------------
+        */
+
         if ($this->enabled === FALSE) {
-            return array('success' => FALSE, 'message' => 'WhatsApp messaging is disabled in config.');
+            return array(
+                'success' => FALSE,
+                'skipped' => TRUE,
+                'message' => 'WhatsApp messaging is disabled in config.'
+            );
         }
 
-        if (empty($this->access_token) || empty($this->phone_number_id)) {
-            return array('success' => FALSE, 'message' => 'WhatsApp configuration variables (access_token / phone_number_id) are missing.');
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Configuration
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            empty($this->access_token) ||
+            empty($this->phone_number_id)
+        ) {
+            return array(
+                'success' => FALSE,
+                'message' => 'WhatsApp access token or phone number ID is missing.'
+            );
         }
 
-        $formatted_to = $this->format_phone_number($to_phone_number);
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Message
+        |--------------------------------------------------------------------------
+        */
+
+        if (empty(trim($message_text))) {
+            return array(
+                'success' => FALSE,
+                'skipped' => TRUE,
+                'message' => 'WhatsApp message is empty.'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Format Phone Number
+        |--------------------------------------------------------------------------
+        */
+
+        $formatted_to = $this->format_phone_number(
+            $to_phone_number
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Phone
+        |--------------------------------------------------------------------------
+        */
+
         if (empty($formatted_to)) {
-            return array('success' => FALSE, 'message' => 'Invalid or empty phone number provided.');
+            return array(
+                'success' => FALSE,
+                'skipped' => TRUE,
+                'message' => 'Invalid or empty WhatsApp phone number.'
+            );
         }
 
-        $url = "https://graph.facebook.com/{$this->api_version}/{$this->phone_number_id}/messages";
+        /*
+        |--------------------------------------------------------------------------
+        | Meta WhatsApp API URL
+        |--------------------------------------------------------------------------
+        */
+
+        $url =
+            'https://graph.facebook.com/' .
+            $this->api_version .
+            '/' .
+            $this->phone_number_id .
+            '/messages';
+
+        /*
+        |--------------------------------------------------------------------------
+        | Build Payload
+        |--------------------------------------------------------------------------
+        */
 
         $payload = array(
             'messaging_product' => 'whatsapp',
-            'recipient_type'    => 'individual',
-            'to'                => $formatted_to,
-            'type'              => 'text',
-            'text'              => array(
-                'preview_url' => false,
-                'body'        => (string)$message_text
+            'recipient_type' => 'individual',
+            'to' => $formatted_to,
+            'type' => 'text',
+            'text' => array(
+                'preview_url' => FALSE,
+                'body' => (string) $message_text
             )
         );
 
-        return $this->execute_curl($url, $payload);
+        /*
+        |--------------------------------------------------------------------------
+        | Send Request
+        |--------------------------------------------------------------------------
+        */
+
+        return $this->execute_curl(
+            $url,
+            $payload
+        );
     }
 
+
     /**
-     * Execute cURL request to Meta Cloud API
-     * 
+     * Execute cURL Request
+     *
      * @param string $url
      * @param array $payload
      * @return array
      */
-    private function execute_curl($url, $payload) {
+    private function execute_curl(
+        $url,
+        $payload
+    ) {
+        /*
+        |--------------------------------------------------------------------------
+        | Convert Payload To JSON
+        |--------------------------------------------------------------------------
+        */
+
         $json_payload = json_encode($payload);
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $json_payload);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-            "Authorization: Bearer {$this->access_token}",
-            "Content-Type: application/json"
-        ));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        if ($json_payload === FALSE) {
 
-        $response  = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error     = curl_error($ch);
+            return array(
+                'success' => FALSE,
+                'message' => 'Unable to encode WhatsApp request.'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Initialize cURL
+        |--------------------------------------------------------------------------
+        */
+
+        if (!function_exists('curl_init')) {
+
+            log_message(
+                'error',
+                'WhatsApp API Error: PHP cURL extension is not enabled.'
+            );
+
+            return array(
+                'success' => FALSE,
+                'message' => 'PHP cURL extension is not enabled.'
+            );
+        }
+
+        $ch = curl_init($url);
+
+        if ($ch === FALSE) {
+
+            return array(
+                'success' => FALSE,
+                'message' => 'Unable to initialize WhatsApp cURL request.'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | cURL Options
+        |--------------------------------------------------------------------------
+        */
+
+        curl_setopt(
+            $ch,
+            CURLOPT_RETURNTRANSFER,
+            TRUE
+        );
+
+        curl_setopt(
+            $ch,
+            CURLOPT_POST,
+            TRUE
+        );
+
+        curl_setopt(
+            $ch,
+            CURLOPT_POSTFIELDS,
+            $json_payload
+        );
+
+        curl_setopt(
+            $ch,
+            CURLOPT_HTTPHEADER,
+            array(
+                'Authorization: Bearer ' . $this->access_token,
+                'Content-Type: application/json'
+            )
+        );
+
+        curl_setopt(
+            $ch,
+            CURLOPT_TIMEOUT,
+            30
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Execute Request
+        |--------------------------------------------------------------------------
+        */
+
+        $response = curl_exec($ch);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get HTTP Status
+        |--------------------------------------------------------------------------
+        */
+
+        $http_code = curl_getinfo(
+            $ch,
+            CURLINFO_HTTP_CODE
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get cURL Error
+        |--------------------------------------------------------------------------
+        */
+
+        $error = curl_error($ch);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Close cURL
+        |--------------------------------------------------------------------------
+        */
+
         curl_close($ch);
 
-        if ($error) {
-            log_message('error', 'WhatsApp API cURL Error: ' . $error);
-            return array('success' => FALSE, 'message' => 'cURL Error: ' . $error);
+        /*
+        |--------------------------------------------------------------------------
+        | Handle cURL Error
+        |--------------------------------------------------------------------------
+        */
+
+        if (!empty($error)) {
+
+            log_message(
+                'error',
+                'WhatsApp API cURL Error: ' . $error
+            );
+
+            return array(
+                'success' => FALSE,
+                'message' => 'WhatsApp cURL Error: ' . $error
+            );
         }
 
-        $result = json_decode($response, true);
+        /*
+        |--------------------------------------------------------------------------
+        | Decode Response
+        |--------------------------------------------------------------------------
+        */
 
-        if ($http_code === 200) {
-            return array('success' => TRUE, 'data' => $result);
-        } else {
-            $err_msg = isset($result['error']['message']) ? $result['error']['message'] : 'Failed to send WhatsApp message';
-            log_message('error', 'WhatsApp API Error: ' . $err_msg . ' Response: ' . $response);
-            return array('success' => FALSE, 'message' => $err_msg, 'data' => $result);
+        $result = json_decode(
+            $response,
+            TRUE
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Successful Response
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $http_code >= 200 &&
+            $http_code < 300
+        ) {
+
+            return array(
+                'success' => TRUE,
+                'message' => 'WhatsApp message sent successfully.',
+                'data' => $result
+            );
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Meta API Error
+        |--------------------------------------------------------------------------
+        */
+
+        $err_msg = 'Failed to send WhatsApp message.';
+
+        if (
+            isset($result['error']['message']) &&
+            !empty($result['error']['message'])
+        ) {
+            $err_msg = $result['error']['message'];
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Log Error
+        |--------------------------------------------------------------------------
+        */
+
+        log_message(
+            'error',
+            'WhatsApp API Error: ' .
+                $err_msg .
+                ' HTTP Code: ' .
+                $http_code .
+                ' Response: ' .
+                $response
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Return Error
+        |--------------------------------------------------------------------------
+        */
+
+        return array(
+            'success' => FALSE,
+            'message' => $err_msg,
+            'http_code' => $http_code,
+            'request' => array(
+                'to' => isset($payload['to']) ? $payload['to'] : '',
+                'type' => isset($payload['type']) ? $payload['type'] : '',
+                'template' => isset($payload['template']) ? $payload['template'] : array()
+            ),
+            'data' => $result
+        );
     }
 }
