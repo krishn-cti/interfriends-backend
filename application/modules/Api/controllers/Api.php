@@ -2188,29 +2188,33 @@ class Api extends Base_Controller
 	// 	}
 	// }
 
+	// updated by @krishn on 18-08-25
 	public function safeKeepingList()
 	{
 		$group_id = $_REQUEST['group_id'];
 		$user_id  = $_REQUEST['user_id'];
 
-		// Condition only for displaying list records
+		// Condition for displaying list records
 		$condition = "group_id = '$group_id'
-                    AND user_id = '$user_id'
-                    AND (
-                            (requested_by = 'admin' AND request_status = '2')
-                            OR
-                            (requested_by = 'user' AND request_status = '1')
-                        )";
+                  AND user_id = '$user_id'
+                  AND (
+                        requested_by = 'admin'
+                        OR
+                        (requested_by = 'user' AND request_status = '1')
+                      )";
 
 		// Fetch list
-		$safeKeepingList = $this->common->getData('safe_keeping', $condition);
+		$safeKeepingList = $this->common->getData(
+			'safe_keeping',
+			$condition
+		);
 
 		/*
-    |--------------------------------------------------------------------------
-    | Amount Calculation
-    | Same logic as Admin Side
-    |--------------------------------------------------------------------------
-    */
+		|--------------------------------------------------------------------------
+		| Amount Calculation
+		| Same logic as Admin Side
+		|--------------------------------------------------------------------------
+		*/
 		$amountCondition = "group_id = '$group_id'
                         AND user_id = '$user_id'";
 
