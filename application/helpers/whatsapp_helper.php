@@ -37,7 +37,7 @@ if (!function_exists('send_whatsapp_notification')) {
         $message,
         $template_name = '',
         $parameters = array(),
-        $language_code = 'en_UK'
+        $language_code = 'en_GB'
     ) {
         /**
          * @var load
@@ -218,7 +218,7 @@ if (!function_exists('send_whatsapp_notification')) {
 |         '150.00',
 |         'August 2026'
 |     ),
-|     'en_UK'
+|     'en_GB'
 | );
 |
 */
@@ -230,7 +230,7 @@ if (!function_exists('send_whatsapp_to_user')) {
         $country_code,
         $template_name,
         $parameters = array(),
-        $language_code = 'en_UK'
+        $language_code = 'en_GB'
     ) {
 
         /**
@@ -392,7 +392,7 @@ if (!function_exists('send_whatsapp_to_emergency')) {
         $message,
         $template_name = '',
         $parameters = array(),
-        $language_code = 'en_UK'
+        $language_code = 'en_GB'
     ) {
 
         /**
@@ -550,7 +550,7 @@ if (!function_exists('send_whatsapp_to_kin')) {
         $message,
         $template_name = '',
         $parameters = array(),
-        $language_code = 'en_UK'
+        $language_code = 'en_GB'
     ) {
 
         /**

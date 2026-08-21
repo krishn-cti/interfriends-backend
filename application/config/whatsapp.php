@@ -12,8 +12,12 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | whatsapp_enabled       : Master toggle flag to enable/disable WhatsApp notifications
 |
 */
-$config['whatsapp_access_token'] = 'EAAO5klwWKvQBSBAs63IBm3RwyqF5t1ES9S3H1McfJ6Itgaa3Suez5hS33vZCG8f7jeRJrFBvzwaJQnRdZBSrK6tAsJK4n8ncZChJgVQA321d75ZCC0KOfYo14ZC1ngF7r9XFtVqNRENEsGECvoBnREuY23VO5eCtPzwpIYGIHPREOo1s8iQstpkTymioZAqeuTMvkKOb7w0WiW7IZAdMqXvSbFC63lrod1atHkaYGSjwWwG5zZB7tU7JZB19MQhUKVMYMqEtD1R5Du03xAHcGyTnhFIoZD';
+
+// Permanant account access token(currently not in use, but can be used in future if needed)
+// $config['whatsapp_access_token'] = 'EAAO5klwWKvQBSdUcZC6DK3B4ayLPrzHCoZCvv0ByikCxV83ODgaBZBPQCECOGz8TCgPedm6PnizJo91bZCznRI9kpCpcqDJXzjYXHep06vLwUVeWpZCGZCD8Oh8UZCrofm93wIQD9ap7RrGa8WjzAMRzbn858XlrpvooIpf9SbCl33ScJSZBnZC4mVoSeCXzV9UDxGAZDZD';
+
+$config['whatsapp_access_token'] = 'EAAO5klwWKvQBSQS3qTYvjbtKrCuNgSYpjxZAhhQfdWp0Ql6QEODJNqbhleRX8RDF5xACjEZBJ257ZCgdyM0ZALdNhtdQukyiEUsIrP0ahE9LnaDUcPHFubm5VuPd81pqlQU4ZApbqmdXu0ZACZA4BFn91U3aidNA6UHS7ZBchoEmFYt4m4nKWtJjrrGh0LZCdZAbKm3wZDZD';
 $config['whatsapp_verify_token'] = 'INTERFRIENDS_WA_WEBHOOK_2026';
-$config['whatsapp_phone_number_id'] = '1246298211898746';
+$config['whatsapp_phone_number_id'] = '1264325026768181';
 $config['whatsapp_api_version'] = 'v20.0';
 $config['whatsapp_enabled'] = TRUE;
