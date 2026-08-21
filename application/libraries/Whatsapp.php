@@ -127,7 +127,7 @@ class Whatsapp
      * send_template_message(
      *     '447123456789',
      *     'outstanding_payment_reminder',
-     *     'en_UK',
+     *     'en_GB',
      *     array(
      *         'John Smith',
      *         'Saving',
@@ -145,7 +145,7 @@ class Whatsapp
     public function send_template_message(
         $to_phone_number,
         $template_name,
-        $language_code = 'en_UK',
+        $language_code = 'en_GB',
         $parameters = array()
     ) {
         /*

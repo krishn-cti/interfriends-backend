@@ -13396,83 +13396,7 @@ class Admin extends Base_Controller
 		$this->response(true, "Reminder sent successfully.");
 	}
 
-	// // API created by @krishn on 18/06/26
-	// public function sendOutstandingPaymentReminder()
-	// {
-	// 	if (
-	// 		empty($_REQUEST['user_id']) ||
-	// 		empty($_REQUEST['type']) ||
-	// 		empty($_REQUEST['amount']) ||
-	// 		empty($_REQUEST['date'])
-	// 	) {
-
-	// 		$this->response(false, "Required fields are missing.");
-	// 		return;
-	// 	}
-
-	// 	$user_id = $_REQUEST['user_id'];
-	// 	$type = ucfirst(strtolower(trim($_REQUEST['type'])));
-	// 	$amount = $_REQUEST['amount'];
-	// 	$date = $_REQUEST['date'];
-
-	// 	$user = $this->common->getData(
-	// 		'user',
-	// 		['user_id' => $user_id],
-	// 		['single']
-	// 	);
-
-	// 	if (empty($user)) {
-	// 		$this->response(false, "User not found.");
-	// 		return;
-	// 	}
-
-	// 	$month = date('F Y', strtotime($date));
-
-	// 	$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
-	// 	$data['useremail'] = '';
-
-	// 	$data['message'] = '
-
-	// 	<p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
-
-	// 	<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
-	// 		<tr>
-	// 			<td><strong>Payment Type</strong></td>
-	// 			<td>' . $type . '</td>
-	// 		</tr>
-	// 		<tr>
-	// 			<td><strong>Outstanding Amount</strong></td>
-	// 			<td>£' . number_format($amount, 2) . '</td>
-	// 		</tr>
-	// 		<tr>
-	// 			<td><strong>Overdue Month</strong></td>
-	// 			<td>' . $month . '</td>
-	// 		</tr>
-	// 	</table>
-
-	// 	<p>Please make the payment at your earliest convenience to avoid any disruption to your Interfriends benefits.</p>
-
-	// 	<p>If you have already made this payment, kindly ignore this email.</p>';
-
-	// 	$subject = "Outstanding Payment Reminder";
-	// 	$messaged = $this->load->view('template/common-mail', $data, true);
-
-	// 	$mail = $this->sendMail($user['email'], $subject, $messaged);
-
-	// 	if ($mail) {
-
-	// 		$message = "Outstanding payment reminder sent.";
-
-	// 		$this->send_nofification($user_id, 1, 0, $message, 0, "16");
-
-	// 		$this->response(true, "Reminder email sent successfully.");
-	// 	} else {
-
-	// 		$this->response(false, "Unable to send reminder email.");
-	// 	}
-	// }
-
-	// API Modified by @krishn on 14/08/26
+	// API created by @krishn on 18/06/26
 	public function sendOutstandingPaymentReminder()
 	{
 		if (
@@ -13487,15 +13411,9 @@ class Admin extends Base_Controller
 		}
 
 		$user_id = $_REQUEST['user_id'];
-		$type    = ucfirst(strtolower(trim($_REQUEST['type'])));
-		$amount  = $_REQUEST['amount'];
-		$date    = $_REQUEST['date'];
-
-		/*
-		|--------------------------------------------------------------------------
-		| Get User
-		|--------------------------------------------------------------------------
-		*/
+		$type = ucfirst(strtolower(trim($_REQUEST['type'])));
+		$amount = $_REQUEST['amount'];
+		$date = $_REQUEST['date'];
 
 		$user = $this->common->getData(
 			'user',
@@ -13508,198 +13426,281 @@ class Admin extends Base_Controller
 			return;
 		}
 
-		/*
-		|--------------------------------------------------------------------------
-		| Prepare Payment Details
-		|--------------------------------------------------------------------------
-		*/
-
 		$month = date('F Y', strtotime($date));
 
-		$full_name = trim(
-			$user['first_name'] . ' ' . $user['last_name']
-		);
-
-		$formatted_amount = number_format($amount, 2);
-
-		/*
-		|--------------------------------------------------------------------------
-		| EMAIL
-		|--------------------------------------------------------------------------
-		*/
-
-		$data['sendername'] = $full_name;
-		$data['useremail']  = '';
+		$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
+		$data['useremail'] = '';
 
 		$data['message'] = '
 
-        <p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
+		<p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
 
-        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
-            <tr>
-                <td><strong>Payment Type</strong></td>
-                <td>' . $type . '</td>
-            </tr>
+		<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
+			<tr>
+				<td><strong>Payment Type</strong></td>
+				<td>' . $type . '</td>
+			</tr>
+			<tr>
+				<td><strong>Outstanding Amount</strong></td>
+				<td>£' . number_format($amount, 2) . '</td>
+			</tr>
+			<tr>
+				<td><strong>Overdue Month</strong></td>
+				<td>' . $month . '</td>
+			</tr>
+		</table>
 
-            <tr>
-                <td><strong>Outstanding Amount</strong></td>
-                <td>£' . $formatted_amount . '</td>
-            </tr>
+		<p>Please make the payment at your earliest convenience to avoid any disruption to your Interfriends benefits.</p>
 
-            <tr>
-                <td><strong>Overdue Month</strong></td>
-                <td>' . $month . '</td>
-            </tr>
-        </table>
-
-        <p>
-            Please make the payment at your earliest convenience
-            to avoid any disruption to your Interfriends benefits.
-        </p>
-
-        <p>
-            If you have already made this payment, kindly ignore this email.
-        </p>';
+		<p>If you have already made this payment, kindly ignore this email.</p>';
 
 		$subject = "Outstanding Payment Reminder";
+		$messaged = $this->load->view('template/common-mail', $data, true);
 
-		$messaged = $this->load->view(
-			'template/common-mail',
-			$data,
-			true
-		);
+		$mail = $this->sendMail($user['email'], $subject, $messaged);
 
-		$mail = false;
+		if ($mail) {
 
-		if (!empty($user['email'])) {
-			$mail = $this->sendMail(
-				$user['email'],
-				$subject,
-				$messaged
-			);
-		}
+			$message = "Outstanding payment reminder sent.";
 
-		/*
-		|--------------------------------------------------------------------------
-		| WHATSAPP
-		|--------------------------------------------------------------------------
-		*/
+			$this->send_nofification($user_id, 1, 0, $message, 0, "16");
 
-		$whatsapp = array(
-			'success' => FALSE,
-			'message' => 'WhatsApp reminder was not attempted.'
-		);
-
-		if (function_exists('send_whatsapp_to_user')) {
-			try {
-				$whatsapp = send_whatsapp_to_user(
-					!empty($user['mobile_number']) ? $user['mobile_number'] : '',
-					!empty($user['country_code']) ? $user['country_code'] : '',
-					'outstanding_payment_reminder',
-					array(
-						$full_name,
-						$type,
-						$formatted_amount,
-						$month
-					)
-				);
-
-				if (!is_array($whatsapp)) {
-					$whatsapp = array(
-						'success' => FALSE,
-						'message' => 'Invalid WhatsApp response.'
-					);
-				}
-			} catch (Exception $e) {
-				$whatsapp = array(
-					'success' => FALSE,
-					'message' => $e->getMessage()
-				);
-
-				log_message(
-					'error',
-					'Outstanding payment WhatsApp exception: ' . $e->getMessage()
-				);
-			}
+			$this->response(true, "Reminder email sent successfully.");
 		} else {
-			$whatsapp = array(
-				'success' => FALSE,
-				'message' => 'WhatsApp helper function is not loaded.'
-			);
+
+			$this->response(false, "Unable to send reminder email.");
 		}
-
-		log_message(
-			'error',
-			'Outstanding payment WhatsApp result: ' . json_encode($whatsapp)
-		);
-
-		/*
-		|--------------------------------------------------------------------------
-		| Notification
-		|--------------------------------------------------------------------------
-		*/
-
-		$message = "Outstanding payment reminder sent.";
-
-		try {
-			$this->send_nofification(
-				$user_id,
-				1,
-				0,
-				$message,
-				0,
-				"16"
-			);
-		} catch (Exception $e) {
-			log_message(
-				'error',
-				'Outstanding payment notification exception: ' . $e->getMessage()
-			);
-		}
-
-		/*
-		|--------------------------------------------------------------------------
-		| Response
-		|--------------------------------------------------------------------------
-		*/
-
-		if ($mail || !empty($whatsapp['success'])) {
-
-			$channels = array();
-
-			if ($mail) {
-				$channels[] = 'email';
-			}
-
-			if (!empty($whatsapp['success'])) {
-				$channels[] = 'WhatsApp';
-			}
-
-			$this->response(
-				true,
-				"Outstanding payment reminder sent successfully via " .
-					implode(' and ', $channels) . "."
-			);
-
-			return;
-		}
-
-		/*
-		|--------------------------------------------------------------------------
-		| Both Failed
-		|--------------------------------------------------------------------------
-		*/
-
-		$this->response(
-			false,
-			"Unable to send outstanding payment reminder.",
-			array(
-				'whatsapp_error' => !empty($whatsapp['message'])
-					? $whatsapp['message']
-					: ''
-			)
-		);
 	}
+
+	// // API Modified by @krishn on 14/08/26 (with WhatsApp integration)
+	// public function sendOutstandingPaymentReminder()
+	// {
+	// 	if (
+	// 		empty($_REQUEST['user_id']) ||
+	// 		empty($_REQUEST['type']) ||
+	// 		empty($_REQUEST['amount']) ||
+	// 		empty($_REQUEST['date'])
+	// 	) {
+
+	// 		$this->response(false, "Required fields are missing.");
+	// 		return;
+	// 	}
+
+	// 	$user_id = $_REQUEST['user_id'];
+	// 	$type    = ucfirst(strtolower(trim($_REQUEST['type'])));
+	// 	$amount  = $_REQUEST['amount'];
+	// 	$date    = $_REQUEST['date'];
+
+	// 	/*
+	// 	|--------------------------------------------------------------------------
+	// 	| Get User
+	// 	|--------------------------------------------------------------------------
+	// 	*/
+
+	// 	$user = $this->common->getData(
+	// 		'user',
+	// 		['user_id' => $user_id],
+	// 		['single']
+	// 	);
+
+	// 	if (empty($user)) {
+	// 		$this->response(false, "User not found.");
+	// 		return;
+	// 	}
+
+	// 	/*
+	// 	|--------------------------------------------------------------------------
+	// 	| Prepare Payment Details
+	// 	|--------------------------------------------------------------------------
+	// 	*/
+
+	// 	$month = date('F Y', strtotime($date));
+
+	// 	$full_name = trim(
+	// 		$user['first_name'] . ' ' . $user['last_name']
+	// 	);
+
+	// 	$formatted_amount = number_format($amount, 2);
+
+	// 	/*
+	// 	|--------------------------------------------------------------------------
+	// 	| EMAIL
+	// 	|--------------------------------------------------------------------------
+	// 	*/
+
+	// 	$data['sendername'] = $full_name;
+	// 	$data['useremail']  = '';
+
+	// 	$data['message'] = '
+
+    //     <p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
+
+    //     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
+    //         <tr>
+    //             <td><strong>Payment Type</strong></td>
+    //             <td>' . $type . '</td>
+    //         </tr>
+
+    //         <tr>
+    //             <td><strong>Outstanding Amount</strong></td>
+    //             <td>£' . $formatted_amount . '</td>
+    //         </tr>
+
+    //         <tr>
+    //             <td><strong>Overdue Month</strong></td>
+    //             <td>' . $month . '</td>
+    //         </tr>
+    //     </table>
+
+    //     <p>
+    //         Please make the payment at your earliest convenience
+    //         to avoid any disruption to your Interfriends benefits.
+    //     </p>
+
+    //     <p>
+    //         If you have already made this payment, kindly ignore this email.
+    //     </p>';
+
+	// 	$subject = "Outstanding Payment Reminder";
+
+	// 	$messaged = $this->load->view(
+	// 		'template/common-mail',
+	// 		$data,
+	// 		true
+	// 	);
+
+	// 	$mail = false;
+
+	// 	if (!empty($user['email'])) {
+	// 		$mail = $this->sendMail(
+	// 			$user['email'],
+	// 			$subject,
+	// 			$messaged
+	// 		);
+	// 	}
+
+	// 	/*
+	// 	|--------------------------------------------------------------------------
+	// 	| WHATSAPP
+	// 	|--------------------------------------------------------------------------
+	// 	*/
+
+	// 	$whatsapp = array(
+	// 		'success' => FALSE,
+	// 		'message' => 'WhatsApp reminder was not attempted.'
+	// 	);
+
+	// 	if (function_exists('send_whatsapp_to_user')) {
+	// 		try {
+	// 			$whatsapp = send_whatsapp_to_user(
+	// 				!empty($user['mobile_number']) ? $user['mobile_number'] : '',
+	// 				!empty($user['country_code']) ? $user['country_code'] : '',
+	// 				'outstanding_payment_reminder',
+	// 				array(
+	// 					$full_name,
+	// 					$type,
+	// 					$formatted_amount,
+	// 					$month
+	// 				),
+	// 				'en_GB'
+	// 			);
+
+	// 			if (!is_array($whatsapp)) {
+	// 				$whatsapp = array(
+	// 					'success' => FALSE,
+	// 					'message' => 'Invalid WhatsApp response.'
+	// 				);
+	// 			}
+	// 		} catch (Exception $e) {
+	// 			$whatsapp = array(
+	// 				'success' => FALSE,
+	// 				'message' => $e->getMessage()
+	// 			);
+
+	// 			log_message(
+	// 				'error',
+	// 				'Outstanding payment WhatsApp exception: ' . $e->getMessage()
+	// 			);
+	// 		}
+	// 	} else {
+	// 		$whatsapp = array(
+	// 			'success' => FALSE,
+	// 			'message' => 'WhatsApp helper function is not loaded.'
+	// 		);
+	// 	}
+
+	// 	log_message(
+	// 		'error',
+	// 		'Outstanding payment WhatsApp result: ' . json_encode($whatsapp)
+	// 	);
+
+	// 	/*
+	// 	|--------------------------------------------------------------------------
+	// 	| Notification
+	// 	|--------------------------------------------------------------------------
+	// 	*/
+
+	// 	$message = "Outstanding payment reminder sent.";
+
+	// 	try {
+	// 		$this->send_nofification(
+	// 			$user_id,
+	// 			1,
+	// 			0,
+	// 			$message,
+	// 			0,
+	// 			"16"
+	// 		);
+	// 	} catch (Exception $e) {
+	// 		log_message(
+	// 			'error',
+	// 			'Outstanding payment notification exception: ' . $e->getMessage()
+	// 		);
+	// 	}
+
+	// 	/*
+	// 	|--------------------------------------------------------------------------
+	// 	| Response
+	// 	|--------------------------------------------------------------------------
+	// 	*/
+
+	// 	if ($mail || !empty($whatsapp['success'])) {
+
+	// 		$channels = array();
+
+	// 		if ($mail) {
+	// 			$channels[] = 'email';
+	// 		}
+
+	// 		if (!empty($whatsapp['success'])) {
+	// 			$channels[] = 'WhatsApp';
+	// 		}
+
+	// 		$this->response(
+	// 			true,
+	// 			"Outstanding payment reminder sent successfully via " .
+	// 				implode(' and ', $channels) . "."
+	// 		);
+
+	// 		return;
+	// 	}
+
+	// 	/*
+	// 	|--------------------------------------------------------------------------
+	// 	| Both Failed
+	// 	|--------------------------------------------------------------------------
+	// 	*/
+
+	// 	$this->response(
+	// 		false,
+	// 		"Unable to send outstanding payment reminder.",
+	// 		array(
+	// 			'whatsapp_error' => !empty($whatsapp['message'])
+	// 				? $whatsapp['message']
+	// 				: ''
+	// 		)
+	// 	);
+	// }
 
 	// API created by @krishn on 13/07/26
 	public function addServiceCategory()
