@@ -2764,6 +2764,7 @@ class User_model extends CI_Model
 		);
 
 		$this->db->where('U.status !=', 2);
+		$this->db->where('ULP.amount >', 0);
 
 		// Loan
 		$this->db->join(
@@ -2851,6 +2852,7 @@ class User_model extends CI_Model
 		$this->db->join('user AS U', 'U.user_id = UEL.user_id');
 
 		$this->db->where('U.status !=', 2);
+		$this->db->where('UEL.loan_amount >', 0);
 
 		// Only consider approved/active emergency loans
 		$this->db->where('UEL.status', 4);
@@ -2939,6 +2941,7 @@ class User_model extends CI_Model
 		* Only active users
 		*/
 		$this->db->where('U.status !=', 2);
+		$this->db->where('UGL.amount >', 0);
 
 		/*
 		* Only active group lifecycle
@@ -3019,6 +3022,105 @@ class User_model extends CI_Model
 		/*
 		* Pagination
 		*/
+		if ($limit !== '' && $limit !== null) {
+			$this->db->limit(
+				(int) $limit,
+				(int) $start
+			);
+		}
+
+		$result = $this->db->get()->result_array();
+
+		return !empty($result) ? $result : array();
+	}
+
+	public function outstanding_miscellaneous_payment_detail($where = "", $limit = '', $start = '')
+	{
+		$this->db->select("
+			U.first_name,
+			U.last_name,
+			U.email,
+
+			UM.title,
+			UM.description,
+			UM.tenure,
+
+			UMP.user_id,
+			UMP.group_id,
+			UMP.id AS payment_id,
+			UMP.loan_id AS miscellaneous_id,
+			UMP.amount AS payment_amount,
+			UMP.payment_method,
+			UMP.status AS payment_status,
+			UMP.emi_date AS payment_emi_date,
+			UMP.created_at AS payment_created_at
+
+		", false);
+
+		$this->db->from('user_miscellaneous_payment AS UMP');
+
+		// User
+		$this->db->join(
+			'user AS U',
+			'U.user_id = UMP.user_id'
+		);
+
+		$this->db->where('U.status !=', 2);
+		$this->db->where('UMP.amount >', 0);
+
+		// Miscellaneous
+		$this->db->join(
+			'user_miscellaneous AS UM',
+			'UM.id = UMP.loan_id',
+			'left'
+		);
+
+		// Additional filters
+		if ($where != '') {
+			$this->db->where($where);
+		}
+
+		/*
+		* Outstanding Miscellaneous Payment Logic
+		*
+		* Status:
+		* 0 = Pending
+		* 1 = Paid On Time
+		* 2 = Paid Late
+		* 3 = Missed Payment Deadline
+		*
+		* Include:
+		* 1. Status 3 (Missed Payment Deadline)
+		* 2. Status 0 (Pending) AND EMI date has passed
+		*
+		* Exclude:
+		* 1. Status 1 (Paid On Time)
+		* 2. Status 2 (Paid Late)
+		*/
+
+		$this->db->group_start();
+
+		// Explicitly missed payment
+		$this->db->where('UMP.status', 3);
+
+		// OR pending payment whose due date has passed
+		$this->db->or_group_start();
+
+		$this->db->where('UMP.status', 0);
+		$this->db->where(
+			'UMP.emi_date <',
+			date('Y-m-d')
+		);
+
+		$this->db->group_end();
+
+		$this->db->group_end();
+
+		// Oldest outstanding payment first
+		$this->db->order_by('UMP.emi_date', 'ASC');
+		$this->db->order_by('UMP.id', 'DESC');
+
+		// Pagination
 		if ($limit !== '' && $limit !== null) {
 			$this->db->limit(
 				(int) $limit,

@@ -1879,6 +1879,11 @@ class Admin extends Base_Controller
 
 			$this->common->insertData('user_miscellaneous_status_history', array("miscellaneous_id" => $miscellaneous_id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
 
+			$getmisc = $this->common->getData('user_miscellaneous', array('id' => $miscellaneous_id), array('single'));
+			if (!empty($getmisc)) {
+				$this->addMiscellaneousEmiPayments($getmisc);
+			}
+
 			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
 			if (!empty($subadmin_id)) {
 				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
@@ -1959,11 +1964,14 @@ class Admin extends Base_Controller
 			$result = "";
 		}
 
-		$this->common->insertData('user_miscellaneous_status_history', array("miscellaneous_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
+		// $this->common->insertData('user_miscellaneous_status_history', array("miscellaneous_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
 		//new-changes 12-06-2024
 		if ($_REQUEST['status']) {
 
 			$getloan = $this->common->getData('user_miscellaneous', array('id' => $id), array('single'));
+			if (!empty($getloan)) {
+				$this->addMiscellaneousEmiPayments($getloan);
+			}
 
 			$status = $_REQUEST['status'];
 			$loan_type = '9';
@@ -3060,17 +3068,22 @@ class Admin extends Base_Controller
 
 	public function loanMiscellaneousPaymentList()
 	{
+		$where = "loan_id = '" . $this->db->escape_str($_REQUEST['loan_id']) . "'";
+		if (!empty($_REQUEST['user_id'])) {
+			$where .= " AND user_id = '" . $this->db->escape_str($_REQUEST['user_id']) . "'";
+		}
+		if (!empty($_REQUEST['group_id'])) {
+			$where .= " AND group_id = '" . $this->db->escape_str($_REQUEST['group_id']) . "'";
+		}
 
-		$where = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "' AND loan_id = '" . $_REQUEST['loan_id'] . "' ";
+		$where1 = $where . " AND (status = '1' OR status = '2')";
+
 		$PaymentList = $this->common->getData('user_miscellaneous_payment', $where);
 
+		$PaymentTotal = $this->common->getData('user_miscellaneous_payment', $where1, array("field" => 'user_id,sum(amount) as total_amount', "group_by" => 'user_id', "single"));
 
-		$where1 = "user_id = '" . $_REQUEST['user_id'] . "' AND group_id = '" . $_REQUEST['group_id'] . "' AND loan_id = '" . $_REQUEST['loan_id'] . "' GROUP BY user_id ";
-
-		$PaymentTotal = $this->common->getData('user_miscellaneous_payment', $where1, array("field" => 'user_id,sum(amount) as total_amount', "single"));
-
-		if ($PaymentTotal) {
-			$totalAmount = $PaymentTotal['total_amount'];
+		if ($PaymentTotal && isset($PaymentTotal['total_amount'])) {
+			$totalAmount = (float)$PaymentTotal['total_amount'];
 		} else {
 			$totalAmount = 0.00;
 		}
@@ -3078,19 +3091,27 @@ class Admin extends Base_Controller
 		$LoanDetail = $this->common->getData('user_miscellaneous', array("id" => $_REQUEST['loan_id']), array('single'));
 
 		if (!empty($LoanDetail)) {
-			$loanAmount_initital = $LoanDetail['amount'];
-			$loanAmount = $LoanDetail['total_payment'];
+			$loanAmount_initital = !empty($LoanDetail['amount']) ? (float)$LoanDetail['amount'] : 0.00;
+			$loanAmount = !empty($LoanDetail['total_payment']) ? (float)$LoanDetail['total_payment'] : 0.00;
+			$loan_emi = !empty($LoanDetail['loan_emi']) ? (float)$LoanDetail['loan_emi'] : 0.00;
+			$tenure = !empty($LoanDetail['tenure']) ? (int)$LoanDetail['tenure'] : 0;
 		} else {
-			$loanAmount_initital = 0;
-			$loanAmount = 0;
+			$loanAmount_initital = 0.00;
+			$loanAmount = 0.00;
+			$loan_emi = 0.00;
+			$tenure = 0;
 		}
 
+		$response = array(
+			"paymentList"         => !empty($PaymentList) ? $PaymentList : array(),
+			'totalPaidAmount'     => (float)$totalAmount,
+			'loanAmount'          => (float)$loanAmount,
+			'loanAmount_initital' => (float)$loanAmount_initital,
+			'loan_emi'            => (float)$loan_emi,
+			'tenure'              => (int)$tenure
+		);
 
-		if (!empty($PaymentList)) {
-			$this->response(true, "Payment fetch Successfully.", array("paymentList" => $PaymentList, 'totalPaidAmount' => (int)$totalAmount, 'loanAmount' => (int)$loanAmount, 'loanAmount_initital' => (int)$loanAmount_initital));
-		} else {
-			$this->response(true, "Payment fetch Successfully.", array("paymentList" => array(), 'totalPaidAmount' => (int)$totalAmount, 'loanAmount' => (int)$loanAmount, 'loanAmount_initital' => (int)$loanAmount_initital));
-		}
+		$this->response(true, "Payment fetch Successfully.", $response);
 	}
 
 
@@ -3808,6 +3829,110 @@ class Admin extends Base_Controller
 
 			$result = $this->common->insertData(
 				'user_loan_payment',
+				$post
+			);
+
+			if (!$result) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private function addMiscellaneousEmiPayments($misc)
+	{
+		if (empty($misc) || empty($misc['id'])) {
+			return false;
+		}
+
+		$tenure = !empty($misc['tenure'])
+			? (int)$misc['tenure']
+			: 0;
+
+		$emiAmount = !empty($misc['loan_emi'])
+			? $misc['loan_emi']
+			: 0;
+
+		if (empty($emiAmount) && !empty($misc['total_payment']) && $tenure > 0) {
+			$emiAmount = $misc['total_payment'] / $tenure;
+		}
+
+		if (empty($emiAmount) && !empty($misc['amount']) && $tenure > 0) {
+			$emiAmount = $misc['amount'] / $tenure;
+		}
+
+		if ($tenure <= 0 || empty($emiAmount)) {
+			return false;
+		}
+
+		$existingPayments = $this->common->getData(
+			'user_miscellaneous_payment',
+			array('loan_id' => $misc['id'])
+		);
+
+		if (!empty($existingPayments)) {
+			if (count($existingPayments) === $tenure) {
+				return true;
+			}
+
+			$hasPaid = false;
+			foreach ($existingPayments as $p) {
+				if (!empty($p['status']) && $p['status'] != 0) {
+					$hasPaid = true;
+					break;
+				}
+			}
+
+			if (!$hasPaid) {
+				$this->db->delete('user_miscellaneous_payment', array('loan_id' => $misc['id']));
+			} else {
+				return true;
+			}
+		}
+
+		$startDate = $this->normalizeValidDate(!empty($misc['start_date']) ? $misc['start_date'] : null);
+		if (!$startDate) {
+			$startDate = date('Y-m-d');
+		}
+
+		$startYear = (int)date('Y', strtotime($startDate));
+		$startMonth = (int)date('m', strtotime($startDate));
+		$originalDay = (int)date('d', strtotime($startDate));
+
+		for ($m = 0; $m < $tenure; $m++) {
+			$totalMonths = ($startMonth - 1) + $m;
+			$targetYear = $startYear + (int)floor($totalMonths / 12);
+			$targetMonth = ($totalMonths % 12) + 1;
+
+			$lastDay = cal_days_in_month(CAL_GREGORIAN, $targetMonth, $targetYear);
+			$day = min($originalDay, $lastDay);
+
+			$paymentDate = sprintf(
+				'%04d-%02d-%02d',
+				$targetYear,
+				$targetMonth,
+				$day
+			);
+
+			$payment = array(
+				'loan_id'        => $misc['id'],
+				'user_id'        => $misc['user_id'],
+				'group_id'       => !empty($misc['group_id']) ? $misc['group_id'] : 0,
+				'amount'         => $emiAmount,
+				'payment_method' => 1,
+				'status'         => 0,
+				'emi_date'       => $paymentDate,
+				'created_at'     => date('Y-m-d H:i:s')
+			);
+
+			$post = $this->common->getField(
+				'user_miscellaneous_payment',
+				$payment
+			);
+
+			$result = $this->common->insertData(
+				'user_miscellaneous_payment',
 				$post
 			);
 
@@ -4923,7 +5048,7 @@ class Admin extends Base_Controller
 	// 		$mail->SMTPAuth = true;
 	// 		$mail->Port = 465;
 	// 		$mail->Username = 'admin@interfriends.uk';
-	// 		$mail->Password = 'Mbx9jm!2';
+	// 		$mail->Password = '@Mbx9jm!2';
 	// 		$mail->SMTPSecure = "ssl";
 
 	// 		$mail->setFrom("admin@interfriends.uk", 'Interfriends');
@@ -4938,7 +5063,7 @@ class Admin extends Base_Controller
 	// 		if ($send) {
 	// 			$imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
 	// 			$imapUser = 'admin@interfriends.uk';
-	// 			$imapPass = 'Mbx9jm!2';
+	// 			$imapPass = '@Mbx9jm!2';
 
 	// 			$imapStream = imap_open($imapServer, $imapUser, $imapPass);
 	// 			if ($imapStream) {
@@ -4980,7 +5105,7 @@ class Admin extends Base_Controller
 			$mail->Host = "smtp.hostinger.com";
 			$mail->SMTPAuth = true;
 			$mail->Username = 'admin@interfriends.uk';
-			$mail->Password = 'Mbx9jm!2';
+			$mail->Password = '@Mbx9jm!2';
 			$mail->SMTPSecure = 'ssl';
 			$mail->Port = 465;
 
@@ -5005,7 +5130,7 @@ class Admin extends Base_Controller
 
 				$imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
 				$imapUser   = 'admin@interfriends.uk';
-				$imapPass   = 'Mbx9jm!2';
+				$imapPass   = '@Mbx9jm!2';
 
 				$imap = @imap_open($imapServer, $imapUser, $imapPass);
 
@@ -7287,45 +7412,206 @@ class Admin extends Base_Controller
 		}
 
 		// If admin requests, execute full payout process
+		// if ($result) {
+		// 	$this->processPayout($payout_id);
+
+		// 	$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+
+		// 	$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+		// 	if (!empty($subadmin_id)) {
+		// 		$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
+		// 		$p_amt = isset($_REQUEST['payout_amount']) ? $_REQUEST['payout_amount'] : '0';
+		// 		$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Processed payout of £" . $p_amt . " for user: " . $target_name, 'Payout', $_REQUEST['user_id'], $target_name, null, $post);
+		// 	}
+
+		// 	$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+
+		// 	$data['useremail'] = "";
+		// 	$data['message'] = '<p>This is a confirmation that your PAYOUT for this cycle has been processed and paid into your account.</p><p>If you were not expecting this payment, please do let us know.</p>';
+		// 	$messaged = $this->load->view('template/common-mail', $data, true);
+		// 	$mail = $this->sendMail($userDetailFrom['email'], 'Payout Request', $messaged);
+
+		// 	if ($mail) {
+		// 		$group_id = $_REQUEST['group_id'];
+
+		// 		$where = "FIND_IN_SET('$group_id', group_ids) > 0 OR admin_type = 2";
+		// 		$superAdmin = $this->common->getData('superAdmin', $where);
+
+		// 		foreach ($superAdmin as $adminUser) {
+		// 			$subject = "Payout Successfully Processed";
+
+		// 			$data['sendername'] = $adminUser['name'];
+		// 			$data['message'] = '<p>We’re pleased to inform you that the PAYOUT for this cycle has been successfully processed.</p>
+		// 			<p>If you did not expect this payment or believe there is an issue, please contact our support team immediately.</p>';
+
+		// 			$messaged = $this->load->view('template/common-mail', $data, true);
+		// 			$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
+		// 		}
+		// 	}
+		// 	$this->response(true, "Payout Successfully Processed");
+		// } else {
+		// 	$this->response(false, "There was a problem processing the payout.");
+		// }
+
+		// If admin requests, execute full payout process
 		if ($result) {
+
 			$this->processPayout($payout_id);
 
-			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+			//Get User Details
+			$userDetailFrom = $this->common->getData(
+				'user',
+				array('user_id' => $_REQUEST['user_id']),
+				array('single')
+			);
 
-			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
+			// Sub Admin Activity Log
+			$subadmin_id = !empty($_REQUEST['subadmin_id'])
+				? $_REQUEST['subadmin_id']
+				: (!empty($_REQUEST['admin_id'])
+					? $_REQUEST['admin_id']
+					: '');
+
 			if (!empty($subadmin_id)) {
-				$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
-				$p_amt = isset($_REQUEST['payout_amount']) ? $_REQUEST['payout_amount'] : '0';
-				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Processed payout of £" . $p_amt . " for user: " . $target_name, 'Payout', $_REQUEST['user_id'], $target_name, null, $post);
+
+				$target_name = '';
+				if (!empty($userDetailFrom)) {
+					$target_name = trim(
+						$userDetailFrom['first_name'] . ' ' .
+						$userDetailFrom['last_name']
+					);
+				}
+
+				$p_amt = isset($_REQUEST['payout_amount'])
+					? $_REQUEST['payout_amount']
+					: '0';
+
+				$this->common->logSubadminActivity(
+					$subadmin_id,
+					'CREATE',
+					"Processed payout of £" . $p_amt . " for user: " . $target_name,
+					'Payout',
+					$_REQUEST['user_id'],
+					$target_name,
+					null,
+					$post
+				);
 			}
 
-			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
+			// EMAIL TO USER
+			$userMail = false;
 
-			$data['useremail'] = "";
-			$data['message'] = '<p>This is a confirmation that your PAYOUT for this cycle has been processed and paid into your account.</p><p>If you were not expecting this payment, please do let us know.</p>';
-			$messaged = $this->load->view('template/common-mail', $data, true);
-			$mail = $this->sendMail($userDetailFrom['email'], 'Payout Request', $messaged);
+			if (!empty($userDetailFrom['email'])) {
+				$user_name = trim(
+					$userDetailFrom['first_name'] . ' ' .
+					$userDetailFrom['last_name']
+				);
 
-			if ($mail) {
-				$group_id = $_REQUEST['group_id'];
+				$data = array();
 
-				$where = "FIND_IN_SET('$group_id', group_ids) > 0 OR admin_type = 2";
-				$superAdmin = $this->common->getData('superAdmin', $where);
+				// Recipient name
+				$data['sendername'] = $user_name;
+
+				// Optional email displayed inside template
+				$data['useremail'] = '';
+
+				$data['message'] = '
+					<p>
+						This is a confirmation that your PAYOUT for this cycle
+						has been processed and paid into your account.
+					</p>
+
+					<p>
+						If you were not expecting this payment, please do let us know.
+					</p>
+				';
+
+				$messaged = $this->load->view(
+					'template/common-mail',
+					$data,
+					true
+				);
+
+				$userMail = $this->sendMail(
+					$userDetailFrom['email'],
+					'Payout Request',
+					$messaged
+				);
+			}
+
+			//EMAIL TO ADMIN / SUB ADMIN
+			$group_id = $_REQUEST['group_id'];
+
+			$where = "FIND_IN_SET('$group_id', group_ids) > 0 OR admin_type = 2";
+
+			$superAdmin = $this->common->getData(
+				'superAdmin',
+				$where
+			);
+
+			$adminMailsSent = 0;
+
+			if (!empty($superAdmin) && is_array($superAdmin)) {
 
 				foreach ($superAdmin as $adminUser) {
-					$subject = "Payout Successfully Processed";
 
-					$data['sendername'] = $adminUser['name'];
-					$data['message'] = '<p>We’re pleased to inform you that the PAYOUT for this cycle has been successfully processed.</p>
-					<p>If you did not expect this payment or believe there is an issue, please contact our support team immediately.</p>';
+					// Skip if admin/sub-admin has no email
+					if (empty($adminUser['email'])) {
+						continue;
+					}
 
-					$messaged = $this->load->view('template/common-mail', $data, true);
-					$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
+					//Recipient Name
+					$recipient_name = !empty($adminUser['name'])
+						? trim($adminUser['name'])
+						: '';
+
+					$data = array();
+
+					$data['sendername'] = $recipient_name;
+					$data['useremail'] = '';
+
+					$data['message'] = '
+						<p>
+							We’re pleased to inform you that the PAYOUT for this cycle
+							has been successfully processed.
+						</p>
+
+						<p>
+							If you did not expect this payment or believe there is an issue,
+							please contact our support team immediately.
+						</p>
+					';
+
+					$messaged = $this->load->view(
+						'template/common-mail',
+						$data,
+						true
+					);
+
+					$adminMail = $this->sendMail(
+						$adminUser['email'],
+						'Payout Successfully Processed',
+						$messaged
+					);
+
+					if ($adminMail) {
+						$adminMailsSent++;
+					}
 				}
 			}
-			$this->response(true, "Payout Successfully Processed");
+
+			//RESPONSE
+			$this->response(
+				true,
+				"Payout Successfully Processed"
+			);
+
 		} else {
-			$this->response(false, "There was a problem processing the payout.");
+
+			$this->response(
+				false,
+				"There was a problem processing the payout."
+			);
 		}
 	}
 
@@ -16011,6 +16297,102 @@ class Admin extends Base_Controller
 				'limit' => $limit,
 				'start' => $start,
 				'savingType' => (int)$savingType
+			)
+		);
+	}
+
+	// created by @krishn on 13/08/26
+	public function getOutstandingMiscellaneousPayments()
+	{
+		$limit = isset($_REQUEST['limit']) && $_REQUEST['limit'] !== ''
+			? (int) $_REQUEST['limit']
+			: '';
+
+		$start = isset($_REQUEST['start']) && $_REQUEST['start'] !== ''
+			? (int) $_REQUEST['start']
+			: 0;
+
+		if ($limit !== '' && $limit <= 0) {
+			$limit = 10;
+		}
+
+		if ($start < 0) {
+			$start = 0;
+		}
+
+		$where = "U.status != 2";
+
+		/* Group Filter */
+		if (!empty($_REQUEST['group_ids'])) {
+
+			$groupIds = array_map('intval', explode(',', $_REQUEST['group_ids']));
+			$groupIds = implode(',', $groupIds);
+
+			$where .= " AND UMP.group_id IN ($groupIds)";
+		}
+
+		/* Circle Filter */
+		if (!empty($_REQUEST['circle_ids'])) {
+
+			$circleIds = array_map('intval', explode(',', $_REQUEST['circle_ids']));
+			$circleIds = implode(',', $circleIds);
+
+			$where .= " AND EXISTS (
+				SELECT 1
+				FROM user_circle UC
+				WHERE UC.user_id = UMP.user_id
+				AND UC.circle_id IN ($circleIds)
+			)";
+		}
+
+		/* Search & Keep your existing search functionality.*/
+		if (!empty($_REQUEST['search'])) {
+
+			$search = strtolower(trim($_REQUEST['search']));
+
+			$where .= " AND (
+				LOWER(CONCAT_WS(' ', U.first_name, U.last_name)) LIKE '%" . $this->db->escape_like_str($search) . "%' OR
+				LOWER(U.email) LIKE '%" . $this->db->escape_like_str($search) . "%'
+			)";
+		}
+
+		/* Get total count WITHOUT pagination */
+		$allMiscCount = $this->user_model->outstanding_miscellaneous_payment_detail(
+			$where,
+			'',
+			0
+		);
+
+		$listCount = count($allMiscCount);
+
+		/* Get paginated records */
+		$allMiscPayments = $this->user_model->outstanding_miscellaneous_payment_detail(
+			$where,
+			$limit,
+			$start
+		);
+
+		$allMiscPayments = !empty($allMiscPayments)
+			? array_values($allMiscPayments)
+			: array();
+
+		/* Serial number */
+		$sno = $start + 1;
+
+		foreach ($allMiscPayments as &$row) {
+			$row['sno'] = $sno++;
+		}
+
+		unset($row);
+
+		$this->response(
+			true,
+			"Outstanding miscellaneous payment data fetched successfully.",
+			array(
+				'lists' => $allMiscPayments,
+				'listCount' => $listCount,
+				'limit' => $limit,
+				'start' => $start
 			)
 		);
 	}
