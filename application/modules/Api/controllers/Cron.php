@@ -39,7 +39,7 @@ class Cron extends Base_Controller
             $mail->SMTPAuth = true;
             $mail->Port = 465;
             $mail->Username = 'admin@interfriends.uk';
-            $mail->Password = 'Mbx9jm!2';
+            $mail->Password = '@Mbx9jm!2';
             $mail->SMTPSecure = "ssl";
 
             $mail->setFrom("admin@interfriends.uk", 'Interfriends');
@@ -54,7 +54,7 @@ class Cron extends Base_Controller
             if ($send) {
                 $imapServer = '{imap.hostinger.com:993/imap/ssl}INBOX.Sent';
                 $imapUser = 'admin@interfriends.uk';
-                $imapPass = 'Mbx9jm!2';
+                $imapPass = '@Mbx9jm!2';
 
                 $imapStream = imap_open($imapServer, $imapUser, $imapPass);
                 if ($imapStream) {
