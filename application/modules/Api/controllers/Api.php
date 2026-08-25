@@ -2692,6 +2692,8 @@ class Api extends Base_Controller
 		$userinfo = get_user_details($user_id);
 
 		if (!empty($userinfo)) {
+			// Add overall_balance key
+			$userinfo['overall_balance'] = 0;
 			$this->response(true, "Profile Fetch Successfully.", array("userinfo" => $userinfo));
 		} else {
 			$this->response(false, "There Is Some Problem.Please Try Again.", array("userinfo" => array()));

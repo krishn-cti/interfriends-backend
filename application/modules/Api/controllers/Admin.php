@@ -650,8 +650,72 @@ class Admin extends Base_Controller
 				$user_id = $_REQUEST['user_id'];
 				$month = $_REQUEST['month'];
 				$amount = $_REQUEST['amount'];
-				$result = $this->common->query_normal("INSERT INTO payment_notification(status,group_type_id,group_id,month,created_at,
-               groupLifecycle_id,user_id,amount) VALUES('$status','$group_type_id','$group_id','$month','$created_at','$groupLifecycle_id','$user_id','$amount')");
+				$result = $this->common->query_normal("INSERT INTO payment_notification(status,group_type_id,group_id,month,created_at,groupLifecycle_id,user_id,amount) VALUES('$status','$group_type_id','$group_id','$month','$created_at','$groupLifecycle_id','$user_id','$amount')");
+			}
+
+			// Send WhatsApp message using appropriate template
+			if (function_exists('send_whatsapp_to_user')) {
+				if (empty($userDetailFrom)) {
+					$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
+				}
+
+				if (!empty($userDetailFrom)) {
+					$full_name = trim($userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name']);
+
+					// Determine Payment Type & Template
+					$payment_type  = 'Savings';
+					$template_name = 'payment_received_for_savings';
+
+					if (!empty($group_lifecycle['group_type_id'])) {
+						if ($group_lifecycle['group_type_id'] == '1') {
+							$payment_type  = 'SAVINGS';
+							$template_name = 'payment_received_for_savings';
+						} elseif ($group_lifecycle['group_type_id'] == '2') {
+							$payment_type  = 'JNR SAVINGS';
+							$template_name = 'payment_received_for_savings';
+						} elseif ($group_lifecycle['group_type_id'] == '3') {
+							$payment_type  = 'Help to Buy';
+							$template_name = 'payment_received_for_loans';
+						} elseif ($group_lifecycle['group_type_id'] == '4') {
+							$payment_type  = 'WELFARE';
+							$template_name = 'payment_received_for_loans';
+						} elseif ($group_lifecycle['group_type_id'] == '5') {
+							$payment_type  = 'Help 2 Buy (Car)';
+							$template_name = 'payment_received_for_loans';
+						}
+					}
+
+					if ($_REQUEST['status'] == '2' || $_REQUEST['status'] == '4') {
+						// Payment Received (Paid on Time / Paid Late)
+						$payment_date     = !empty($_REQUEST['date']) ? date('d M Y', strtotime($_REQUEST['date'])) : date('d M Y');
+						$formatted_amount = !empty($_REQUEST['amount']) ? number_format($_REQUEST['amount'], 2) : '0.00';
+						$status_text = ($_REQUEST['status'] == '2') ? 'Paid on Time' : 'Paid Late';
+
+						send_whatsapp_to_user(
+							!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+							!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+							$template_name,
+							array(
+								$full_name,          // {{1}}
+								$payment_date,       // {{2}}
+								$payment_type,       // {{3}}
+								$formatted_amount,   // {{4}}
+								$status_text         // {{5}}
+							)
+						);
+					} elseif ($_REQUEST['status'] == '3') {
+						// Missed Payment Deadline
+						send_whatsapp_to_user(
+							!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+							!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+							'missed_payment_created',
+							array(
+								$full_name,          // {{1}}
+								$payment_type        // {{2}}
+							)
+						);
+					}
+				}
 			}
 
 			// changes on 10-05-2024
@@ -1419,18 +1483,9 @@ class Admin extends Base_Controller
 				$result['id_proof_image'] = base_url('assets/images/blank.webp');
 			}
 
-			$this->response(
-				true,
-				"Profile Fetch Successfully.",
-				array("userinfo" => $result)
-			);
+			$this->response(true, "Profile Fetch Successfully.", array("userinfo" => $result));
 		} else {
-
-			$this->response(
-				false,
-				"There Is Some Problem. Please Try Again.",
-				array("userinfo" => array())
-			);
+			$this->response(false, "There Is Some Problem. Please Try Again.", array("userinfo" => array()));
 		}
 	}
 
@@ -2386,6 +2441,21 @@ class Admin extends Base_Controller
 				<p><strong>Note:</strong> The full payment must be returned within 30 days.</p>';
 				$messaged = $this->load->view('template/common-mail', $data, true);
 				$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
+
+
+				// WhatsApp Notification for Emergency Loan Approved
+				if (function_exists('send_whatsapp_to_user') && !empty($userDetailFrom)) {
+					$recipientName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+					send_whatsapp_to_user(
+						!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+						!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+						'payment_approved_for_loans',
+						array(
+							!empty($recipientName) ? $recipientName : 'Member',
+							'Emergency Loan'
+						)
+					);
+				}
 			}
 		}
 
@@ -2402,10 +2472,25 @@ class Admin extends Base_Controller
 			<p>Thank you for your understanding.</p>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
+
+
+			// WhatsApp Notification for Emergency Loan Declined
+			if (function_exists('send_whatsapp_to_user') && !empty($userDetailFrom)) {
+				$recipientName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+				send_whatsapp_to_user(
+					!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+					!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+					'loan_request_declined',
+					array(
+						!empty($recipientName) ? $recipientName : 'Member',
+						'Emergency Loan'
+					)
+				);
+			}
 		}
 
 		if ($_REQUEST['status'] === '6') {
-			$message = " emergency loan declined";
+			$message = " Emergency loan declined";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "6");
 
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
@@ -2414,13 +2499,28 @@ class Admin extends Base_Controller
 			<p>Thank you for your understanding.</p>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
+
+
+			// WhatsApp Notification for Emergency Loan Declined
+			if (function_exists('send_whatsapp_to_user') && !empty($userDetailFrom)) {
+				$recipientName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+				send_whatsapp_to_user(
+					!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+					!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+					'loan_request_declined',
+					array(
+						!empty($recipientName) ? $recipientName : 'Member',
+						'Emergency Loan'
+					)
+				);
+			}
 		}
 
 		if ($_REQUEST['status'] === '5') {
-			$message = "emergency loan in process";
+			$message = "Emergency loan in process";
 			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "1", "1");
 
-			$message2 = "awaiting further approvall";
+			$message2 = "awaiting further approval";
 			$this->send_nofification($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message2, $id, "5");
 		}
 
@@ -2440,9 +2540,26 @@ class Admin extends Base_Controller
 
 			$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
 			$data['useremail'] = "";
-			$data['message'] = 'This is a confirmation that your Emergency Loan has been fully paid and marked as completed.<p>Payment due date - <b>' . date('d M Y', strtotime($_REQUEST['pay_by'])) . '</b></p>';
+			$data['message'] = 'This is a confirmation that your Emergency Loan has been fully paid and marked as completed.<p>Payment due date - <b>' . date('d M Y') . '</b></p>';
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$mail = $this->sendMail($userDetailFrom['email'], 'Emergency Loan', $messaged);
+
+			// WhatsApp Notification for Emergency Loan Fully Paid
+			if (function_exists('send_whatsapp_to_user') && !empty($userDetailFrom)) {
+				$recipientName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+				send_whatsapp_to_user(
+					!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+					!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+					'payment_received_for_emergency',
+					array(
+						!empty($recipientName) ? $recipientName : 'Member',
+						date('d M Y'),
+						'Emergency Loan',
+						!empty($userDetailFrom['emergency_loan_amount']) ? $userDetailFrom['emergency_loan_amount'] : '0',
+						'Fully Paid'
+					)
+				);
+			}
 		}
 
 
@@ -4142,6 +4259,20 @@ class Admin extends Base_Controller
 						$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
 					}
 				}
+
+				// WhatsApp Notification for Loan Approved
+				if (function_exists('send_whatsapp_to_user')) {
+					$loanTypeTitle = !empty($getloan['loan_type']) ? $this->getLoanTypeTitle($getloan['loan_type']) : 'Loan';
+					send_whatsapp_to_user(
+						!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+						!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+						'payment_approved_for_loans',
+						array(
+							$applicantName,
+							$loanTypeTitle
+						)
+					);
+				}
 			}
 		}
 
@@ -4166,6 +4297,24 @@ class Admin extends Base_Controller
 
 					$messaged = $this->load->view('template/common-mail', $data, true);
 					$this->sendMail($userDetailFrom['email'], 'Welfare Application Declined', $messaged);
+				}
+			}
+
+			// WhatsApp Notification for Loan Declined
+			if ($status === '3' && function_exists('send_whatsapp_to_user')) {
+				$userDetailFrom = $this->common->getData('user', array('user_id' => $userId), array('single'));
+				if (!empty($userDetailFrom)) {
+					$applicantName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+					$loanTypeTitle = !empty($getloan['loan_type']) ? $this->getLoanTypeTitle($getloan['loan_type']) : 'Loan';
+					send_whatsapp_to_user(
+						!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+						!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+						'loan_request_declined',
+						array(
+							!empty($applicantName) ? $applicantName : 'Member',
+							$loanTypeTitle
+						)
+					);
 				}
 			}
 		}
@@ -4300,6 +4449,26 @@ class Admin extends Base_Controller
 					$subject,
 					$messaged
 				);
+
+				// WhatsApp Notification for Loan Completed / Payment Received
+				if (function_exists('send_whatsapp_to_user')) {
+					$applicantName   = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+					$loanTypeTitle   = $this->getLoanTypeTitle($getloan['loan_type']);
+					$formattedAmount = number_format((float)$getloan['loan_amount'], 2);
+
+					send_whatsapp_to_user(
+						!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+						!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+						'payment_received_for_loans',
+						array(
+							!empty($applicantName) ? $applicantName : 'Member',
+							date('d M Y'),
+							$loanTypeTitle,
+							$formattedAmount,
+							'Completed'
+						)
+					);
+				}
 			}
 		}
 
@@ -4535,6 +4704,37 @@ class Admin extends Base_Controller
 				$loanTypeTitle . ' Payment Received',
 				$mailMessage
 			);
+
+			// WhatsApp Notification for Loan Payment Received / Missed
+			if (function_exists('send_whatsapp_to_user')) {
+				$recipientName   = trim(($userDetail['first_name'] ?? '') . ' ' . ($userDetail['last_name'] ?? ''));
+				$formattedAmount = number_format((float)$amount, 2);
+
+				if ($newStatus == 1 || $newStatus == 2) {
+					send_whatsapp_to_user(
+						!empty($userDetail['mobile_number']) ? $userDetail['mobile_number'] : '',
+						!empty($userDetail['country_code']) ? $userDetail['country_code'] : '',
+						'payment_received_for_loans',
+						array(
+							!empty($recipientName) ? $recipientName : 'Member',
+							$paymentDate,
+							$loanTypeTitle,
+							$formattedAmount,
+							$statusText
+						)
+					);
+				} elseif ($newStatus == 3) {
+					send_whatsapp_to_user(
+						!empty($userDetail['mobile_number']) ? $userDetail['mobile_number'] : '',
+						!empty($userDetail['country_code']) ? $userDetail['country_code'] : '',
+						'missed_payment_created',
+						array(
+							!empty($recipientName) ? $recipientName : 'Member',
+							$loanTypeTitle
+						)
+					);
+				}
+			}
 		}
 
 		/*
@@ -4607,6 +4807,51 @@ class Admin extends Base_Controller
 			$result = $this->common->updateData('user_miscellaneous_payment', $post, array('id' => $id));
 		} else {
 			$result = "";
+		}
+
+		// Send whatsapp message
+		if (!empty($post) && !empty($post['user_id']) && !empty($post['amount'])) {
+			// Get user details
+			$userDetail = $this->common->getData('user', array('user_id' => $post['user_id']), array('single'));
+
+			// Get payment method name
+			$paymentMethods = $this->common->getData('user_miscellaneous', array('id' => $id), array('single'));
+			$paymentMethodName = isset($paymentMethods['title']) ? $paymentMethods['title'] : 'Miscellaneous Payment';
+
+			// Prepare WhatsApp template variables
+			$recipientName = trim(($userDetail['first_name'] ?? '') . ' ' . ($userDetail['last_name'] ?? ''));
+			$paymentDate = date('d M Y', strtotime($post['payment_date']));
+			$amountReceived = '£' . number_format((float)$post['amount'], 2);
+			switch($post['status']) {
+				case 1:
+					$paymentStatus = 'Paid On Time';
+					break;
+				case 2:
+					$paymentStatus = 'Paid Late';
+					break;
+				case 3:
+					$paymentStatus = 'Missed Payment Deadline';
+					break;
+				default:
+					$paymentStatus = 'Pending';
+					break;
+			}
+
+			// Send WhatsApp notification
+			if (function_exists('send_whatsapp_to_user') && !empty($userDetail)) {
+				send_whatsapp_to_user(
+					!empty($userDetail['mobile_number']) ? $userDetail['mobile_number'] : '',
+					!empty($userDetail['country_code']) ? $userDetail['country_code'] : '',
+					'payment_received_for_miscellaneous',
+					array(
+						!empty($recipientName) ? $recipientName : 'Member',
+						!empty($paymentDate) ? $paymentDate : 'Payment Date',
+						!empty($paymentMethodName) ? $paymentMethodName : 'Payment Type',
+						!empty($amountReceived) ? $amountReceived : '£0.00',
+						!empty($paymentStatus) ? $paymentStatus : 'Pending'
+					)
+				);
+			}
 		}
 
 		if ($result) {
@@ -7478,7 +7723,7 @@ class Admin extends Base_Controller
 				if (!empty($userDetailFrom)) {
 					$target_name = trim(
 						$userDetailFrom['first_name'] . ' ' .
-						$userDetailFrom['last_name']
+							$userDetailFrom['last_name']
 					);
 				}
 
@@ -7504,7 +7749,7 @@ class Admin extends Base_Controller
 			if (!empty($userDetailFrom['email'])) {
 				$user_name = trim(
 					$userDetailFrom['first_name'] . ' ' .
-					$userDetailFrom['last_name']
+						$userDetailFrom['last_name']
 				);
 
 				$data = array();
@@ -7537,6 +7782,19 @@ class Admin extends Base_Controller
 					'Payout Request',
 					$messaged
 				);
+
+				// WhatsApp Notification for Payout Processed
+				if (function_exists('send_whatsapp_to_user')) {
+					$recipientName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+					send_whatsapp_to_user(
+						!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+						!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+						'payout_request_created',
+						array(
+							!empty($recipientName) ? $recipientName : 'Member'
+						)
+					);
+				}
 			}
 
 			//EMAIL TO ADMIN / SUB ADMIN
@@ -7605,7 +7863,6 @@ class Admin extends Base_Controller
 				true,
 				"Payout Successfully Processed"
 			);
-
 		} else {
 
 			$this->response(
@@ -7775,6 +8032,19 @@ class Admin extends Base_Controller
 			if (!empty($userDetails['email'])) {
 				$messaged = $this->load->view('template/common-mail', $data, true);
 				$this->sendMail($userDetails['email'], $subject, $messaged);
+			}
+
+			// WhatsApp Notification for Payout Request Accepted
+			if ($request_status == 1 && function_exists('send_whatsapp_to_user') && !empty($userDetails)) {
+				$recipientName = trim(($userDetails['first_name'] ?? '') . ' ' . ($userDetails['last_name'] ?? ''));
+				send_whatsapp_to_user(
+					!empty($userDetails['mobile_number']) ? $userDetails['mobile_number'] : '',
+					!empty($userDetails['country_code']) ? $userDetails['country_code'] : '',
+					'payout_request_created',
+					array(
+						!empty($recipientName) ? $recipientName : 'Member'
+					)
+				);
 			}
 
 			$this->response(true, $responseMessage);
@@ -7948,6 +8218,19 @@ class Admin extends Base_Controller
 
 		$messaged = $this->load->view('template/common-mail', $data, true);
 		$this->sendMail($userDetailFrom['email'], 'Safekeeping', $messaged);
+
+		// WhatsApp Notification for Safekeeping Created
+		if (function_exists('send_whatsapp_to_user') && !empty($userDetailFrom)) {
+			$recipientName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+			send_whatsapp_to_user(
+				!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+				!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+				'safekeeping_request_created',
+				array(
+					!empty($recipientName) ? $recipientName : 'Member'
+				)
+			);
+		}
 
 		$this->common->query_normal("UPDATE credit_score_user SET safekeeping_money = safekeeping_money + 0 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 
@@ -8226,6 +8509,19 @@ class Admin extends Base_Controller
 			'Safekeeping Accepted',
 			$message
 		);
+
+		// WhatsApp Notification for Safekeeping Request Accepted
+		if (function_exists('send_whatsapp_to_user') && !empty($userDetail)) {
+			$recipientName = trim(($userDetail['first_name'] ?? '') . ' ' . ($userDetail['last_name'] ?? ''));
+			send_whatsapp_to_user(
+				!empty($userDetail['mobile_number']) ? $userDetail['mobile_number'] : '',
+				!empty($userDetail['country_code']) ? $userDetail['country_code'] : '',
+				'safekeeping_request_created',
+				array(
+					!empty($recipientName) ? $recipientName : 'Member'
+				)
+			);
+		}
 
 		// Credit Score
 		$this->common->query_normal("
@@ -13682,311 +13978,113 @@ class Admin extends Base_Controller
 		$this->response(true, "Reminder sent successfully.");
 	}
 
-	// API created by @krishn on 18/06/26
+	// API Modified by @krishn on 14/08/26 (with WhatsApp integration)
 	public function sendOutstandingPaymentReminder()
 	{
-		if (
-			empty($_REQUEST['user_id']) ||
-			empty($_REQUEST['type']) ||
-			empty($_REQUEST['amount']) ||
-			empty($_REQUEST['date'])
-		) {
-
+		if (empty($_REQUEST['user_id']) || empty($_REQUEST['type']) || empty($_REQUEST['amount']) || empty($_REQUEST['date'])) {
 			$this->response(false, "Required fields are missing.");
 			return;
 		}
 
 		$user_id = $_REQUEST['user_id'];
-		$type = ucfirst(strtolower(trim($_REQUEST['type'])));
-		$amount = $_REQUEST['amount'];
-		$date = $_REQUEST['date'];
+		$type    = ucfirst(strtolower(trim($_REQUEST['type'])));
+		$amount  = $_REQUEST['amount'];
+		$date    = $_REQUEST['date'];
 
-		$user = $this->common->getData(
-			'user',
-			['user_id' => $user_id],
-			['single']
-		);
+		// Get User
+		$user = $this->common->getData('user', ['user_id' => $user_id], ['single']);
 
 		if (empty($user)) {
 			$this->response(false, "User not found.");
 			return;
 		}
 
-		$month = date('F Y', strtotime($date));
+		// Prepare Payment Details
+		$month            = date('F Y', strtotime($date));
+		$full_name        = trim($user['first_name'] . ' ' . $user['last_name']);
+		$formatted_amount = number_format($amount, 2);
 
-		$data['sendername'] = $user['first_name'] . ' ' . $user['last_name'];
-		$data['useremail'] = '';
+		// EMAIL
+		$data['sendername'] = $full_name;
+		$data['useremail']  = '';
+		$data['message']    = '
 
-		$data['message'] = '
+        <p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
 
-		<p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
+            <tr>
+                <td><strong>Payment Type</strong></td>
+                <td>' . $type . '</td>
+            </tr>
 
-		<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
-			<tr>
-				<td><strong>Payment Type</strong></td>
-				<td>' . $type . '</td>
-			</tr>
-			<tr>
-				<td><strong>Outstanding Amount</strong></td>
-				<td>£' . number_format($amount, 2) . '</td>
-			</tr>
-			<tr>
-				<td><strong>Overdue Month</strong></td>
-				<td>' . $month . '</td>
-			</tr>
-		</table>
+            <tr>
+                <td><strong>Outstanding Amount</strong></td>
+                <td>£' . $formatted_amount . '</td>
+            </tr>
 
-		<p>Please make the payment at your earliest convenience to avoid any disruption to your Interfriends benefits.</p>
+            <tr>
+                <td><strong>Overdue Month</strong></td>
+                <td>' . $month . '</td>
+            </tr>
+        </table>
 
-		<p>If you have already made this payment, kindly ignore this email.</p>';
+        <p>
+            Please make the payment at your earliest convenience
+            to avoid any disruption to your Interfriends benefits.
+        </p>
 
-		$subject = "Outstanding Payment Reminder";
+        <p>
+            If you have already made this payment, kindly ignore this email.
+        </p>';
+
+		$subject  = "Outstanding Payment Reminder";
 		$messaged = $this->load->view('template/common-mail', $data, true);
 
-		$mail = $this->sendMail($user['email'], $subject, $messaged);
-
-		if ($mail) {
-
-			$message = "Outstanding payment reminder sent.";
-
-			$this->send_nofification($user_id, 1, 0, $message, 0, "16");
-
-			$this->response(true, "Reminder email sent successfully.");
-		} else {
-
-			$this->response(false, "Unable to send reminder email.");
+		$mail = false;
+		if (!empty($user['email'])) {
+			$mail = $this->sendMail($user['email'], $subject, $messaged);
 		}
+
+		// WHATSAPP
+		$whatsapp = array('success' => FALSE, 'message' => 'WhatsApp reminder was not attempted.');
+		if (function_exists('send_whatsapp_to_user')) {
+			$whatsapp = send_whatsapp_to_user(
+				!empty($user['mobile_number']) ? $user['mobile_number'] : '',
+				!empty($user['country_code']) ? $user['country_code'] : '',
+				'outstanding_payment_reminder',
+				array($full_name, $type, $formatted_amount, $month)
+			);
+		}
+
+		// Notification
+		$this->send_nofification($user_id, 1, 0, "Outstanding payment reminder sent.", 0, "16");
+
+		// Response
+		if ($mail || !empty($whatsapp['success'])) {
+			$channels = array();
+			if ($mail) {
+				$channels[] = 'email';
+			}
+			if (!empty($whatsapp['success'])) {
+				$channels[] = 'WhatsApp';
+			}
+
+			$this->response(
+				true,
+				"Outstanding payment reminder sent successfully via " . implode(' and ', $channels) . "."
+			);
+			return;
+		}
+
+		// Both Failed
+		$this->response(
+			false,
+			"Unable to send outstanding payment reminder.",
+			array(
+				'whatsapp_error' => !empty($whatsapp['message']) ? $whatsapp['message'] : ''
+			)
+		);
 	}
-
-	// // API Modified by @krishn on 14/08/26 (with WhatsApp integration)
-	// public function sendOutstandingPaymentReminder()
-	// {
-	// 	if (
-	// 		empty($_REQUEST['user_id']) ||
-	// 		empty($_REQUEST['type']) ||
-	// 		empty($_REQUEST['amount']) ||
-	// 		empty($_REQUEST['date'])
-	// 	) {
-
-	// 		$this->response(false, "Required fields are missing.");
-	// 		return;
-	// 	}
-
-	// 	$user_id = $_REQUEST['user_id'];
-	// 	$type    = ucfirst(strtolower(trim($_REQUEST['type'])));
-	// 	$amount  = $_REQUEST['amount'];
-	// 	$date    = $_REQUEST['date'];
-
-	// 	/*
-	// 	|--------------------------------------------------------------------------
-	// 	| Get User
-	// 	|--------------------------------------------------------------------------
-	// 	*/
-
-	// 	$user = $this->common->getData(
-	// 		'user',
-	// 		['user_id' => $user_id],
-	// 		['single']
-	// 	);
-
-	// 	if (empty($user)) {
-	// 		$this->response(false, "User not found.");
-	// 		return;
-	// 	}
-
-	// 	/*
-	// 	|--------------------------------------------------------------------------
-	// 	| Prepare Payment Details
-	// 	|--------------------------------------------------------------------------
-	// 	*/
-
-	// 	$month = date('F Y', strtotime($date));
-
-	// 	$full_name = trim(
-	// 		$user['first_name'] . ' ' . $user['last_name']
-	// 	);
-
-	// 	$formatted_amount = number_format($amount, 2);
-
-	// 	/*
-	// 	|--------------------------------------------------------------------------
-	// 	| EMAIL
-	// 	|--------------------------------------------------------------------------
-	// 	*/
-
-	// 	$data['sendername'] = $full_name;
-	// 	$data['useremail']  = '';
-
-	// 	$data['message'] = '
-
-    //     <p>This is a reminder that you have an outstanding <strong>' . $type . '</strong> payment.</p>
-
-    //     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;margin-top:10px;">
-    //         <tr>
-    //             <td><strong>Payment Type</strong></td>
-    //             <td>' . $type . '</td>
-    //         </tr>
-
-    //         <tr>
-    //             <td><strong>Outstanding Amount</strong></td>
-    //             <td>£' . $formatted_amount . '</td>
-    //         </tr>
-
-    //         <tr>
-    //             <td><strong>Overdue Month</strong></td>
-    //             <td>' . $month . '</td>
-    //         </tr>
-    //     </table>
-
-    //     <p>
-    //         Please make the payment at your earliest convenience
-    //         to avoid any disruption to your Interfriends benefits.
-    //     </p>
-
-    //     <p>
-    //         If you have already made this payment, kindly ignore this email.
-    //     </p>';
-
-	// 	$subject = "Outstanding Payment Reminder";
-
-	// 	$messaged = $this->load->view(
-	// 		'template/common-mail',
-	// 		$data,
-	// 		true
-	// 	);
-
-	// 	$mail = false;
-
-	// 	if (!empty($user['email'])) {
-	// 		$mail = $this->sendMail(
-	// 			$user['email'],
-	// 			$subject,
-	// 			$messaged
-	// 		);
-	// 	}
-
-	// 	/*
-	// 	|--------------------------------------------------------------------------
-	// 	| WHATSAPP
-	// 	|--------------------------------------------------------------------------
-	// 	*/
-
-	// 	$whatsapp = array(
-	// 		'success' => FALSE,
-	// 		'message' => 'WhatsApp reminder was not attempted.'
-	// 	);
-
-	// 	if (function_exists('send_whatsapp_to_user')) {
-	// 		try {
-	// 			$whatsapp = send_whatsapp_to_user(
-	// 				!empty($user['mobile_number']) ? $user['mobile_number'] : '',
-	// 				!empty($user['country_code']) ? $user['country_code'] : '',
-	// 				'outstanding_payment_reminder',
-	// 				array(
-	// 					$full_name,
-	// 					$type,
-	// 					$formatted_amount,
-	// 					$month
-	// 				),
-	// 				'en_GB'
-	// 			);
-
-	// 			if (!is_array($whatsapp)) {
-	// 				$whatsapp = array(
-	// 					'success' => FALSE,
-	// 					'message' => 'Invalid WhatsApp response.'
-	// 				);
-	// 			}
-	// 		} catch (Exception $e) {
-	// 			$whatsapp = array(
-	// 				'success' => FALSE,
-	// 				'message' => $e->getMessage()
-	// 			);
-
-	// 			log_message(
-	// 				'error',
-	// 				'Outstanding payment WhatsApp exception: ' . $e->getMessage()
-	// 			);
-	// 		}
-	// 	} else {
-	// 		$whatsapp = array(
-	// 			'success' => FALSE,
-	// 			'message' => 'WhatsApp helper function is not loaded.'
-	// 		);
-	// 	}
-
-	// 	log_message(
-	// 		'error',
-	// 		'Outstanding payment WhatsApp result: ' . json_encode($whatsapp)
-	// 	);
-
-	// 	/*
-	// 	|--------------------------------------------------------------------------
-	// 	| Notification
-	// 	|--------------------------------------------------------------------------
-	// 	*/
-
-	// 	$message = "Outstanding payment reminder sent.";
-
-	// 	try {
-	// 		$this->send_nofification(
-	// 			$user_id,
-	// 			1,
-	// 			0,
-	// 			$message,
-	// 			0,
-	// 			"16"
-	// 		);
-	// 	} catch (Exception $e) {
-	// 		log_message(
-	// 			'error',
-	// 			'Outstanding payment notification exception: ' . $e->getMessage()
-	// 		);
-	// 	}
-
-	// 	/*
-	// 	|--------------------------------------------------------------------------
-	// 	| Response
-	// 	|--------------------------------------------------------------------------
-	// 	*/
-
-	// 	if ($mail || !empty($whatsapp['success'])) {
-
-	// 		$channels = array();
-
-	// 		if ($mail) {
-	// 			$channels[] = 'email';
-	// 		}
-
-	// 		if (!empty($whatsapp['success'])) {
-	// 			$channels[] = 'WhatsApp';
-	// 		}
-
-	// 		$this->response(
-	// 			true,
-	// 			"Outstanding payment reminder sent successfully via " .
-	// 				implode(' and ', $channels) . "."
-	// 		);
-
-	// 		return;
-	// 	}
-
-	// 	/*
-	// 	|--------------------------------------------------------------------------
-	// 	| Both Failed
-	// 	|--------------------------------------------------------------------------
-	// 	*/
-
-	// 	$this->response(
-	// 		false,
-	// 		"Unable to send outstanding payment reminder.",
-	// 		array(
-	// 			'whatsapp_error' => !empty($whatsapp['message'])
-	// 				? $whatsapp['message']
-	// 				: ''
-	// 		)
-	// 	);
-	// }
 
 	// API created by @krishn on 13/07/26
 	public function addServiceCategory()
