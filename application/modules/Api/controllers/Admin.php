@@ -476,34 +476,68 @@ class Admin extends Base_Controller
 				$typename = '2';
 			}
 
-			if ($_REQUEST['status'] === '3' &&  $typename != '2') {
+			// ------------------------------------------------------------------
+			// Trust Score update — updated by @krishn on 25/08/26
+			// Savings (group_type_id=1): Paid on Time +20 | Paid Late -10 (-40 two in a row) | Missed -30 (-50 two in a row)
+			// JNR Savings (group_type_id=2): Paid on Time +2 | Paid Late -2 | Missed -5
+			// ------------------------------------------------------------------
+			$currentStatus   = $_REQUEST['status'];  // '2'=Paid on Time, '3'=Missed, '4'=Paid Late
+			$currentUserId   = $_REQUEST['user_id'];
+			$groupTypeId     = isset($group_lifecycle['group_type_id']) ? $group_lifecycle['group_type_id'] : '0';
 
-				$this->common->query_normal("UPDATE credit_score_user SET three_or_more_missed_savings_deadline = three_or_more_missed_savings_deadline+1 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			if ($groupTypeId === '1' || $groupTypeId === '2') {
 
-				$creditScoreInfo = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
+				// Fetch the previous status for this user (before the current insert which already happened above)
+				$prevHistory = $this->db
+					->select('status')
+					->from('user_cycle_status_history')
+					->where('user_id', $currentUserId)
+					->order_by('id', 'DESC')
+					->limit(1, 1)   // skip the just-inserted row (offset 1)
+					->get()
+					->row_array();
 
-				if (!empty($creditScoreInfo)) {
+				$prevStatus = !empty($prevHistory) ? $prevHistory['status'] : null;
 
-					if ($creditScoreInfo['three_or_more_missed_savings_deadline'] > 2) {
-						$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-						$this->updateCreditScore(300, 'minus');
-					} else {
-						$this->common->query_normal("UPDATE credit_score_user SET missed_savings_deadline = missed_savings_deadline-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-						$this->updateCreditScore(100, 'minus');
+				if ($groupTypeId === '1') {
+					// === Savings ===
+					if ($currentStatus === '2') {
+						// Paid on Time: +20
+						$this->updateCreditScore(20, 'plus');
+					} elseif ($currentStatus === '4') {
+						// Paid Late: two in a row = -40, otherwise -10
+						if ($prevStatus === '4') {
+							$this->updateCreditScore(40, 'minus');
+						} else {
+							$this->updateCreditScore(10, 'minus');
+						}
+					} elseif ($currentStatus === '3') {
+						// Missed: two in a row = -50, otherwise -30
+						if ($prevStatus === '3') {
+							$this->updateCreditScore(50, 'minus');
+						} else {
+							$this->updateCreditScore(30, 'minus');
+						}
+					}
+				} else {
+					// === JNR Savings ===
+					if ($currentStatus === '2') {
+						// Paid on Time: +2
+						$this->updateCreditScore(2, 'plus');
+					} elseif ($currentStatus === '4') {
+						// Paid Late: -2
+						$this->updateCreditScore(2, 'minus');
+					} elseif ($currentStatus === '3') {
+						// Missed: -5
+						$this->updateCreditScore(5, 'minus');
 					}
 				}
 			}
+			// ------------------------------------------------------------------
 
 
 
 			if ($_REQUEST['status'] == '2') {
-
-				if ($typename != '2') {
-
-					$this->common->query_normal("UPDATE credit_score_user SET saving_paid_on_time = saving_paid_on_time+20 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-					$this->updateCreditScore(20, 'plus');
-				}
 
 				$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
@@ -636,10 +670,7 @@ class Admin extends Base_Controller
 			}
 
 
-			if ($_REQUEST['status'] === '4' &&  $typename != '2') {
-				$this->common->query_normal("UPDATE credit_score_user SET late_savings_payment = late_savings_payment-30 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-				$this->updateCreditScore(30, 'minus');
-			}
+			// (Trust score for status=4 is now handled in the unified block above)
 			//new-changes 12-06-2024
 			if ($_REQUEST['status']) {
 				$status = $_REQUEST['status'];
@@ -1939,6 +1970,9 @@ class Admin extends Base_Controller
 				$this->addMiscellaneousEmiPayments($getmisc);
 			}
 
+			// Trust Score: New Misc account created — updated by @krishn on 25/08/26
+			$this->updateCreditScore(85, 'minus');
+
 			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
 			if (!empty($subadmin_id)) {
 				$uId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : '';
@@ -1974,41 +2008,11 @@ class Admin extends Base_Controller
 		}
 
 
-		if ($_REQUEST['paid_status'] === '2') {
-			$this->common->query_normal("UPDATE credit_score_user SET late_misc_payment = late_misc_payment-60 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(60, 'minus');
-			$_REQUEST['active_date'] = date('Y-m-d H:i:s');
-		}
-
-		if ($_REQUEST['paid_status'] === '3') {
-
-			$this->common->query_normal("UPDATE credit_score_user SET three_or_more_missed_misc_deadline = three_or_more_missed_misc_deadline+1 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-			$creditScoreInfo = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-			if (!empty($creditScoreInfo)) {
-
-				if ($creditScoreInfo['three_or_more_missed_savings_deadline'] > 2) {
-					$this->common->query_normal("UPDATE credit_score_user SET missed_misc_deadline = missed_misc_deadline-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-
-					$this->updateCreditScore(300, 'minus');
-				} else {
-					$this->common->query_normal("UPDATE credit_score_user SET missed_misc_deadline = missed_misc_deadline-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-					$this->updateCreditScore(100, 'minus');
-				}
-			}
-		}
-
-
-		if ($_REQUEST['paid_status'] === '1') {
-
-			$this->common->query_normal("UPDATE credit_score_user SET misc_paid_on_time = misc_paid_on_time+20 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(20, 'plus');
-		}
-
-
 		if ($_REQUEST['status'] === '2') {
 			$_REQUEST['complete_date'] = date('Y-m-d H:i:s');
+
+			// Trust Score: Misc marked as complete +85 — updated by @krishn on 25/08/26
+			$this->updateCreditScore(85, 'plus');
 		}
 
 		$post = $this->common->getField('user_miscellaneous', $_REQUEST);
@@ -2139,9 +2143,9 @@ class Admin extends Base_Controller
 
 		$loan_id = $this->db->insert_id();
 		if ($result) {
-			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-85 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
 
-			$this->updateCreditScoreUser(200, 'minus', $_REQUEST['user_id']);
+			$this->updateCreditScoreUser(85, 'minus', $_REQUEST['user_id']);
 
 			if (!empty($_REQUEST['gurarantor'])) {
 				$this->common->query_normal("UPDATE credit_score_user SET guarantee_a_loan_application = guarantee_a_loan_application+0 WHERE `user_id` = '" . $_REQUEST['gurarantor'] . "'");
@@ -2371,7 +2375,7 @@ class Admin extends Base_Controller
 
 		if ($result) {
 			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_request = emergency_loan_request-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScoreUser(100, 'minus', $_REQUEST['user_id']);
+			$this->updateCreditScoreUser(85, 'minus', $_REQUEST['user_id']);
 
 
 			$this->common->insertData('user_emergency_loan_status_history', array("loan_id" => $loan_id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
@@ -2427,6 +2431,9 @@ class Admin extends Base_Controller
 		$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
 		if ($_REQUEST['status'] === '4') {
+			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_request = emergency_loan_request-85 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(85, 'minus');
+
 			$message = "emergency loan approved";
 			$this->send_nofification_admin($_REQUEST['user_id'], $_REQUEST['admin_id'], $_REQUEST['group_id'], $message, $id, "2", "2");
 
@@ -2533,8 +2540,8 @@ class Admin extends Base_Controller
 
 		if ($_REQUEST['status'] === '2') {
 
-			$this->common->query_normal("UPDATE credit_score_user SET loan_emergency_payment_fully_paid = loan_emergency_payment_fully_paid+0 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(0, 'plus');
+			$this->common->query_normal("UPDATE credit_score_user SET loan_emergency_payment_fully_paid = loan_emergency_payment_fully_paid+85 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(85, 'plus');
 
 			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
@@ -2564,26 +2571,18 @@ class Admin extends Base_Controller
 
 
 		if ($_REQUEST['paid_status'] === '1') {
-			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_on_time = emergency_loan_paid_on_time+150 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-			$this->updateCreditScore(150, 'plus');
+			$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_on_time = emergency_loan_paid_on_time+5 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(5, 'plus');
 		}
 
 
 		if ($_REQUEST['paid_status'] === '2') {
-			$this->common->query_normal("UPDATE credit_score_user SET three_late_emergency_payments = three_late_emergency_payments+1 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->common->query_normal("UPDATE credit_score_user SET three_late_emergency_payments = three_late_emergency_payments+1, emergency_loan_paid_late = emergency_loan_paid_late-10 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
+			$this->updateCreditScore(10, 'minus');
+		}
 
-			$creditScoreInfo = $this->common->getData('credit_score_user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-			if (!empty($creditScoreInfo)) {
-
-				if ($creditScoreInfo['three_late_emergency_payments'] > 3) {
-					$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_late = emergency_loan_paid_late-300 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-					$this->updateCreditScore(300, 'minus');
-				} else {
-					$this->common->query_normal("UPDATE credit_score_user SET emergency_loan_paid_late = emergency_loan_paid_late-100 WHERE `user_id` = '" . $_REQUEST['user_id'] . "'");
-					$this->updateCreditScore(100, 'minus');
-				}
-			}
+		if ($_REQUEST['paid_status'] === '3') {
+			$this->updateCreditScore(0, 'plus');
 		}
 
 		$this->common->insertData('user_emergency_loan_status_history', array("loan_id" => $id, "user_id" => $_REQUEST['user_id'], "note_title" => $_REQUEST['note_title'], "note_description" => $_REQUEST['note_description'], "status" => $_REQUEST['status'], "created_at" => date('Y-m-d H:i:s')));
@@ -4175,8 +4174,8 @@ class Admin extends Base_Controller
 			$message = "loan approved";
 			$this->send_nofification_admin($userId, $adminId, $groupId, $message, $id, "5", "2");
 
-			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-200 WHERE `user_id` = '" . $userId . "'");
-			$this->updateCreditScore(200, 'minus');
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-85 WHERE `user_id` = '" . $userId . "'");
+			$this->updateCreditScore(85, 'minus');
 
 
 			$message2 = "loan accepted by super admin";
@@ -4396,8 +4395,8 @@ class Admin extends Base_Controller
 			$message2 = "loan completed";
 			$this->send_nofification($userId, $adminId, $groupId, $message2, $id, "15");
 
-			$this->common->query_normal("UPDATE credit_score_user SET loan_payment_fully_paid = loan_payment_fully_paid+80 WHERE `user_id` = '" . $userId . "'");
-			$this->updateCreditScore(80, 'plus');
+			$this->common->query_normal("UPDATE credit_score_user SET loan_payment_fully_paid = loan_payment_fully_paid+85 WHERE `user_id` = '" . $userId . "'");
+			$this->updateCreditScore(85, 'plus');
 
 			// Send Loan Completed Email
 			$userDetailFrom = $this->common->getData(
@@ -4631,7 +4630,7 @@ class Admin extends Base_Controller
 			$data['sendername'] = trim(($userDetail['first_name'] ?? '') . ' ' . ($userDetail['last_name'] ?? ''));
 			$data['useremail'] = $userDetail['email'] ?? '';
 
-			$paymentDate = !empty($oldPayment['created_at']) ? date('d M Y', strtotime($oldPayment['created_at'])) : date('d M Y');
+			$paymentDate = !empty($_REQUEST['created_at']) ? date('d M Y', strtotime($_REQUEST['created_at'])) : date('d M Y');
 
 			$dueDate = !empty($oldPayment['emi_date']) ? date('d M Y', strtotime($oldPayment['emi_date'])) : 'N/A';
 
@@ -4742,23 +4741,22 @@ class Admin extends Base_Controller
 		* TRUST SCORE
 		* ---------------------------------------------------------
 		*
-		* CURRENT REQUIREMENT:
-		*
-		* Only Welfare (loan_type = 7)
-		* AND
-		* Paid On Time (status = 1)
-		*
-		* gets +15 trust score.
-		*
-		* We also check oldStatus != 1 so that the same payment
-		* cannot receive +15 multiple times.
+		* Paid On Time (status = 1): +5
+		* Paid Late (status = 2): -10
+		* Missed Payment (status = 3): -20
 		*/
-		if ($loanType == 7 && $newStatus == 1 && $oldStatus != 1) {
-
-			//Update user's Welfare payment trust-score field
-			$this->common->query_normal("UPDATE credit_score_user SET loan_paid_on_time = loan_paid_on_time + 15 WHERE user_id = '" . $userId . "'");
-
-			$this->updateCreditScore(15, 'plus');
+		if ($newStatus != $oldStatus) {
+			$_REQUEST['user_id'] = $userId;
+			if ($newStatus == 1) {
+				$this->common->query_normal("UPDATE credit_score_user SET loan_paid_on_time = loan_paid_on_time + 5 WHERE user_id = '" . $userId . "'");
+				$this->updateCreditScore(5, 'plus');
+			} elseif ($newStatus == 2) {
+				$this->common->query_normal("UPDATE credit_score_user SET late_loan_payment = late_loan_payment - 10 WHERE user_id = '" . $userId . "'");
+				$this->updateCreditScore(10, 'minus');
+			} elseif ($newStatus == 3) {
+				$this->common->query_normal("UPDATE credit_score_user SET missed_loan_deadline = missed_loan_deadline - 20 WHERE user_id = '" . $userId . "'");
+				$this->updateCreditScore(20, 'minus');
+			}
 		}
 
 		//SUB ADMIN ACTIVITY LOG
@@ -4800,6 +4798,9 @@ class Admin extends Base_Controller
 			$this->paymentByPF($id, $_REQUEST['amount'], '3');
 		}
 
+		$oldPayment = $this->common->getData('user_miscellaneous_payment', array('id' => $id), array('single'));
+		$oldStatus = !empty($oldPayment) ? $oldPayment['status'] : null;
+		$userId = !empty($_REQUEST['user_id']) ? $_REQUEST['user_id'] : (!empty($oldPayment['user_id']) ? $oldPayment['user_id'] : '');
 
 		$post = $this->common->getField('user_miscellaneous_payment', $_REQUEST);
 
@@ -4807,6 +4808,22 @@ class Admin extends Base_Controller
 			$result = $this->common->updateData('user_miscellaneous_payment', $post, array('id' => $id));
 		} else {
 			$result = "";
+		}
+
+		// Update Credit Score
+		$newStatus = isset($post['status']) ? $post['status'] : null;
+		if ($result && !empty($userId) && $newStatus !== null && $newStatus != $oldStatus) {
+			$_REQUEST['user_id'] = $userId;
+			if ($newStatus == 1) {
+				// Paid on Time: +5
+				$this->updateCreditScore(5, 'plus');
+			} elseif ($newStatus == 2) {
+				// Paid Late: -15
+				$this->updateCreditScore(15, 'minus');
+			} elseif ($newStatus == 3) {
+				// Missed Payment: -30
+				$this->updateCreditScore(30, 'minus');
+			}
 		}
 
 		// Send whatsapp message
@@ -10988,8 +11005,8 @@ class Admin extends Base_Controller
 			$this->send_nofification($claim['user_id'], $adminId, $claim['group_id'], $message, $claimId, "11");
 
 			// update trust score
-			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-100 WHERE `user_id` = '" . $claim['user_id'] . "'");
-			$this->updateCreditScoreUser(100, 'minus', $claim['user_id']);
+			$this->common->query_normal("UPDATE credit_score_user SET each_loan_application = each_loan_application-50 WHERE `user_id` = '" . $claim['user_id'] . "'");
+			$this->updateCreditScoreUser(50, 'minus', $claim['user_id']);
 
 			// Mail Notification
 			$user = $this->common->getData('user', array('user_id' => $claim['user_id']), array('single'));
@@ -14728,6 +14745,24 @@ class Admin extends Base_Controller
 			return;
 		}
 
+		if (empty($_REQUEST['service_start_date'])) {
+			$this->response(false, "Service start date is required.");
+			return;
+		}
+
+		if (empty($_REQUEST['service_end_date'])) {
+			$this->response(false, "Service end date is required.");
+			return;
+		}
+
+		if (
+			strtotime($_REQUEST['service_end_date']) <
+			strtotime($_REQUEST['service_start_date'])
+		) {
+			$this->response(false, "Service end date cannot be before the start date.");
+			return;
+		}
+
 		// Check service
 		$service = $this->common->getData(
 			'services',
@@ -14793,6 +14828,8 @@ class Admin extends Base_Controller
 			$assignmentData = array(
 				'user_id'           => $value['user_id'],
 				'service_id'        => $_REQUEST['service_id'],
+				'service_start_date'=> $_REQUEST['service_start_date'],
+				'service_end_date'  => $_REQUEST['service_end_date'],
 				'description'       => $providerDescription,
 				'country_code'      => !empty($value['country_code']) ? $value['country_code'] : '',
 				'mobile'            => !empty($value['mobile']) ? $value['mobile'] : '',
@@ -15158,6 +15195,237 @@ class Admin extends Base_Controller
 		));
 	}
 
+	// created by @krishn on 25/08/26
+	public function getAllExpiredUserServices()
+	{
+		$limit = '';
+		$start = '';
+		$where = array();
+
+		/*
+		|--------------------------------------------------------------------------
+		| Only for Sub Admin
+		|--------------------------------------------------------------------------
+		*/
+
+		if (
+			!empty($_REQUEST['created_by_type']) &&
+			$_REQUEST['created_by_type'] == "subadmin"
+		) {
+
+			if (!empty($_REQUEST['group_ids'])) {
+
+				$group_ids = explode(',', $_REQUEST['group_ids']);
+				$group_ids = array_map('trim', $group_ids);
+				$group_ids = array_map('intval', $group_ids);
+
+				$where['group_ids'] = $group_ids;
+			}
+
+			if (!empty($_REQUEST['circle_ids'])) {
+
+				$circle_ids = explode(',', $_REQUEST['circle_ids']);
+				$circle_ids = array_map('trim', $circle_ids);
+				$circle_ids = array_map('intval', $circle_ids);
+
+				$where['circle_ids'] = $circle_ids;
+			}
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Pagination
+		|--------------------------------------------------------------------------
+		*/
+
+		if (isset($_REQUEST['start']) && $_REQUEST['start'] !== '') {
+
+			$limit = 10;
+			$start = (int)$_REQUEST['start'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| User Service ID
+		|--------------------------------------------------------------------------
+		*/
+
+		if (!empty($_REQUEST['user_service_id'])) {
+			$where['US.id'] = $_REQUEST['user_service_id'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| User ID
+		|--------------------------------------------------------------------------
+		*/
+
+		if (!empty($_REQUEST['user_id'])) {
+			$where['US.user_id'] = $_REQUEST['user_id'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Category
+		|--------------------------------------------------------------------------
+		*/
+
+		if (!empty($_REQUEST['category_id'])) {
+			$where['S.category_id'] = $_REQUEST['category_id'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Sub Category
+		|--------------------------------------------------------------------------
+		*/
+
+		if (!empty($_REQUEST['subcategory_id'])) {
+			$where['S.subcategory_id'] = $_REQUEST['subcategory_id'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| User Service Status
+		|--------------------------------------------------------------------------
+		*/
+
+		if (isset($_REQUEST['status']) && $_REQUEST['status'] !== '') {
+			$where['US.status'] = $_REQUEST['status'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Approval Status
+		|--------------------------------------------------------------------------
+		*/
+
+		if (
+			isset($_REQUEST['approval_status']) &&
+			$_REQUEST['approval_status'] !== ''
+		) {
+			$where['US.approval_status'] = $_REQUEST['approval_status'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Service Status
+		|--------------------------------------------------------------------------
+		*/
+
+		if (
+			isset($_REQUEST['service_status']) &&
+			$_REQUEST['service_status'] !== ''
+		) {
+			$where['S.status'] = $_REQUEST['service_status'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Service ID
+		|--------------------------------------------------------------------------
+		*/
+
+		if (!empty($_REQUEST['service_id'])) {
+			$where['US.service_id'] = $_REQUEST['service_id'];
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Search
+		|--------------------------------------------------------------------------
+		*/
+
+		if (
+			!empty($_REQUEST['search']) ||
+			!empty($_REQUEST['search_keyword'])
+		) {
+
+			$where['search'] = !empty($_REQUEST['search'])
+				? trim($_REQUEST['search'])
+				: trim($_REQUEST['search_keyword']);
+		}
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| EXPIRED SERVICES ONLY
+		|--------------------------------------------------------------------------
+		|
+		| Service is expired when service_end_date is before today.
+		|
+		| Example:
+		| service_end_date = 2026-08-24
+		| today             = 2026-08-25
+		| => Expired
+		|
+		| Today's date is NOT expired.
+		|
+		*/
+
+		$where['expired_services'] = true;
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Get Services
+		|--------------------------------------------------------------------------
+		*/
+
+		$services = $this->user_model->user_assigned_services(
+			$where,
+			array('order_by_pending'),
+			$limit,
+			$start
+		);
+
+		/*
+		|--------------------------------------------------------------------------
+		| Attach Images
+		|--------------------------------------------------------------------------
+		*/
+
+		$services = $this->user_model->attachServiceImages($services);
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Total Count
+		|--------------------------------------------------------------------------
+		*/
+
+		$totalCount = $this->user_model->user_assigned_services(
+			$where,
+			array('count')
+		);
+
+
+		/*
+		|--------------------------------------------------------------------------
+		| Response
+		|--------------------------------------------------------------------------
+		*/
+
+		$this->response(
+			true,
+			"Expired services fetched successfully.",
+			array(
+				"services"   => $services,
+				"totalCount" => $totalCount
+			)
+		);
+	}
+
 	// created by @krishn on 16/07/26
 	public function approveRejectUserService()
 	{
@@ -15317,6 +15585,46 @@ class Admin extends Base_Controller
 			}
 
 			$this->response(true, "Service rejected successfully.");
+		}
+	}
+
+	// created by @krishn on 21/07/26
+	public function updateUserServiceExpiredStatus()
+	{
+		if (empty($_REQUEST['user_service_id']) || !isset($_REQUEST['service_start_date']) || !isset($_REQUEST['service_end_date'])) {
+			$this->response(false, "User Service ID, Service Start Date and Service End Date are required.");
+			return;
+		}
+
+		$userService = $this->common->getData(
+			'user_services',
+			array('id' => $_REQUEST['user_service_id']),
+			array('single')
+		);
+
+		if (empty($userService)) {
+			$this->response(false, "User Service not found.");
+			return;
+		}
+
+		$update = array(
+			'service_start_date' => $_REQUEST['service_start_date'],
+			'service_end_date' => $_REQUEST['service_end_date'],
+			'updated_at' => date('Y-m-d H:i:s')
+		);
+
+		$post = $this->common->getField('user_services', $update);
+
+		$result = $this->common->updateData(
+			'user_services',
+			$post,
+			array('id' => $_REQUEST['user_service_id'])
+		);
+
+		if ($result) {
+			$this->response(true, "User Service renewed successfully.");
+		} else {
+			$this->response(false, "Unable to renew user service.");
 		}
 	}
 
@@ -15628,6 +15936,45 @@ class Admin extends Base_Controller
 	}
 
 	// created by @krishn on 07/08/26
+	// created by @krishn on 25/08/26
+	public function getDividendPreview()
+	{
+		$dividendYear = isset($_REQUEST['dividend_year']) ? trim($_REQUEST['dividend_year']) : '';
+		$percentage   = isset($_REQUEST['percentage'])   ? (float) $_REQUEST['percentage']  : 0;
+		$type         = isset($_REQUEST['type'])         ? (int)   $_REQUEST['type']         : 0;
+
+		if (!in_array($type, array(1, 2), true)) {
+			$this->response(false, "Dividend type is required. Use 1 for Investment, 2 for Provident.");
+			return;
+		}
+
+		if ($dividendYear === '' || !preg_match('/^\d{4}$/', $dividendYear)) {
+			$this->response(false, "Valid dividend year is required.");
+			return;
+		}
+
+		$currentYear = (int) date('Y') + 1;
+
+		if ((int) $dividendYear < 1900 || (int) $dividendYear > $currentYear) {
+			$this->response(false, "Dividend year is invalid.");
+			return;
+		}
+
+		if ($percentage <= 0 || $percentage > 100) {
+			$this->response(false, "Percentage must be greater than 0 and less than or equal to 100.");
+			return;
+		}
+
+		$result = $this->user_model->getDividendPreview($dividendYear, $percentage, $type);
+
+		if (empty($result['status'])) {
+			$this->response(false, $result['message']);
+			return;
+		}
+
+		$this->response(true, $result['message'], $result['data']);
+	}
+
 	public function createDividendForAllUsers()
 	{
 		$dividendYear = isset($_REQUEST['dividend_year']) ? trim($_REQUEST['dividend_year']) : '';
