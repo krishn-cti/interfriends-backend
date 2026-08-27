@@ -1905,6 +1905,136 @@ class User_model extends CI_Model
 	}
 
 	// created by krishn 15-07-2026
+	// public function user_assigned_services($where = "", $options = array(), $limit = '', $start = '')
+	// {
+	// 	$this->db->select("
+	// 		US.id AS user_service_id,
+	// 		US.service_id,
+	// 		US.company_name,
+	// 		US.company_logo,
+	// 		US.price,
+	// 		US.description as provider_description,
+	// 		US.country_code,
+	// 		US.mobile,
+	// 		US.email,
+	// 		US.website,
+	// 		US.location,
+	// 		US.service_start_date,
+	// 		US.service_end_date,
+	// 		US.latitude,
+	// 		US.longitude,
+	// 		US.status as user_service_status,
+	// 		US.approval_status,
+	// 		US.created_at,
+
+	// 		S.service_name,
+	// 		S.description as service_description,
+	// 		S.status as service_status,
+
+	// 		U.user_id,
+	// 		U.first_name,
+	// 		U.last_name,
+	// 		U.email as user_email,
+	// 		U.mobile_number,
+	// 		U.profile_image,
+	// 		U.profile_image_thumb,
+
+	// 		SC.category_name,
+	// 		SSC.subcategory_name
+	// 	");
+
+	// 	$this->db->from('user_services US');
+
+	// 	$this->db->join('services S', 'S.id = US.service_id');
+	// 	$this->db->join('service_categories SC', 'SC.id = S.category_id');
+	// 	$this->db->join('service_subcategories SSC', 'SSC.id = S.subcategory_id');
+
+	// 	$this->db->join('user U', 'U.user_id = US.user_id');
+	// 	$this->db->join('user_circle UC', 'UC.user_id = U.user_id', 'left');
+
+	// 	if (!empty($where) && is_array($where)) {
+	// 		if (!empty($where['US.id'])) {
+	// 			$this->db->where('US.id', $where['US.id']);
+	// 		}
+
+	// 		if (!empty($where['US.user_id'])) {
+	// 			$this->db->where('US.user_id', $where['US.user_id']);
+	// 		}
+
+	// 		if (!empty($where['US.service_id'])) {
+	// 			$this->db->where('US.service_id', $where['US.service_id']);
+	// 		}
+
+	// 		if (!empty($where['S.category_id'])) {
+	// 			$this->db->where('S.category_id', $where['S.category_id']);
+	// 		}
+
+	// 		if (!empty($where['S.subcategory_id'])) {
+	// 			$this->db->where('S.subcategory_id', $where['S.subcategory_id']);
+	// 		}
+
+	// 		if (isset($where['US.status'])) {
+	// 			$this->db->where('US.status', $where['US.status']);
+	// 		}
+
+	// 		if (isset($where['US.approval_status'])) {
+	// 			$this->db->where('US.approval_status', $where['US.approval_status']);
+	// 		}
+
+	// 		if (isset($where['S.status'])) {
+	// 			$this->db->where('S.status', $where['S.status']);
+	// 		}
+
+	// 		if (!empty($where['group_ids'])) {
+	// 			$this->db->where_in('UC.group_id', $where['group_ids']);
+	// 		}
+
+	// 		if (!empty($where['circle_ids'])) {
+	// 			$this->db->where_in('UC.circle_id', $where['circle_ids']);
+	// 		}
+
+	// 		if (!empty($where['search'])) {
+	// 			$this->db->group_start();
+	// 			$this->db->like('S.service_name', $where['search']);
+	// 			$this->db->or_like('S.description', $where['search']);
+	// 			$this->db->or_like('US.company_name', $where['search']);
+	// 			$this->db->or_like('US.description', $where['search']);
+	// 			$this->db->or_like('US.email', $where['search']);
+	// 			$this->db->or_like('US.country_code', $where['search']);
+	// 			$this->db->or_like('US.mobile', $where['search']);
+	// 			$this->db->or_like('US.location', $where['search']);
+	// 			$this->db->or_like('U.first_name', $where['search']);
+	// 			$this->db->or_like('U.last_name', $where['search']);
+	// 			$this->db->or_like('U.email', $where['search']);
+	// 			$this->db->or_like('U.mobile_number', $where['search']);
+	// 			$this->db->or_like('SC.category_name', $where['search']);
+	// 			$this->db->or_like('SSC.subcategory_name', $where['search']);
+	// 			$this->db->group_end();
+	// 		}
+	// 	} elseif (!empty($where)) {
+	// 		$this->db->where("1=1 {$where}", NULL, FALSE);
+	// 	}
+
+	// 	if (!empty($options) && in_array('order_by_pending', $options)) {
+	// 		$this->db->order_by("CASE WHEN US.approval_status = 0 THEN 0 ELSE 1 END", "ASC", FALSE);
+	// 		$this->db->order_by('US.id', 'DESC');
+	// 	} else {
+	// 		$this->db->order_by('US.id', 'DESC');
+	// 	}
+
+	// 	if ($limit != '') {
+	// 		$this->db->limit($limit, $start);
+	// 	}
+
+	// 	$res = $this->db->get()->result_array();
+
+	// 	if (!empty($options) && in_array('count', $options)) {
+	// 		return count($res);
+	// 	}
+
+	// 	return $res;
+	// }
+
 	public function user_assigned_services($where = "", $options = array(), $limit = '', $start = '')
 	{
 		$this->db->select("
@@ -1919,6 +2049,8 @@ class User_model extends CI_Model
 			US.email,
 			US.website,
 			US.location,
+			US.service_start_date,
+			US.service_end_date,
 			US.latitude,
 			US.longitude,
 			US.status as user_service_status,
@@ -1961,6 +2093,10 @@ class User_model extends CI_Model
 
 			if (!empty($where['US.service_id'])) {
 				$this->db->where('US.service_id', $where['US.service_id']);
+			}
+
+			if (!empty($where['expired_services'])) {
+				$this->db->where('US.service_end_date <', date('Y-m-d'));
 			}
 
 			if (!empty($where['S.category_id'])) {
@@ -2025,6 +2161,38 @@ class User_model extends CI_Model
 		}
 
 		$res = $this->db->get()->result_array();
+
+		/*
+		|--------------------------------------------------------------------------
+		| Check Service Expiry
+		|--------------------------------------------------------------------------
+		|
+		| If service_end_date has passed today's date:
+		| is_expired = true
+		|
+		| If service_end_date is today or in the future:
+		| is_expired = false
+		|
+		| If service_end_date is empty:
+		| is_expired = false
+		|
+		*/
+
+		$today = date('Y-m-d');
+
+		foreach ($res as &$row) {
+
+			$row['is_expired'] = false;
+
+			if (
+				!empty($row['service_end_date']) &&
+				$row['service_end_date'] < $today
+			) {
+				$row['is_expired'] = true;
+			}
+		}
+
+		unset($row);
 
 		if (!empty($options) && in_array('count', $options)) {
 			return count($res);
@@ -2113,6 +2281,80 @@ class User_model extends CI_Model
 	}
 
 	// created by @krishn on 07/08/26
+	// created by @krishn on 25/08/26
+	public function getDividendPreview($dividendYear, $percentage, $type = 1)
+	{
+		$typeName = ($type == 2) ? 'Provident' : 'Investment';
+
+		// Check if dividend already applied for this year + type
+		$duplicate = $this->db
+			->where('dividend_year', $dividendYear)
+			->where('type', $type)
+			->where('property_id IS NULL', null, false)
+			->get('dividend')
+			->row_array();
+
+		$alreadyApplied = !empty($duplicate);
+
+		$eligibleUsers = $this->getDividendEligibleUsers();
+
+		$usersCount           = 0;
+		$totalProvidentBal    = 0;
+		$totalInvestmentBal   = 0;
+		$totalProvidentDiv    = 0;
+		$totalInvestmentDiv   = 0;
+		$totalDividend        = 0;
+
+		foreach ($eligibleUsers as $user) {
+			$providentBalance   = max(0, (float) $user['provident_balance']);
+			$investmentBalance  = max(0, (float) $user['investment_balance']);
+
+			if ($type == 1) {
+				// Investment dividend only
+				$providentDividend  = 0.00;
+				$investmentDividend = round(($investmentBalance * $percentage) / 100, 2);
+			} elseif ($type == 2) {
+				// Provident dividend only
+				$providentDividend  = round(($providentBalance * $percentage) / 100, 2);
+				$investmentDividend = 0.00;
+			} else {
+				$providentDividend  = round(($providentBalance * $percentage) / 100, 2);
+				$investmentDividend = round(($investmentBalance * $percentage) / 100, 2);
+			}
+
+			$rowTotal = round($providentDividend + $investmentDividend, 2);
+
+			if ($rowTotal <= 0) {
+				continue;
+			}
+
+			$usersCount++;
+			$totalProvidentBal  += $providentBalance;
+			$totalInvestmentBal += $investmentBalance;
+			$totalProvidentDiv  += $providentDividend;
+			$totalInvestmentDiv += $investmentDividend;
+			$totalDividend      += $rowTotal;
+		}
+
+		return array(
+			'status'  => true,
+			'message' => 'Dividend preview calculated successfully.',
+			'data'    => array(
+				'dividend_year'              => $dividendYear,
+				'percentage'                 => number_format($percentage, 2, '.', ''),
+				'type'                       => $type,
+				'type_name'                  => $typeName,
+				'already_applied'            => $alreadyApplied,
+				'eligible_users_count'       => $usersCount,
+				'total_provident_balance'    => number_format($totalProvidentBal, 2, '.', ''),
+				'total_investment_balance'   => number_format($totalInvestmentBal, 2, '.', ''),
+				'total_provident_dividend'   => number_format($totalProvidentDiv, 2, '.', ''),
+				'total_investment_dividend'  => number_format($totalInvestmentDiv, 2, '.', ''),
+				'total_dividend'             => number_format($totalDividend, 2, '.', '')
+			)
+		);
+	}
+
 	public function createDividendForAllUsers($dividendYear, $percentage, $description, $createdBy, $type = 1)
 	{
 		$duplicate = $this->db

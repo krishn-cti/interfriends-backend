@@ -4870,6 +4870,8 @@ class Api extends Base_Controller
 		$data = array(
 			'user_id'           => $_REQUEST['user_id'],
 			'service_id'        => $_REQUEST['service_id'],
+			'service_start_date'=> $_REQUEST['service_start_date'],
+			'service_end_date'  => $_REQUEST['service_end_date'],
 			'company_name'      => !empty($_REQUEST['company_name']) ? $_REQUEST['company_name'] : '',
 			'company_logo'      => $companyLogo,
 			'description'       => !empty($_REQUEST['description']) ? $_REQUEST['description'] : '',
