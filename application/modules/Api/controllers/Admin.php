@@ -3432,6 +3432,34 @@ class Admin extends Base_Controller
 			$messaged = $this->load->view('template/common-mail', $data, true);
 			$this->sendMail($userDetailFrom['email'], $cycle_name, $messaged);
 
+			// WhatsApp notification
+			if (function_exists('send_whatsapp_to_user') && !empty($userDetailFrom)) {
+				$recipientName = trim(($userDetailFrom['first_name'] ?? '') . ' ' . ($userDetailFrom['last_name'] ?? ''));
+				$rawPaymentDate = !empty($_REQUEST['payment_date']) ? $_REQUEST['payment_date'] : (
+					!empty($_REQUEST['created_at']) ? $_REQUEST['created_at'] : (
+						!empty($_REQUEST['date']) ? $_REQUEST['date'] : (
+							!empty($post['created_at']) ? $post['created_at'] : ''
+						)
+					)
+				);
+				$paymentDate = (!empty($rawPaymentDate) && strtotime($rawPaymentDate) !== false) ? date('d M Y', strtotime($rawPaymentDate)) : date('d M Y');
+				$amountReceived = number_format((float)$_REQUEST['amount'], 2);
+				$paymentStatus = (!empty($data["status"]) && $data["status"] !== '#N/A') ? $data["status"] : 'Pending';
+
+				send_whatsapp_to_user(
+					!empty($userDetailFrom['mobile_number']) ? $userDetailFrom['mobile_number'] : '',
+					!empty($userDetailFrom['country_code']) ? $userDetailFrom['country_code'] : '',
+					'payment_received_for_miscellaneous',
+					array(
+						!empty($recipientName) ? $recipientName : 'Member',
+						!empty($paymentDate) ? $paymentDate : date('d M Y'),
+						!empty($cycle_name) ? $cycle_name : 'Miscellaneous Payment',
+						!empty($amountReceived) ? $amountReceived : '0.00',
+						!empty($paymentStatus) ? $paymentStatus : 'Pending'
+					)
+				);
+			}
+
 			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
 			if (!empty($subadmin_id)) {
 				$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
@@ -4827,19 +4855,35 @@ class Admin extends Base_Controller
 		}
 
 		// Send whatsapp message
-		if (!empty($post) && !empty($post['user_id']) && !empty($post['amount'])) {
+		$amount = isset($_REQUEST['amount']) ? $_REQUEST['amount'] : (isset($post['amount']) ? $post['amount'] : (!empty($oldPayment['amount']) ? $oldPayment['amount'] : 0));
+		if ($result && !empty($userId) && (float)$amount > 0) {
 			// Get user details
-			$userDetail = $this->common->getData('user', array('user_id' => $post['user_id']), array('single'));
+			$userDetail = $this->common->getData('user', array('user_id' => $userId), array('single'));
 
-			// Get payment method name
-			$paymentMethods = $this->common->getData('user_miscellaneous', array('id' => $id), array('single'));
-			$paymentMethodName = isset($paymentMethods['title']) ? $paymentMethods['title'] : 'Miscellaneous Payment';
+			// Get payment method name (title from user_miscellaneous using loan_id)
+			$miscId = !empty($_REQUEST['loan_id']) ? $_REQUEST['loan_id'] : (!empty($post['loan_id']) ? $post['loan_id'] : (!empty($oldPayment['loan_id']) ? $oldPayment['loan_id'] : ''));
+			$miscDetail = !empty($miscId) ? $this->common->getData('user_miscellaneous', array('id' => $miscId), array('single')) : array();
+			$paymentMethodName = !empty($miscDetail['title']) ? $miscDetail['title'] : 'Miscellaneous Payment';
 
 			// Prepare WhatsApp template variables
 			$recipientName = trim(($userDetail['first_name'] ?? '') . ' ' . ($userDetail['last_name'] ?? ''));
-			$paymentDate = date('d M Y', strtotime($post['payment_date']));
-			$amountReceived = '£' . number_format((float)$post['amount'], 2);
-			switch($post['status']) {
+			$rawPaymentDate = !empty($_REQUEST['payment_date']) ? $_REQUEST['payment_date'] : (
+				!empty($_REQUEST['created_at']) ? $_REQUEST['created_at'] : (
+					!empty($_REQUEST['date']) ? $_REQUEST['date'] : (
+						!empty($post['payment_date']) ? $post['payment_date'] : (
+							!empty($post['created_at']) ? $post['created_at'] : (
+								!empty($oldPayment['created_at']) ? $oldPayment['created_at'] : (
+									!empty($oldPayment['emi_date']) ? $oldPayment['emi_date'] : ''
+								)
+							)
+						)
+					)
+				)
+			);
+			$paymentDate = (!empty($rawPaymentDate) && strtotime($rawPaymentDate) !== false) ? date('d M Y', strtotime($rawPaymentDate)) : date('d M Y');
+			$amountReceived = number_format((float)$amount, 2);
+			$currStatus = ($newStatus !== null) ? $newStatus : $oldStatus;
+			switch((int)$currStatus) {
 				case 1:
 					$paymentStatus = 'Paid On Time';
 					break;
@@ -4862,9 +4906,9 @@ class Admin extends Base_Controller
 					'payment_received_for_miscellaneous',
 					array(
 						!empty($recipientName) ? $recipientName : 'Member',
-						!empty($paymentDate) ? $paymentDate : 'Payment Date',
-						!empty($paymentMethodName) ? $paymentMethodName : 'Payment Type',
-						!empty($amountReceived) ? $amountReceived : '£0.00',
+						!empty($paymentDate) ? $paymentDate : date('d M Y'),
+						!empty($paymentMethodName) ? $paymentMethodName : 'Miscellaneous Payment',
+						!empty($amountReceived) ? $amountReceived : '0.00',
 						!empty($paymentStatus) ? $paymentStatus : 'Pending'
 					)
 				);
@@ -5909,13 +5953,7 @@ class Admin extends Base_Controller
 		}
 
 
-		$recommendResult = $this->common->getData('recommend_user', array("email" => $_REQUEST['email'], 'admin_status' => '1'), array('single'));
-
-		if (!empty($recommendResult)) {
-			$_REQUEST['recommended'] = 0;
-		} else {
-			$_REQUEST['recommended'] = 1;
-		}
+		$_REQUEST['recommended'] = 1;
 
 		$user = $this->common->getField('user', $_REQUEST);
 		$result = $this->common->insertData('user', $user);
@@ -5953,10 +5991,10 @@ class Admin extends Base_Controller
 			$creditArray['fully_registered'] = 300;
 			$this->updateCreditScore(300, 'plus');
 
-			$recommendResult = $this->common->getData('recommend_user', array("email" => $_REQUEST['email'], 'admin_status' => '1'), array('single'));
+			$recommendResult = $this->common->getData('recommend_user', array("email" => $_REQUEST['email']), array('single'));
 
 			if (!empty($recommendResult)) {
-				$result = $this->common->updateData('recommend_user', array('signup_form' => '1'), array('id' => $recommendResult['id']));
+				$this->common->updateData('recommend_user', array('signup_form' => '1'), array('id' => $recommendResult['id']));
 
 				if (!empty($recommendResult['user_id'])) {
 					$creditArray['register_one_refree'] = 0;
@@ -6760,138 +6798,18 @@ class Admin extends Base_Controller
 			$recommendUser = $this->common->getData('recommend_user', ['id' => $id], ['single']);
 
 			if ($status === '1') {
-				// If user already exists, mark as not recommended
+				// Mark as not recommended and add to waiting list (not in any circle)
 				$existingUser = $this->common->getData('user', ['email' => $recommendUser['email']], ['single']);
 
 				if (!empty($existingUser)) {
-					$this->common->updateData('user', array('recommended' => '0'), array('user_id' => $existingUser['user_id']));
+					$this->common->updateData('user', array('recommended' => '0', 'exist_in_waiting' => 1), array('user_id' => $existingUser['user_id']));
 				}
 
-				// check limit exceeded or not
-				$recommenderGroupDetails = $this->common->getData('user_circle', ['user_id' => $recommendUser['refer_user_id']], ['single']);
+				// Remove recommended user entry
+				$this->common->deleteData('recommend_user', array('id' => $id));
 
-				$whereForMember = "
-					UG.circle_id = '" . $recommenderGroupDetails['circle_id'] . "'
-					AND UG.group_id = '" . $recommenderGroupDetails['group_id'] . "'
-					AND U.status != '2'
-					AND U.recommended = '0'
-				";
-
-				$usercircledata = $this->user_model->user_circle_detail($whereForMember, array());
-
-				$groupCircleMemberCount = !empty($usercircledata) ? count($usercircledata) : 0;
-
-				if ($groupCircleMemberCount >= 25) {
-					$this->common->updateData('user', array('exist_in_waiting' => 1), array('user_id' => $existingUser['user_id']));
-
-					$superAdmin = $this->common->getData('superAdmin', ['admin_type' => '2']);
-
-					foreach ($superAdmin as $adminUser) {
-						$subject = "User Added in the Waiting List";
-
-						$data['sendername'] = $adminUser['name'];
-						$data['message'] = '<p>We regret to inform you that the user (<strong>' . $existingUser['first_name'] . '</strong>) could not be added to the circle because the member limit for this circle has been exceeded.</p>
-						<p><strong>' . $existingUser['first_name'] . '</strong> has been added to the waiting list.</p>
-						<p>Please review the circle settings or consider increasing the member limit if necessary.</p>';
-
-						$messaged = $this->load->view('template/common-mail', $data, true);
-						$mail = $this->sendMail($adminUser['email'], $subject, $messaged);
-					}
-
-					$this->response(true, "Limit exceeded. User added in the waiting list.");
-					die();
-				}
-
-				// Send Joining Instructions Email
-				$subject = "Joining Instructions";
-				$data['sendername'] = $recommendUser['first_name'];
-				$data['message'] = '<p style="margin-bottom:10px;">I am writing to provide you with the necessary account details for the upcoming Interfriends cycle.</p>
-                <h4><strong>UNITED KINGDOM USERS</strong></h4>
-                <p><strong>Account Name:</strong> Interfriends</p>
-                <p><strong>Bank Name:</strong> Lloyds Bank</p>
-                <p><strong>Account Number:</strong> 32774168</p>
-                <p><strong>Sort Code:</strong> 30-98-97</p>
-                <p><strong>Reference:</strong> Your unique ID followed by SVS (we will send your unique ID separately)</p>
-                <p>Please note that there are two savings cycles, one starting in January and the other in July. Payments must be made between the 1st and the last day of each month by 4:00 pm.</p>
-                <p>Any payment made after the deadline may negatively impact your Interfriends Trust Score.</p>
-                <p>To access your Interfriends dashboard, please follow this link and enter the email used for your application: <a href="' . USER_BASE_URL . '">Click Here</a> for Login</p>
-                <p>If you have forgotten your password, you can click on \'forgotten password\' to create a new one.</p>
-                <p>Thank you for your attention to this matter.</p>';
-
-				$messaged = $this->load->view('template/common-mail', $data, true);
-				$mail = $this->sendMail($recommendUser['email'], $subject, $messaged);
-
-				if ($mail) {
-					$_REQUEST['created_at'] = date('Y-m-d H:i:s');
-					$groupUser = $this->common->getData('user', ['user_id' => $existingUser['user_id']], ['single']);
-
-					// Add user to group
-					$groupDetail = $this->common->getData('user_group', ['user_id' => $existingUser['user_id']], ['single']);
-
-					if (!empty($groupDetail)) {
-						$this->response(false, "This user " . $groupUser['first_name'] . " is already in another group");
-						return;
-					}
-
-					// Add user to circle
-					$groupCircle = $this->common->getData('user_circle', ['user_id' => $existingUser['user_id']], ['single']);
-
-					if (!empty($groupCircle)) {
-						$this->response(false, "This user " . $groupUser['first_name'] . " is already in another circle");
-						return;
-					}
-
-					if (!empty($recommenderGroupDetails)) {
-						// user added in group
-						$insertGroupData = [
-							"group_id" => $recommenderGroupDetails['group_id'],
-							"user_id" => $existingUser['user_id'],
-							"created_at" => $_REQUEST['created_at']
-						];
-
-						$groupPost = $this->common->getField('user_group', $insertGroupData);
-						$addedInGroup = $this->common->insertData('user_group', $groupPost);
-
-						// user added in circle
-						$insertCricleData = [
-							"group_id" => $recommenderGroupDetails['group_id'],
-							"circle_id" => $recommenderGroupDetails['circle_id'],
-							"user_id" => $existingUser['user_id'],
-							"created_at" => $_REQUEST['created_at']
-						];
-
-						$circlePost = $this->common->getField('user_circle', $insertCricleData);
-						$addedInCircle = $this->common->insertData('user_circle', $circlePost);
-
-						if ($addedInCircle && $addedInGroup) {
-							// Remove recommended user entry
-							$this->common->deleteData('recommend_user', array('id' => $id));
-
-							// Fetch users in same circle/group excluding the newly added user
-							$circleUsers = $this->common->getData('user_circle', [
-								'group_id' => $recommenderGroupDetails['group_id'],
-								'circle_id' => $recommenderGroupDetails['circle_id']
-							]);
-
-							foreach ($circleUsers as $userCircle) {
-								if ($userCircle['user_id'] != $existingUser['user_id']) { // Don't send to the newly added user
-									$userDetails = $this->common->getData('user', ['user_id' => $userCircle['user_id']], ['single']);
-									if (!empty($userDetails)) {
-										$email = $userDetails['email'];
-										$subject = "New Member Joined Your Circle";
-										$data['sendername'] = $userDetails['first_name'];
-										$data['message'] = "<p>We are pleased to inform you that <strong>" . $groupUser['first_name'] . "</strong> has successfully completed the registration process and is now a member of your circle.</p>";
-
-										$messaged = $this->load->view('template/common-mail', $data, true);
-										$this->sendMail($email, $subject, $messaged);
-									}
-								}
-							}
-						}
-					}
-				}
-
-				$this->response(true, "Accepted Successfully.", ["lists" => $updateResult]);
+				$this->response(true, "User approved successfully and added to waiting list.", ["lists" => $updateResult]);
+				return;
 			}
 			if ($status === '2') {
 				// send mail to circle lead/deputy circle lead, recommender and new member
@@ -7674,100 +7592,33 @@ class Admin extends Base_Controller
 		}
 
 		// If admin requests, execute full payout process
-		// if ($result) {
-		// 	$this->processPayout($payout_id);
-
-		// 	$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
-
-		// 	$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
-		// 	if (!empty($subadmin_id)) {
-		// 		$target_name = !empty($userDetailFrom) ? (isset($userDetailFrom['first_name']) ? $userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name'] : '') : '';
-		// 		$p_amt = isset($_REQUEST['payout_amount']) ? $_REQUEST['payout_amount'] : '0';
-		// 		$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Processed payout of £" . $p_amt . " for user: " . $target_name, 'Payout', $_REQUEST['user_id'], $target_name, null, $post);
-		// 	}
-
-		// 	$data['sendername'] = $userDetailFrom['first_name'] . " " . $userDetailFrom['last_name'];
-
-		// 	$data['useremail'] = "";
-		// 	$data['message'] = '<p>This is a confirmation that your PAYOUT for this cycle has been processed and paid into your account.</p><p>If you were not expecting this payment, please do let us know.</p>';
-		// 	$messaged = $this->load->view('template/common-mail', $data, true);
-		// 	$mail = $this->sendMail($userDetailFrom['email'], 'Payout Request', $messaged);
-
-		// 	if ($mail) {
-		// 		$group_id = $_REQUEST['group_id'];
-
-		// 		$where = "FIND_IN_SET('$group_id', group_ids) > 0 OR admin_type = 2";
-		// 		$superAdmin = $this->common->getData('superAdmin', $where);
-
-		// 		foreach ($superAdmin as $adminUser) {
-		// 			$subject = "Payout Successfully Processed";
-
-		// 			$data['sendername'] = $adminUser['name'];
-		// 			$data['message'] = '<p>We’re pleased to inform you that the PAYOUT for this cycle has been successfully processed.</p>
-		// 			<p>If you did not expect this payment or believe there is an issue, please contact our support team immediately.</p>';
-
-		// 			$messaged = $this->load->view('template/common-mail', $data, true);
-		// 			$mail = $this->sendMail($userDetailFrom['email'], $subject, $messaged);
-		// 		}
-		// 	}
-		// 	$this->response(true, "Payout Successfully Processed");
-		// } else {
-		// 	$this->response(false, "There was a problem processing the payout.");
-		// }
-
-		// If admin requests, execute full payout process
 		if ($result) {
 
 			$this->processPayout($payout_id);
 
 			//Get User Details
-			$userDetailFrom = $this->common->getData(
-				'user',
-				array('user_id' => $_REQUEST['user_id']),
-				array('single')
-			);
+			$userDetailFrom = $this->common->getData('user', array('user_id' => $_REQUEST['user_id']), array('single'));
 
 			// Sub Admin Activity Log
-			$subadmin_id = !empty($_REQUEST['subadmin_id'])
-				? $_REQUEST['subadmin_id']
-				: (!empty($_REQUEST['admin_id'])
-					? $_REQUEST['admin_id']
-					: '');
+			$subadmin_id = !empty($_REQUEST['subadmin_id']) ? $_REQUEST['subadmin_id'] : (!empty($_REQUEST['admin_id']) ? $_REQUEST['admin_id'] : '');
 
 			if (!empty($subadmin_id)) {
 
 				$target_name = '';
 				if (!empty($userDetailFrom)) {
-					$target_name = trim(
-						$userDetailFrom['first_name'] . ' ' .
-							$userDetailFrom['last_name']
-					);
+					$target_name = trim($userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name']);
 				}
 
-				$p_amt = isset($_REQUEST['payout_amount'])
-					? $_REQUEST['payout_amount']
-					: '0';
+				$p_amt = isset($_REQUEST['payout_amount']) ? $_REQUEST['payout_amount'] : '0';
 
-				$this->common->logSubadminActivity(
-					$subadmin_id,
-					'CREATE',
-					"Processed payout of £" . $p_amt . " for user: " . $target_name,
-					'Payout',
-					$_REQUEST['user_id'],
-					$target_name,
-					null,
-					$post
-				);
+				$this->common->logSubadminActivity($subadmin_id, 'CREATE', "Processed payout of £" . $p_amt . " for user: " . $target_name, 'Payout', $_REQUEST['user_id'], $target_name, null, $post);
 			}
 
 			// EMAIL TO USER
 			$userMail = false;
 
 			if (!empty($userDetailFrom['email'])) {
-				$user_name = trim(
-					$userDetailFrom['first_name'] . ' ' .
-						$userDetailFrom['last_name']
-				);
+				$user_name = trim($userDetailFrom['first_name'] . ' ' . $userDetailFrom['last_name']);
 
 				$data = array();
 
@@ -7788,17 +7639,8 @@ class Admin extends Base_Controller
 					</p>
 				';
 
-				$messaged = $this->load->view(
-					'template/common-mail',
-					$data,
-					true
-				);
-
-				$userMail = $this->sendMail(
-					$userDetailFrom['email'],
-					'Payout Request',
-					$messaged
-				);
+				$messaged = $this->load->view('template/common-mail', $data, true);
+				$userMail = $this->sendMail($userDetailFrom['email'], 'Payout Request', $messaged);
 
 				// WhatsApp Notification for Payout Processed
 				if (function_exists('send_whatsapp_to_user')) {
@@ -7814,15 +7656,8 @@ class Admin extends Base_Controller
 				}
 			}
 
-			//EMAIL TO ADMIN / SUB ADMIN
-			$group_id = $_REQUEST['group_id'];
-
-			$where = "FIND_IN_SET('$group_id', group_ids) > 0 OR admin_type = 2";
-
-			$superAdmin = $this->common->getData(
-				'superAdmin',
-				$where
-			);
+			// EMAIL AND WHATSAPP TO SUPER ADMIN ONLY
+			$superAdmin = $this->common->getData('superAdmin', ['admin_type' => '2']);
 
 			$adminMailsSent = 0;
 
@@ -7830,62 +7665,54 @@ class Admin extends Base_Controller
 
 				foreach ($superAdmin as $adminUser) {
 
-					// Skip if admin/sub-admin has no email
-					if (empty($adminUser['email'])) {
-						continue;
+					//Recipient Name
+					$recipient_name = !empty($adminUser['name']) ? trim($adminUser['name']) : '';
+
+					// Send Email to Super Admin
+					if (!empty($adminUser['email'])) {
+						$data = array();
+
+						$data['sendername'] = $recipient_name;
+						$data['useremail'] = '';
+
+						$data['message'] = '
+							<p>
+								We’re pleased to inform you that the PAYOUT for this cycle
+								has been successfully processed.
+							</p>
+
+							<p>
+								If you did not expect this payment or believe there is an issue,
+								please contact our support team immediately.
+							</p>
+						';
+
+						$messaged = $this->load->view('template/common-mail', $data, true);
+						$adminMail = $this->sendMail($adminUser['email'], 'Payout Successfully Processed', $messaged);
+
+						if ($adminMail) {
+							$adminMailsSent++;
+						}
 					}
 
-					//Recipient Name
-					$recipient_name = !empty($adminUser['name'])
-						? trim($adminUser['name'])
-						: '';
-
-					$data = array();
-
-					$data['sendername'] = $recipient_name;
-					$data['useremail'] = '';
-
-					$data['message'] = '
-						<p>
-							We’re pleased to inform you that the PAYOUT for this cycle
-							has been successfully processed.
-						</p>
-
-						<p>
-							If you did not expect this payment or believe there is an issue,
-							please contact our support team immediately.
-						</p>
-					';
-
-					$messaged = $this->load->view(
-						'template/common-mail',
-						$data,
-						true
-					);
-
-					$adminMail = $this->sendMail(
-						$adminUser['email'],
-						'Payout Successfully Processed',
-						$messaged
-					);
-
-					if ($adminMail) {
-						$adminMailsSent++;
+					// Send WhatsApp to Super Admin
+					if (function_exists('send_whatsapp_to_user') && !empty($adminUser['mobile_number'])) {
+						send_whatsapp_to_user(
+							!empty($adminUser['mobile_number']) ? $adminUser['mobile_number'] : '',
+							!empty($adminUser['country_code']) ? $adminUser['country_code'] : '',
+							'payout_request_created',
+							array(
+								!empty($recipient_name) ? $recipient_name : 'Admin'
+							)
+						);
 					}
 				}
 			}
 
 			//RESPONSE
-			$this->response(
-				true,
-				"Payout Successfully Processed"
-			);
+			$this->response(true, "Payout Successfully Processed");
 		} else {
-
-			$this->response(
-				false,
-				"There was a problem processing the payout."
-			);
+			$this->response(false, "There was a problem processing the payout.");
 		}
 	}
 
