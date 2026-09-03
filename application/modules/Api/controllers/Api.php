@@ -2312,62 +2312,46 @@ class Api extends Base_Controller
 
 	public function cylcleAvg()
 	{
+		$user_id = !empty($_REQUEST['user_id']) ? (int) $_REQUEST['user_id'] : 0;
+		$group_id = !empty($_REQUEST['group_id']) ? (int) $_REQUEST['group_id'] : 0;
+		$group_cycle_id = !empty($_REQUEST['group_cycle_id']) ? (int) $_REQUEST['group_cycle_id'] : 0;
+		$type = !empty($_REQUEST['type']) ? (int) $_REQUEST['type'] : 1;
 
-		$cycleTransfer = $this->common->getData('cycle_status_management', array('user_id' => $_REQUEST['user_id'], 'group_id' => $_REQUEST['group_id'], 'group_cycle_id' => $_REQUEST['group_cycle_id']), array('single'));
+		// 1. Calculate avgAmount for this specific cycle
+		$paidWhere = "group_id = '{$group_id}' AND groupLifecycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status IN (2, 4)";
+		$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'IFNULL(SUM(amount), 0) as total_payment', "single"));
+		$paidAmount = !empty($paidResult['total_payment']) ? (float) $paidResult['total_payment'] : 0.00;
 
-		if (empty($cycleTransfer)) {
-			$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
+		// Subtract any payout already taken for this cycle
+		$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status = 1";
+		$payoutResult = $this->common->getData('payout_cycle', $payoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
+		$payoutAmount = !empty($payoutResult['total_payout']) ? (float) $payoutResult['total_payout'] : 0.00;
 
-			if (!empty($result['total_payment'])) {
-				$avgAmount = $result['total_payment'];
-			} else {
-				$avgAmount = 0.00;
-			}
-		} else {
-			$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
+		$avgAmount = $paidAmount - $payoutAmount;
 
-			if (!empty($paidResult['total_payment'])) {
-				$paidAvgAmount = $paidResult['total_payment'];
-			} else {
-				$paidAvgAmount = 0;
-			}
+		// 2. Calculate totalAvgAmount for all cycles of this product type (Savings = 1, JNR = 2)
+		$groupLifecycles = $this->common->getData('group_lifecycle', array('group_id' => $group_id, 'group_type_id' => $type));
+		$totalAvgAmount = 0.00;
 
+		if (!empty($groupLifecycles)) {
+			$lifecycleIds = array_map('intval', array_column($groupLifecycles, 'id'));
+			$lifecycleIdsStr = implode(',', $lifecycleIds);
 
-			$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $_REQUEST['group_cycle_id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
+			$allPaidWhere = "group_id = '{$group_id}' AND user_id = '{$user_id}' AND groupLifecycle_id IN ({$lifecycleIdsStr}) AND status IN (2, 4)";
+			$allPaidResult = $this->common->getData('user_group_lifecycle', $allPaidWhere, array("field" => 'IFNULL(SUM(amount), 0) as total_payment', "single"));
+			$allPaidAmount = !empty($allPaidResult['total_payment']) ? (float) $allPaidResult['total_payment'] : 0.00;
 
-			$payout_amount_total = $result['total_amount'];
+			$allPayoutWhere = "group_id = '{$group_id}' AND user_id = '{$user_id}' AND group_cycle_id IN ({$lifecycleIdsStr}) AND status = 1";
+			$allPayoutResult = $this->common->getData('payout_cycle', $allPayoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
+			$allPayoutAmount = !empty($allPayoutResult['total_payout']) ? (float) $allPayoutResult['total_payout'] : 0.00;
 
-			//print_r($payout_amount_total);
-			$avgAmount = $paidAvgAmount - $payout_amount_total;
+			$totalAvgAmount = $allPaidAmount - $allPayoutAmount;
 		}
 
-		// 		$groupCycleInfo = $this->common->getData('group_lifecycle',array('group_id'=>$_REQUEST['group_id'], 'group_type_id'=>$_REQUEST['type']));
-		// 		$avgAmount = 0;
-		// 		if(!empty($groupCycleInfo)) {
-		// 			foreach ($groupCycleInfo as $key => $value) {
-
-		//     			$paidWhere = "group_id = '".$_REQUEST['group_id']."' AND groupLifecycle_id = '".$value['id']."' AND user_id = '". $_REQUEST['user_id'] ."' AND status !='1'";
-		//     			$paidResult = $this->common->getData('user_group_lifecycle',$paidWhere,array("field" => 'sum(amount) as total_payment',"single"));
-
-		//     			if(!empty($paidResult['total_payment'])) {
-		//     				$avgAmount += $paidResult['total_payment'];
-		//     			}
-		// 			}
-		// 		} 
-
-
-		$whereCycle = "group_id = '" . $_REQUEST['group_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status != 1";
-		$resultCycle = $this->common->getData('user_group_lifecycle', $whereCycle, array("field" => 'sum(amount) as total_payment', "single"));
-
-		if (!empty($resultCycle['total_payment'])) {
-			$totalAvgAmount = $resultCycle['total_payment'];
-		} else {
-			$totalAvgAmount = 0;
-		}
-
-		$this->response(true, 'amount fetch successfully', array('avgAmount' => $avgAmount, 'totalAvgAmount' => $totalAvgAmount));
+		$this->response(true, 'amount fetch successfully', array(
+			'avgAmount' => $avgAmount,
+			'totalAvgAmount' => $totalAvgAmount
+		));
 	}
 
 	public function cylcleAvgPayout()
@@ -2736,39 +2720,20 @@ class Api extends Base_Controller
 
 	function savingAvgCal($group_cycle_id)
 	{
-		$cycleTransfer = $this->common->getData('cycle_status_management', array('user_id' => $_POST['user_id'], 'group_id' => $_POST['group_id'], 'group_cycle_id' => $group_cycle_id), array('single'));
+		$user_id  = !empty($_REQUEST['user_id'])  ? (int) $_REQUEST['user_id']  : 0;
+		$group_id = !empty($_REQUEST['group_id']) ? (int) $_REQUEST['group_id'] : 0;
 
-		if (empty($cycleTransfer)) {
-			$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $group_cycle_id . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
+		// Sum only actually paid installments (status 2 = Paid On Time, 4 = Paid Late)
+		$paidWhere = "group_id = '{$group_id}' AND groupLifecycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status IN (2, 4)";
+		$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'IFNULL(SUM(amount), 0) as total_payment', "single"));
+		$paidAmount = !empty($paidResult['total_payment']) ? (float) $paidResult['total_payment'] : 0.00;
 
-			if (!empty($result['total_payment'])) {
-				$avgAmount = $result['total_payment'];
-			} else {
-				$avgAmount = 0.00;
-			}
+		// Subtract any payout already disbursed for this cycle
+		$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status = 1";
+		$payoutResult = $this->common->getData('payout_cycle', $payoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
+		$payoutAmount = !empty($payoutResult['total_payout']) ? (float) $payoutResult['total_payout'] : 0.00;
 
-			return $avgAmount;
-		} else {
-			$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $group_cycle_id . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-
-			$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
-
-			if (!empty($paidResult['total_payment'])) {
-				$paidAvgAmount = $paidResult['total_payment'];
-			} else {
-				$paidAvgAmount = 0;
-			}
-
-
-
-			$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $group_cycle_id, 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-			$payout_amount_total = $result['total_amount'];
-
-
-			return $avgAmount =  $paidAvgAmount - $payout_amount_total;
-		}
+		return $paidAmount - $payoutAmount;
 	}
 
 
