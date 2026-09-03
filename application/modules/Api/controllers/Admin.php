@@ -9728,35 +9728,20 @@ class Admin extends Base_Controller
 
 	function savingAvgCal($group_cycle_id)
 	{
-		$cycleTransfer = $this->common->getData('cycle_status_management', array('user_id' => $_REQUEST['user_id'], 'group_id' => $_REQUEST['group_id'], 'group_cycle_id' => $group_cycle_id), array('single'));
-		// echo "<pre>"; print_r($cycleTransfer); echo "</pre>";
-		if (empty($cycleTransfer)) {
-			$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $group_cycle_id . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
+		$user_id  = !empty($_REQUEST['user_id'])  ? (int) $_REQUEST['user_id']  : 0;
+		$group_id = !empty($_REQUEST['group_id']) ? (int) $_REQUEST['group_id'] : 0;
 
-			if (!empty($result['total_payment'])) {
-				$avgAmount = $result['total_payment'];
-			} else {
-				$avgAmount = 0;
-			}
+		// Sum only actually paid installments (status 2 = Paid On Time, 4 = Paid Late)
+		$paidWhere = "group_id = '{$group_id}' AND groupLifecycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status IN (2, 4)";
+		$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'IFNULL(SUM(amount), 0) as total_payment', "single"));
+		$paidAmount = !empty($paidResult['total_payment']) ? (float) $paidResult['total_payment'] : 0.00;
 
-			return $avgAmount;
-		} else {
-			$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $group_cycle_id . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-			$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
+		// Subtract any payout already disbursed for this cycle
+		$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status = 1";
+		$payoutResult = $this->common->getData('payout_cycle', $payoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
+		$payoutAmount = !empty($payoutResult['total_payout']) ? (float) $payoutResult['total_payout'] : 0.00;
 
-			if (!empty($paidResult['total_payment'])) {
-				$paidAvgAmount = $paidResult['total_payment'];
-			} else {
-				$paidAvgAmount = 0;
-			}
-
-
-			$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $group_cycle_id, 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-			$payout_amount_total = $result['total_amount'];
-			return $avgAmount =  $paidAvgAmount - $payout_amount_total;
-		}
+		return $paidAmount - $payoutAmount;
 	}
 
 	// public function savingAvgCal($group_cycle_id, $user_id, $group_id)
@@ -13900,8 +13885,8 @@ class Admin extends Base_Controller
 			);
 		}
 
-		// Notification
-		$this->send_nofification($user_id, 1, 0, "Outstanding payment reminder sent.", 0, "16");
+		// // Notification
+		// $this->send_nofification($user_id, 1, 0, "Outstanding payment reminder sent.", 0, "16");
 
 		// Response
 		if ($mail || !empty($whatsapp['success'])) {

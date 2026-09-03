@@ -380,7 +380,7 @@ class Cron extends Base_Controller
         $where = "
             UL.status = 4
             AND ULP.status NOT IN (1,2)
-            AND ULP.emi_date < CURDATE()
+            AND ULP.emi_date < DATE_FORMAT(CURDATE(), '%Y-%m-01')
             AND U.status != 2
         ";
 

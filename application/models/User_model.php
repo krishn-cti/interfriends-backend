@@ -2279,8 +2279,7 @@ class User_model extends CI_Model
 
 		return $this->db->get()->result_array();
 	}
-
-	// created by @krishn on 07/08/26
+	
 	// created by @krishn on 25/08/26
 	public function getDividendPreview($dividendYear, $percentage, $type = 1)
 	{
