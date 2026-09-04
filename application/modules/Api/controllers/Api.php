@@ -2042,7 +2042,65 @@ class Api extends Base_Controller
 		}
 	}
 
+	// public function getuser_group_by_singlecycle()
+	// {
+	// 	$group_id            = $_REQUEST['group_id'];
+	// 	$groupLifecycle_id   = $_REQUEST['groupLifecycle_id'];
+	// 	$user_id             = $_REQUEST['user_id'];
 
+	// 	// 1. Fetch all payment rows for this cycle (for the list display)
+	// 	$groupCycleList = $this->common->getData('user_group_lifecycle', array(
+	// 		'group_id'          => $group_id,
+	// 		'groupLifecycle_id' => $groupLifecycle_id,
+	// 		'user_id'           => $user_id
+	// 	));
+
+	// 	// 2. Total savings contributed in this cycle
+	// 	$totalSavingsResult = $this->common->getData('user_group_lifecycle', array(
+	// 		'group_id'          => $group_id,
+	// 		'groupLifecycle_id' => $groupLifecycle_id,
+	// 		'user_id'           => $user_id
+	// 	), array('field' => 'IFNULL(SUM(amount), 0) as total_savings', 'single'));
+	// 	$totalSavings = !empty($totalSavingsResult['total_savings']) ? (float) $totalSavingsResult['total_savings'] : 0.00;
+
+	// 	// 3. Payout already taken for this cycle (the net amount paid out, e.g. £1080)
+	// 	$payoutResult = $this->common->getData('payout_cycle', array(
+	// 		'group_id'       => $group_id,
+	// 		'group_cycle_id' => $groupLifecycle_id,
+	// 		'user_id'        => $user_id,
+	// 		'status'         => 1   // status = 1 means approved/processed
+	// 	), array('field' => 'IFNULL(SUM(payout_amount), 0) as total_payout', 'single'));
+	// 	$payoutAmount = !empty($payoutResult['total_payout']) ? (float) $payoutResult['total_payout'] : 0.00;
+
+	// 	// 4. Provident (PF) deducted for this cycle (e.g. £120 = 10%)
+	// 	//    payment_type = 2 means credited into provident, pf_type = 1 means from a payout event
+	// 	$providentResult = $this->common->getData('pf_user', array(
+	// 		'group_id'    => $group_id,
+	// 		'user_id'     => $user_id,
+	// 		'main_id'     => $groupLifecycle_id,
+	// 		'payment_type'=> '2'
+	// 	), array('field' => 'IFNULL(SUM(pf_amount), 0) as total_pf', 'single'));
+	// 	$providentAmount = !empty($providentResult['total_pf']) ? (float) $providentResult['total_pf'] : 0.00;
+
+	// 	// 5. Net balance = Total Savings − Payout − Provident
+	// 	//    If fully paid out: £1200 − £1080 − £120 = £0
+	// 	$totalBalance = $totalSavings - $payoutAmount - $providentAmount;
+	// 	// if ($totalBalance < 0) {
+	// 	// 	$totalBalance = 0.00; // Safety clamp — never show negative
+	// 	// }
+
+	// 	if (!empty($groupCycleList)) {
+	// 		$this->response(true, 'group fetch successfully', array(
+	// 			'groupCycleList' => $groupCycleList,
+	// 			'totalBalance'   => $totalBalance
+	// 		));
+	// 	} else {
+	// 		$this->response(true, 'group not found', array(
+	// 			'groupCycleList' => array(),
+	// 			'totalBalance'   => 0
+	// 		));
+	// 	}
+	// }
 
 
 	public function pfList()
@@ -2310,6 +2368,7 @@ class Api extends Base_Controller
 	// }
 
 
+	// corrected by @krishn on 04-09-26
 	public function cylcleAvg()
 	{
 		$user_id = !empty($_REQUEST['user_id']) ? (int) $_REQUEST['user_id'] : 0;
@@ -2323,11 +2382,20 @@ class Api extends Base_Controller
 		$paidAmount = !empty($paidResult['total_payment']) ? (float) $paidResult['total_payment'] : 0.00;
 
 		// Subtract any payout already taken for this cycle
-		$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status = 1";
+		$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND (request_status = 1 OR status = 1)";
 		$payoutResult = $this->common->getData('payout_cycle', $payoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
 		$payoutAmount = !empty($payoutResult['total_payout']) ? (float) $payoutResult['total_payout'] : 0.00;
 
-		$avgAmount = $paidAmount - $payoutAmount;
+		// Subtract any provident (PF) deducted for this cycle (e.g. 10% = £120)
+		$providentWhere = "group_id = '{$group_id}' AND user_id = '{$user_id}' AND main_id = '{$group_cycle_id}' AND payment_type = 2";
+		$providentResult = $this->common->getData('pf_user', $providentWhere, array("field" => 'IFNULL(SUM(pf_amount), 0) as total_pf', "single"));
+		$providentAmount = !empty($providentResult['total_pf']) ? (float) $providentResult['total_pf'] : 0.00;
+
+		// Net cycle balance = Paid - Payout - Provident
+		$avgAmount = $paidAmount - $payoutAmount - $providentAmount;
+		// if ($avgAmount < 0) {
+		// 	$avgAmount = 0.00;
+		// }
 
 		// 2. Calculate totalAvgAmount for all cycles of this product type (Savings = 1, JNR = 2)
 		$groupLifecycles = $this->common->getData('group_lifecycle', array('group_id' => $group_id, 'group_type_id' => $type));
@@ -2341,11 +2409,18 @@ class Api extends Base_Controller
 			$allPaidResult = $this->common->getData('user_group_lifecycle', $allPaidWhere, array("field" => 'IFNULL(SUM(amount), 0) as total_payment', "single"));
 			$allPaidAmount = !empty($allPaidResult['total_payment']) ? (float) $allPaidResult['total_payment'] : 0.00;
 
-			$allPayoutWhere = "group_id = '{$group_id}' AND user_id = '{$user_id}' AND group_cycle_id IN ({$lifecycleIdsStr}) AND status = 1";
+			$allPayoutWhere = "group_id = '{$group_id}' AND user_id = '{$user_id}' AND group_cycle_id IN ({$lifecycleIdsStr}) AND (request_status = 1 OR status = 1)";
 			$allPayoutResult = $this->common->getData('payout_cycle', $allPayoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
 			$allPayoutAmount = !empty($allPayoutResult['total_payout']) ? (float) $allPayoutResult['total_payout'] : 0.00;
 
-			$totalAvgAmount = $allPaidAmount - $allPayoutAmount;
+			$allProvidentWhere = "group_id = '{$group_id}' AND user_id = '{$user_id}' AND main_id IN ({$lifecycleIdsStr}) AND payment_type = 2";
+			$allProvidentResult = $this->common->getData('pf_user', $allProvidentWhere, array("field" => 'IFNULL(SUM(pf_amount), 0) as total_pf', "single"));
+			$allProvidentAmount = !empty($allProvidentResult['total_pf']) ? (float) $allProvidentResult['total_pf'] : 0.00;
+
+			$totalAvgAmount = $allPaidAmount - $allPayoutAmount - $allProvidentAmount;
+			// if ($totalAvgAmount < 0) {
+			// 	$totalAvgAmount = 0.00;
+			// }
 		}
 
 		$this->response(true, 'amount fetch successfully', array(
@@ -2718,6 +2793,7 @@ class Api extends Base_Controller
 	}
 
 
+	// updated by @krishn on 04-09-26
 	function savingAvgCal($group_cycle_id)
 	{
 		$user_id  = !empty($_REQUEST['user_id'])  ? (int) $_REQUEST['user_id']  : 0;
@@ -2729,12 +2805,36 @@ class Api extends Base_Controller
 		$paidAmount = !empty($paidResult['total_payment']) ? (float) $paidResult['total_payment'] : 0.00;
 
 		// Subtract any payout already disbursed for this cycle
-		$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status = 1";
+		$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND (request_status = 1 OR status = 1)";
 		$payoutResult = $this->common->getData('payout_cycle', $payoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
 		$payoutAmount = !empty($payoutResult['total_payout']) ? (float) $payoutResult['total_payout'] : 0.00;
 
-		return $paidAmount - $payoutAmount;
+		// Subtract any provident (PF) deducted for this cycle (e.g. 10% = £120)
+		$providentWhere = "group_id = '{$group_id}' AND user_id = '{$user_id}' AND main_id = '{$group_cycle_id}' AND payment_type = 2";
+		$providentResult = $this->common->getData('pf_user', $providentWhere, array("field" => 'IFNULL(SUM(pf_amount), 0) as total_pf', "single"));
+		$providentAmount = !empty($providentResult['total_pf']) ? (float) $providentResult['total_pf'] : 0.00;
+
+		$netAmount = $paidAmount - $payoutAmount - $providentAmount;
+		return $netAmount;
 	}
+	
+	// function savingAvgCal($group_cycle_id)
+	// {
+	// 	$user_id  = !empty($_REQUEST['user_id'])  ? (int) $_REQUEST['user_id']  : 0;
+	// 	$group_id = !empty($_REQUEST['group_id']) ? (int) $_REQUEST['group_id'] : 0;
+
+	// 	// Sum only actually paid installments (status 2 = Paid On Time, 4 = Paid Late)
+	// 	$paidWhere = "group_id = '{$group_id}' AND groupLifecycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status IN (2, 4)";
+	// 	$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'IFNULL(SUM(amount), 0) as total_payment', "single"));
+	// 	$paidAmount = !empty($paidResult['total_payment']) ? (float) $paidResult['total_payment'] : 0.00;
+
+	// 	// Subtract any payout already disbursed for this cycle
+	// 	$payoutWhere = "group_id = '{$group_id}' AND group_cycle_id = '{$group_cycle_id}' AND user_id = '{$user_id}' AND status = 1";
+	// 	$payoutResult = $this->common->getData('payout_cycle', $payoutWhere, array("field" => 'IFNULL(SUM(payout_amount), 0) as total_payout', "single"));
+	// 	$payoutAmount = !empty($payoutResult['total_payout']) ? (float) $payoutResult['total_payout'] : 0.00;
+
+	// 	return $paidAmount - $payoutAmount;
+	// }
 
 
 	// public function avgSaving()
@@ -2898,68 +2998,6 @@ class Api extends Base_Controller
 		));
 	}
 
-	// public function avgSavingJNR()
-	// {
-
-	// 	$result2 = $this->common->getData('group_lifecycle', array("group_id" => $_REQUEST['group_id'], "group_type_id" => '2'), array('sort_by' => 'id', 'sort_direction' => 'desc'));
-
-	// 	$avgAmount = 0;
-	// 	if (!empty($result2)) {
-	// 		foreach ($result2 as $key => $value) {
-	// 			$avgAmount += $this->savingAvgCal($value['id']);
-	// 		}
-	// 	} else {
-	// 		$avgAmount = 0;
-	// 	}
-
-
-	// 	// $_REQUEST['group_cycle_id'] = $grouplifecycle[0]['id'];
-	// 	// $_POST['group_cycle_id'] = $grouplifecycle[0]['id'];
-	// 	// $cycleTransfer = $this->common->getData('cycle_status_management', array('user_id' => $_POST['user_id'], 'group_id' => $_POST['group_id'], 'group_cycle_id' => $_POST['group_cycle_id']), array('single'));
-
-	// 	// if (empty($cycleTransfer)) {
-	// 	// 	$where = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-	// 	// 	$result = $this->common->getData('user_group_lifecycle', $where, array("field" => 'sum(amount) as total_payment', "single"));
-
-	// 	// 	if (!empty($result['total_payment'])) {
-	// 	// 		$avgAmount = $result['total_payment'];
-	// 	// 	} else {
-	// 	// 		$avgAmount = 0.00;
-	// 	// 	}
-	// 	// } else {
-	// 	// 	$paidWhere = "group_id = '" . $_REQUEST['group_id'] . "' AND groupLifecycle_id = '" . $_REQUEST['group_cycle_id'] . "' AND user_id = '" . $_REQUEST['user_id'] . "' AND status !='1'";
-	// 	// 	$paidResult = $this->common->getData('user_group_lifecycle', $paidWhere, array("field" => 'sum(amount) as total_payment', "single"));
-
-	// 	// 	if (!empty($paidResult['total_payment'])) {
-	// 	// 		$paidAvgAmount = $paidResult['total_payment'];
-	// 	// 	} else {
-	// 	// 		$paidAvgAmount = 0;
-	// 	// 	}
-
-
-	// 	// 	$result = $this->common->getData('user_group_lifecycle', array('groupLifecycle_id' => $_REQUEST['group_cycle_id'], 'user_id' => $_REQUEST['user_id']), array('field' => 'SUM(amount) as total_amount', 'single'));
-
-	// 	// 	$payout_amount_total = $result['total_amount'];
-	// 	// 	$avgAmount =  $payout_amount_total -  $paidAvgAmount;
-	// 	// }
-
-
-	// 	// 	$groupCycleInfo = $this->common->getData('group_lifecycle',array('group_id'=>$_REQUEST['group_id'], 'group_type_id'=>'2'));
-	// 	// 		$avgAmount = 0;
-	// 	// 		if(!empty($groupCycleInfo)) {
-	// 	// 			foreach ($groupCycleInfo as $key => $value) {
-
-	// 	//     			$paidWhere = "group_id = '".$_REQUEST['group_id']."' AND groupLifecycle_id = '".$value['id']."' AND user_id = '". $_REQUEST['user_id'] ."' AND status !='1'";
-	// 	//     			$paidResult = $this->common->getData('user_group_lifecycle',$paidWhere,array("field" => 'sum(amount) as total_payment',"single"));
-
-	// 	//     			if(!empty($paidResult['total_payment'])) {
-	// 	//     				$avgAmount += $paidResult['total_payment'];
-	// 	//     			}
-	// 	// 			}
-	// 	// 		} 
-
-	// 	$this->response(true, 'amount fetch successfully', array('avgAmountCycle' => $avgAmount));
-	// }
 
 	// changed by @krishn on 23-04-25
 	public function avgSavingJNR()
